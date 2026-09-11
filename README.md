@@ -2,4 +2,6 @@
 Capstone project Fall 2026
 
 Frontend: React<br />
-Backend:  C#
+Backend:  C#<br />
+
+Database: Relational (SQL) <br />
