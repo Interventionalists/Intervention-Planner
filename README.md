@@ -1,7 +1,27 @@
 # Intervention-Planner
 Capstone project Fall 2026
 
-Frontend: React<br />
-Backend:  Python<br />
-
+Frontend: Vue<br />
+Backend:  Python - FastAPI<br />
 Database: Relational (SQL) <br />
+
+## ENVIRONMENT SETUP
+
+### Backend Setup
+
+```bash
+cd backend
+python -m venv venv
+venv\Scripts\Activate.ps1   # Windows
+# source venv/bin/activate  # Mac/Linux
+pip install -r requirements.txt
+uvicorn main:app --reload
+```
+
+### Frontend Setup
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
