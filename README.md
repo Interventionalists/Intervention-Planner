@@ -5,7 +5,7 @@ Frontend: Vue<br />
 Backend:  Python - FastAPI<br />
 Database: Relational (SQL) <br />
 
-## ENVIRONMENT SETUP
+## ENVIRONMENT SETUP (do in powershell terminal)
 
 ### Backend Setup
 
