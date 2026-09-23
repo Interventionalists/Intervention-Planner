@@ -23,6 +23,32 @@ jobs:
         python-version: '3.11' # Change to your preferred Python version
         cache: 'pip'           # Caches pip dependencies to speed up subsequent runs
 
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Install frontend dependencies
+      working-directory: frontend
+      run: npm ci
+
+    - name: Start frontend
+      working-directory: frontend
+      run: npm run dev -- --host 127.0.0.1 > frontend.log 2>&1 &
+
+    - name: Wait for frontend
+      run: |
+        for attempt in {1..30}; do
+          if curl --fail --silent http://127.0.0.1:5173/ > /dev/null; then
+            exit 0
+          fi
+          sleep 1
+        done
+        cat frontend/frontend.log
+        exit 1
+
     # Step 3: Install project dependencies
     - name: Install dependencies
       run: |
