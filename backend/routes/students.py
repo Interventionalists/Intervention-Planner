@@ -1,6 +1,6 @@
 from http.client import HTTPException
 from fastapi import APIRouter
-from database.supabase_client import fetch_student
+from database.supabase_client import fetch_students
 
 router = APIRouter()
 
@@ -8,7 +8,7 @@ router = APIRouter()
 @router.get("/students-fetch")
 def get_students():
     try:
-        students = fetch_student()
+        students = fetch_students()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     return {"students": students}

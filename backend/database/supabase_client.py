@@ -9,7 +9,18 @@ supabase: Client = create_client(
 )
 
 #fetches all student data from the database.
-def fetch_student():
+def fetch_students():
     response = supabase.table("students").select("*").execute()
     return response.data
 
+def fetch_teachers():
+    response = supabase.table("users").select("*").eq("role", "teacher").execute()
+    return response.data
+
+def fetch_interventionists():
+    response = supabase.table("users").select("*").eq("role", "interventionist").execute()
+    return response.data
+
+def fetch_admins():
+    response = supabase.table("users").select("*").eq("role", "admin").execute()
+    return response.data
