@@ -1,3 +1,11 @@
+# ------------------------------------------------------------------------------
+#
+# Name:        test_web_connection.py
+# Purpose:     A simple test file to check the connection to the frontend server.
+# Author:      Dudley D. (09/21/2026)
+#
+# ------------------------------------------------------------------------------
+
 from urllib.request import urlopen
 from urllib.error import URLError
 
@@ -5,6 +13,7 @@ import pytest
 
 FRONTEND_URL = "http://localhost:5173/"
 
+# Test connection to the frontend server
 def test_frontend_connection():
     """Test to check if the frontend is accessible."""
     try:
