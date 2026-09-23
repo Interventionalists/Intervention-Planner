@@ -24,3 +24,7 @@ def fetch_interventionists():
 def fetch_admins():
     response = supabase.table("users").select("*").eq("role", "admin").execute()
     return response.data
+
+def create_user(email :str, password:str, first_name: str, last_name: str, role:str):
+    response = supabase.table("users").insert({"email": email, "password": password, "first_name": first_name, "last_name": last_name, "role": role}).execute()
+    return response.data
