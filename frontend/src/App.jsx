@@ -39,6 +39,36 @@ function App() {
     setIsAuthenticated(true);
   };
 
+
+  //TODO: Implement endpoint and login logic
+  const handleLogin = async ({email, password}) => {
+    try {
+
+      const response = await fetch("/api/login", { // TODO: Call correct backend endpoint
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Login failed");
+      }
+
+      const data = await response.json();
+
+      if (data.token) {
+      localStorage.setItem("interventioner-token", data.token);
+    }
+
+      sessionStorage.setItem(AUTH_SESSION_KEY, data.token);
+      setIsAuthenticated(true);
+
+    } catch (error) {
+      console.error("Login failed:", error);
+      alert("Login failed. Please check your credentials and try again.");
+    }
+  }
+
   const logOut = () => {
     sessionStorage.removeItem(AUTH_SESSION_KEY);
     setIsAuthenticated(false);
@@ -53,7 +83,7 @@ function App() {
             isAuthenticated ? (
               <Navigate to="/app" replace />
             ) : (
-              <LoginPage onSubmit={logIn} />
+              <LoginPage onSubmit={handleLogin} />
             )
           }
         />

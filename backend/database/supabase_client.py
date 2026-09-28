@@ -28,3 +28,7 @@ def fetch_admins():
 def create_user(email :str, password:str, first_name: str, last_name: str, role:str):
     response = supabase.table("users").insert({"email": email, "password": password, "first_name": first_name, "last_name": last_name, "role": role}).execute()
     return response.data
+
+def login(email: str, password: str):
+    response = supabase.table("users").select("*").eq("email", email).eq("password", password).execute()
+    return response.data

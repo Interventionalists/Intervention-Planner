@@ -1,10 +1,18 @@
 import React from "react";
 import { ArrowRight, LockKeyhole } from "lucide-react";
+
+// login page handler
 function LoginPage({ onSubmit }) {
   const handleSubmit = (event) => {
     event.preventDefault();
-    onSubmit();
+
+    const formData = new FormData(event.target);
+    const email = formData.get("email");
+    const password = formData.get("password");
+
+    onSubmit({email, password});
   };
+
   return (
     <main className="login-screen">
       <section className="login-brand-panel">
@@ -29,7 +37,8 @@ function LoginPage({ onSubmit }) {
           <p className="login-eyebrow">Your workspace</p>
           <h2>Welcome back</h2>
           <p className="login-intro">Sign in to continue to Interventioner.</p>
-          <form className="login-form" onSubmit={handleSubmit}>
+          
+          <form className="login-form" onSubmit={handleSubmit}>  
             <label htmlFor="login-email">Email address</label>
             <input
               id="login-email"
@@ -39,6 +48,7 @@ function LoginPage({ onSubmit }) {
               placeholder="you@school.edu"
               required
             />
+
             <label htmlFor="login-password">Password</label>
             <input
               id="login-password"
@@ -48,11 +58,13 @@ function LoginPage({ onSubmit }) {
               placeholder="Enter your password"
               required
             />
+
             <button className="login-submit" type="submit">
               Sign in
               <ArrowRight size={18} />
             </button>
           </form>
+          
           <p className="login-demo-note">
             Demo mode: any email and password will sign you in.
           </p>
