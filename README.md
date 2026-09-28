@@ -4,6 +4,7 @@ Capstone project Fall 2026
 Frontend: Vue<br />
 Backend:  Python - FastAPI<br />
 Database: Relational (SQL) <br />
+Hosting: Cloudflare <br />
 
 ## ENVIRONMENT SETUP (do in powershell terminal)
 
