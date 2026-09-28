@@ -2,7 +2,7 @@
 // Later, replace these objects with the results of your API calls.
 
 export const currentUser = {
-  name: "Ms. Poop",
+  name: "Ms. Pytleski",
   initials: "MP",
 };
 
@@ -11,9 +11,9 @@ export const students = [
     id: 1,
     name: "Little Timmy",
     grade: 4,
-    teacher: "Ms. PP",
-    group: 69,
-    interventionTeacher: "Ms. Poop",
+    teacher: "Ms. Bakken",
+    group: 1,
+    interventionTeacher: "Ms. Pytleski",
     avatar: "https://api.dicebear.com/9.x/adventurer/svg?seed=Timmy",
     notes: "",
     scores: { English: 80.56, Math: 30.51, Reading: 87.67, Science: 70.32, Band: 70.40, Art: 52.30, "P.E.": 90.51 },
@@ -25,7 +25,7 @@ export const students = [
     grade: 4,
     teacher: "Mr. Carter",
     group: 12,
-    interventionTeacher: "Ms. Poop",
+    interventionTeacher: "Ms. Pytleski",
     avatar: "https://api.dicebear.com/9.x/adventurer/svg?seed=Jamie",
     notes: "Reading fluency intervention.",
     scores: { English: 91, Math: 72, Reading: 64, Science: 84, "P.E.": 95 },
@@ -37,7 +37,7 @@ export const students = [
     grade: 5,
     teacher: "Ms. Brown",
     group: 8,
-    interventionTeacher: "Ms. Poop",
+    interventionTeacher: "Ms. Pytleski",
     avatar: "https://api.dicebear.com/9.x/adventurer/svg?seed=Alex",
     notes: "Math intervention.",
     scores: { English: 84, Math: 54, Reading: 78, Science: 80, "P.E.": 88 },
