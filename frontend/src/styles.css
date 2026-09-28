@@ -3,7 +3,6 @@
 :root {
   font-family: "Montserrat", sans-serif;
   color: #171717;
-  background: #f5f5f5;
   font-synthesis: none;
   --border: #d9d9d9;
   --radius: 15px;
@@ -20,6 +19,174 @@ body {
 button, input, select { font: inherit; }
 
 button { cursor: pointer; }
+
+.login-screen {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  background: white;
+}
+
+.login-brand-panel {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 30px 7%;
+  color: white;
+  background-color: #172c50;
+  background-image:
+    linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+  background-size: 36px 36px;
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.login-brand-mark {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: #079bd8;
+  font-weight: 700;
+}
+
+.login-brand-copy {
+  width: min(100%, 470px);
+  margin: auto;
+  padding: 52px 0;
+}
+
+.login-eyebrow {
+  margin: 0 0 12px;
+  color: #0788b4;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.login-brand-panel .login-eyebrow { color: #69d1e6; }
+
+.login-brand-copy h1 {
+  max-width: 420px;
+  margin: 0;
+  font-size: 46px;
+  line-height: 1.08;
+  font-weight: 600;
+}
+
+.login-brand-description {
+  max-width: 390px;
+  margin: 17px 0 0;
+  color: rgba(255,255,255,.76);
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.login-brand-footer {
+  margin: 0;
+  color: rgba(255,255,255,.55);
+  font-size: 11px;
+}
+
+.login-content {
+  display: grid;
+  place-items: center;
+  padding: 52px 40px;
+}
+
+.login-form-wrap { width: min(100%, 390px); }
+
+.login-lock-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 30px;
+  border-radius: 8px;
+  color: #172c50;
+  background: #e8f5f7;
+}
+
+.login-form-wrap h2 {
+  margin: 0;
+  color: #171717;
+  font-size: 30px;
+  line-height: 1.2;
+  font-weight: 600;
+}
+
+.login-intro {
+  margin: 10px 0 0;
+  color: #686868;
+  font-size: 14px;
+}
+
+.login-form {
+  display: grid;
+  gap: 11px;
+  margin-top: 31px;
+}
+
+.login-form label {
+  color: #292929;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.login-form input {
+  width: 100%;
+  height: 46px;
+  margin-bottom: 8px;
+  padding: 0 13px;
+  border: 1px solid #d4d9de;
+  border-radius: 5px;
+  outline: none;
+  color: #171717;
+  background: white;
+  font-size: 13px;
+}
+
+.login-form input:focus {
+  border-color: #079bd8;
+  box-shadow: 0 0 0 3px rgba(7,155,216,.13);
+}
+
+.login-form input::placeholder { color: #959da4; }
+
+.login-submit {
+  min-height: 47px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 8px;
+  border: 0;
+  border-radius: 5px;
+  color: white;
+  background: #172c50;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background .15s ease;
+}
+
+.login-submit:hover { background: #23416d; }
+.login-submit:focus-visible { outline: 3px solid #48b7f2; outline-offset: 3px; }
+
+.login-demo-note {
+  margin: 23px 0 0;
+  color: #737b81;
+  font-size: 11px;
+  line-height: 1.5;
+}
 
 .app {
   min-height: 100vh;
@@ -432,6 +599,17 @@ nav { display: grid; gap: 6px; }
 }
 
 @media (max-width: 760px) {
+  .login-screen { grid-template-columns: 1fr; }
+  .login-brand-panel {
+    min-height: auto;
+    padding: 22px 25px 25px;
+  }
+  .login-brand-copy { padding: 42px 0 0; }
+  .login-brand-copy h1 { font-size: 34px; }
+  .login-brand-description { margin-top: 10px; font-size: 13px; }
+  .login-brand-footer { display: none; }
+  .login-content { padding: 40px 25px 56px; }
+  .login-lock-icon { margin-bottom: 22px; }
   .sidebar {
     transform: translateX(-100%);
     width: 250px;
@@ -462,6 +640,8 @@ nav { display: grid; gap: 6px; }
 }
 
 @media (max-width: 470px) {
+  .login-brand-copy h1 { font-size: 30px; }
+  .login-content { padding-right: 22px; padding-left: 22px; }
   .topbar { gap: 8px; }
   .theme-grid { grid-template-columns: 1fr; }
   .score-row { grid-template-columns: 62px 1fr 50px; }

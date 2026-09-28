@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from "react";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import {
+  LogOut,
   BarChart3,
   CalendarDays,
   ChevronLeft,
@@ -15,6 +17,9 @@ import {
   X
 } from "lucide-react";
 import { currentUser, events, students, themePresets } from "./data";
+import LoginPage from "./LoginPage";
+
+const AUTH_SESSION_KEY = "interventioner-demo-authenticated";
 
 const navItems = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -25,6 +30,53 @@ const navItems = [
 ];
 
 function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(
+    () => sessionStorage.getItem(AUTH_SESSION_KEY) === "true"
+  );
+
+  const logIn = () => {
+    sessionStorage.setItem(AUTH_SESSION_KEY, "true");
+    setIsAuthenticated(true);
+  };
+
+  const logOut = () => {
+    sessionStorage.removeItem(AUTH_SESSION_KEY);
+    setIsAuthenticated(false);
+  };
+
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route
+          path="/login"
+          element={
+            isAuthenticated ? (
+              <Navigate to="/app" replace />
+            ) : (
+              <LoginPage onSubmit={logIn} />
+            )
+          }
+        />
+        <Route
+          path="/app"
+          element={
+            isAuthenticated ? (
+              <PlannerApp onLogout={logOut} />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+        <Route
+          path="*"
+          element={<Navigate to={isAuthenticated ? "/app" : "/login"} replace />}
+        />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
+function PlannerApp({ onLogout }) {
   const [page, setPage] = useState("dashboard");
   const [selectedStudent, setSelectedStudent] = useState(students[0]);
   const [query, setQuery] = useState("");
@@ -58,6 +110,7 @@ function App() {
         onPageChange={selectPage}
         mobileOpen={mobileOpen}
         closeMobile={() => setMobileOpen(false)}
+        onLogout={onLogout}
       />
 
       <div className="main-shell">
@@ -97,7 +150,7 @@ function App() {
   );
 }
 
-function Sidebar({ page, onPageChange, mobileOpen, closeMobile }) {
+function Sidebar({ page, onPageChange, mobileOpen, closeMobile, onLogout }) {
   return (
     <>
       {mobileOpen && <div className="mobile-overlay" onClick={closeMobile} />}
@@ -127,6 +180,10 @@ function Sidebar({ page, onPageChange, mobileOpen, closeMobile }) {
           <button className="nav-item">
             <CircleUserRound size={19} strokeWidth={1.8} />
             <span>{currentUser.name}</span>
+          </button>
+          <button className="nav-item" onClick={onLogout}>
+            <LogOut size={19} strokeWidth={1.8} />
+            <span>Sign out</span>
           </button>
         </div>
       </aside>
