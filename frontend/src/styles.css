@@ -188,6 +188,12 @@ button { cursor: pointer; }
   line-height: 1.5;
 }
 
+.login-error {
+  margin: -6px 0 4px;
+  color: #ef3030;
+  font-size: 13px;
+}
+
 .app {
   min-height: 100vh;
   display: flex;
