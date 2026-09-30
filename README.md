@@ -1,7 +1,7 @@
 # Intervention-Planner
 Capstone project Fall 2026
 
-Frontend: Vue<br />
+Frontend: React<br />
 Backend:  Python - FastAPI<br />
 Database: Relational (SQL) <br />
 Hosting: Cloudflare <br />
