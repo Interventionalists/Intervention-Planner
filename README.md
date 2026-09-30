@@ -16,7 +16,6 @@ python -m venv venv
 venv\Scripts\Activate.ps1   # Windows
 # source venv/bin/activate  # Mac/Linux
 pip install -r requirements.txt
-copy .env.example .env   # then fill in real values, see below
 uvicorn main:app --reload
 ```
 
@@ -25,7 +24,6 @@ uvicorn main:app --reload
 ```bash
 cd frontend
 npm install
-copy .env.example .env   # then fill in real values, see below
 npm run dev
 ```
 
