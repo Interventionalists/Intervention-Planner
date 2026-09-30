@@ -221,7 +221,7 @@ function Dashboard({ student, onStudentChange, onStudents }) {
     <>
       <PageHeading
         eyebrow="Overview"
-        title="Good morning, Ms. Poop"
+        title={`Good morning, ${currentUser.name}!`}
         subtitle="Here’s what’s happening with your intervention students."
       />
 
