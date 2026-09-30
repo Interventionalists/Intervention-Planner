@@ -1,10 +1,40 @@
-import React from "react";
+import React, { useState } from "react";
 import { ArrowRight, LockKeyhole } from "lucide-react";
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
 function LoginPage({ onSubmit }) {
-  const handleSubmit = (event) => {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (event) => {
     event.preventDefault();
-    onSubmit();
+    setError("");
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!response.ok) {
+        setError("Invalid email or password.");
+        return;
+      }
+
+      const user = await response.json();
+      onSubmit(user);
+    } catch (err) {
+      setError("Unable to reach the server. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
+
   return (
     <main className="login-screen">
       <section className="login-brand-panel">
@@ -37,6 +67,8 @@ function LoginPage({ onSubmit }) {
               type="email"
               autoComplete="username"
               placeholder="you@school.edu"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
               required
             />
             <label htmlFor="login-password">Password</label>
@@ -46,19 +78,20 @@ function LoginPage({ onSubmit }) {
               type="password"
               autoComplete="current-password"
               placeholder="Enter your password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
               required
             />
-            <button className="login-submit" type="submit">
-              Sign in
+            {error && <p className="login-error">{error}</p>}
+            <button className="login-submit" type="submit" disabled={isSubmitting}>
+              {isSubmitting ? "Signing in…" : "Sign in"}
               <ArrowRight size={18} />
             </button>
           </form>
-          <p className="login-demo-note">
-            Demo mode: any email and password will sign you in.
-          </p>
         </div>
       </section>
     </main>
   );
 }
+
 export default LoginPage;

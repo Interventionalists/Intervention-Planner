@@ -20,6 +20,7 @@ import { currentUser, events, students, themePresets } from "./data";
 import LoginPage from "./LoginPage";
 
 const AUTH_SESSION_KEY = "interventioner-demo-authenticated";
+const AUTH_USER_KEY = "interventioner-auth-user";
 
 const navItems = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -34,13 +35,15 @@ function App() {
     () => sessionStorage.getItem(AUTH_SESSION_KEY) === "true"
   );
 
-  const logIn = () => {
+  const logIn = (user) => {
     sessionStorage.setItem(AUTH_SESSION_KEY, "true");
+    sessionStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
     setIsAuthenticated(true);
   };
 
   const logOut = () => {
     sessionStorage.removeItem(AUTH_SESSION_KEY);
+    sessionStorage.removeItem(AUTH_USER_KEY);
     setIsAuthenticated(false);
   };
 

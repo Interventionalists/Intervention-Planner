@@ -1,4 +1,5 @@
 import os
+import bcrypt
 from supabase import create_client, Client
 from dotenv import load_dotenv
 
@@ -7,6 +8,20 @@ supabase: Client = create_client(
     os.environ["SUPABASE_URL"],
     os.environ["SUPABASE_SERVICE_KEY"],
 )
+
+#looks up a single user by email for login verification.
+def fetch_user_by_email(email):
+    response = supabase.table("users").select("*").eq("email", email).limit(1).execute()
+    return response.data[0] if response.data else None
+
+#hashes a plaintext password for storage in password_hash. bcrypt generates
+#and embeds a random salt per call, so no separate salt column is needed.
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+#checks a plaintext password against a stored bcrypt hash.
+def verify_password(password: str, password_hash: str) -> bool:
+    return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
 
 #fetches all student data from the database.
 def fetch_students():
