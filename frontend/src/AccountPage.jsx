@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   Bell,
   CheckCircle2,
@@ -14,13 +14,55 @@ const preferences = [
   "Student risk alerts",
 ];
 
-const AccountPage = ({ user, name, initials }) => {
+// onUserUpdated(updatedUser) lets the parent refresh its user state after a save.
+const AccountPage = ({ user, name, initials, onUserUpdated }) => {
+  const [editing, setEditing] = useState(false);
+  const [school, setSchool] = useState(user?.school || "");
+  const [schools, setSchools] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+
+  // Load all schools once
+  useEffect(() => {
+    fetch("/api/schools", { credentials: "include" })
+      .then((res) => res.json())
+      .then((data) => setSchools(data.map((s) => s.name ?? s)))
+      .catch(() => setSchools([]));
+  }, []);
+
   const details = [
     { label: "Name: ", value: name },
     { label: "Email: ", value: user?.email || "Not provided" },
     { label: "Role: ", value: user?.role || "Not provided" },
-    { label: "School: ", value: user?.school || "Not provided" },
+    { label: "School: ", value: user?.school || "No school assigned" },
   ];
+
+  const startEditing = () => {
+    setSchool(user?.school || "");
+    setSaveError("");
+    setEditing(true);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSaveError("");
+    try {
+      // Adjust the URL / method / body to match your backend route
+      const res = await fetch("", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ school }),
+      });
+      if (!res.ok) throw new Error("Request failed");
+      onUserUpdated?.({ ...user, school });
+      setEditing(false);
+    } catch {
+      setSaveError("Couldn't save your school. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="account-page">
@@ -34,24 +76,59 @@ const AccountPage = ({ user, name, initials }) => {
         <div className="account-avatar">{initials}</div>
         <div className="account-header-copy">
           <h2>{name}</h2>
-          <p>{user?.role || "Account"}
-             
-             {/* Check if the user has a school assigned and display it if available */}
-             if (user?.school == null) { 
-                "No school assigned"
-             }
-
-            {user?.school ? ` · ${user.school}` : ""}</p>
+          <p>
+            {user?.role || "Account"}
+            {` · ${user?.school || "No school assigned"}`}
+          </p>
         </div>
-        <button className="primary-button">Edit profile</button>
+        
       </section>
+
+      {editing && (
+        <section className="card account-card">
+          <div className="card-title">
+            <h2>Edit school</h2>
+          </div>
+
+          <input
+            list="school-options"
+            value={school}
+            onChange={(e) => setSchool(e.target.value)}
+            placeholder="Start typing your school"
+          />
+          <datalist id="school-options">
+            {schools.map((schoolName) => (
+              <option key={schoolName} value={schoolName} />
+            ))}
+          </datalist>
+
+          {saveError && <small>{saveError}</small>}
+
+          <div className="edit-actions">
+            <button
+              className="primary-button"
+              onClick={handleSave}
+              disabled={!schools.includes(school) || saving}
+            >
+              {saving ? "Saving…" : "Save changes"}
+            </button>
+            <button
+              className="secondary-button"
+              onClick={() => setEditing(false)}
+              disabled={saving}
+            >
+              Cancel
+            </button>
+          </div>
+        </section>
+      )}
 
       <div className="account-grid">
         <section className="card account-card">
           <div className="card-title">
-            <h2>Account details</h2>
+            <h2>Account details</h2> 
             <span className="status-pill">
-              <CheckCircle2 size={15} /> Active
+              <CheckCircle2 size={15} /> {!editing && (<button className="text-button" onClick={startEditing}><h2>Edit profile</h2></button>)}
             </span>
           </div>
 

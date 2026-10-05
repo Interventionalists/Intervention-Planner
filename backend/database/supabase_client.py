@@ -43,3 +43,15 @@ def fetch_admins():
 def fetch_schools():
     response = supabase.table("schools").select("*").execute()
     return response.data
+
+def update_user_school(user_id, new_school_id):
+    response = supabase.table("users").update({"school_id": new_school_id}).eq("id", user_id).execute()
+    return response.data
+
+def fetch_user_school(user_id):
+    response = supabase.table("users").select("school_id").eq("id", user_id).execute()
+    return response.data[0]["school_id"] if response.data else None
+
+def fetch_school_name(school_id):
+    response = supabase.table("schools").select("name").eq("id", school_id).execute()
+    return response.data[0]["name"] if response.data else None
