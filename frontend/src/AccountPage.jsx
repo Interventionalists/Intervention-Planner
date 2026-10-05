@@ -16,10 +16,10 @@ const preferences = [
 
 const AccountPage = ({ user, name, initials }) => {
   const details = [
-    { label: "Name", value: name },
-    { label: "Email", value: user?.email || "Not provided" },
-    { label: "Role", value: user?.role || "Not provided" },
-    { label: "School", value: user?.school || "Not provided" },
+    { label: "Name: ", value: name },
+    { label: "Email: ", value: user?.email || "Not provided" },
+    { label: "Role: ", value: user?.role || "Not provided" },
+    { label: "School: ", value: user?.school || "Not provided" },
   ];
 
   return (
@@ -34,7 +34,14 @@ const AccountPage = ({ user, name, initials }) => {
         <div className="account-avatar">{initials}</div>
         <div className="account-header-copy">
           <h2>{name}</h2>
-          <p>{user?.role || "Account"}{user?.school ? ` · ${user.school}` : ""}</p>
+          <p>{user?.role || "Account"}
+             
+             {/* Check if the user has a school assigned and display it if available */}
+             if (user?.school == null) { 
+                "No school assigned"
+             }
+
+            {user?.school ? ` · ${user.school}` : ""}</p>
         </div>
         <button className="primary-button">Edit profile</button>
       </section>

@@ -39,3 +39,7 @@ def fetch_interventionists():
 def fetch_admins():
     response = supabase.table("users").select("*").eq("role", "admin").execute()
     return response.data
+
+def fetch_schools():
+    response = supabase.table("schools").select("*").execute()
+    return response.data

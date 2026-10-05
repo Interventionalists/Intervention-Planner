@@ -28,8 +28,7 @@ const navItems = [
   { id: "students", label: "Students", icon: Users },
   { id: "calendar", label: "Calendar", icon: CalendarDays },
   { id: "reports", label: "Reports", icon: BarChart3 },
-  { id: "settings", label: "Settings", icon: Settings },
-  { id: "account", label: "Account", icon: CircleUserRound },
+  { id: "settings", label: "Settings", icon: Settings }
 ];
 
 function App() {
@@ -40,7 +39,7 @@ function App() {
     const savedUser = sessionStorage.getItem(AUTH_USER_KEY);
     return savedUser ? JSON.parse(savedUser) : null;
   });
-  
+
   const logIn = (user) => {
     sessionStorage.setItem(AUTH_SESSION_KEY, "true");
     sessionStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
@@ -143,6 +142,7 @@ function PlannerApp({ onLogout, user }) {
           openMenu={() => setMobileOpen(true)}
           userName={userName}
           userInitials={userInitials}
+          onAccountClick={() => selectPage("account")}
         />
 
         <main className="content">
@@ -228,7 +228,14 @@ function Sidebar({
   );
 }
 
-function Header({ query, setQuery, openMenu, userName, userInitials }) {
+function Header({
+  query,
+  setQuery,
+  openMenu,
+  userName,
+  userInitials,
+  onAccountClick,
+}) {
   return (
     <header className="topbar">
       <button className="mobile-menu" onClick={openMenu} aria-label="Open menu">
@@ -247,7 +254,14 @@ function Header({ query, setQuery, openMenu, userName, userInitials }) {
 
       <div className="profile">
         <span>Hello, {userName}</span>
-        <div className="avatar-small">{userInitials}</div>
+        <button
+          className="avatar-small"
+          type="button"
+          onClick={onAccountClick}
+          aria-label={`Open ${userName}'s account`}
+        >
+          {userInitials}
+        </button>
       </div>
     </header>
   );

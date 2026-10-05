@@ -7,6 +7,7 @@ from routes.teachers import router as teachers_router
 from routes.interventionists import router as interventionists_router
 from routes.admins import router as admins_router
 from routes.auth import router as auth_router
+from routes.schools import router as schools_router
 
 load_dotenv()
 
@@ -33,3 +34,4 @@ app.include_router(teachers_router)
 app.include_router(interventionists_router)
 app.include_router(admins_router)
 app.include_router(auth_router)
+app.include_router(schools_router)
