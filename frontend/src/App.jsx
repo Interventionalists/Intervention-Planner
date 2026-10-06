@@ -47,6 +47,11 @@ function App() {
     setIsAuthenticated(true);
   };
 
+  const updateUser = (user) => {
+    sessionStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+    setCurrentUser(user);
+  };
+
   const logOut = () => {
     sessionStorage.removeItem(AUTH_SESSION_KEY);
     sessionStorage.removeItem(AUTH_USER_KEY);
@@ -71,7 +76,11 @@ function App() {
           path="/app"
           element={
             isAuthenticated ? (
-              <PlannerApp onLogout={logOut} user={currentUser} />
+              <PlannerApp
+                onLogout={logOut}
+                onUserUpdated={updateUser}
+                user={currentUser}
+              />
             ) : (
               <Navigate to="/login" replace />
             )
@@ -86,7 +95,7 @@ function App() {
   );
 }
 
-function PlannerApp({ onLogout, user }) {
+function PlannerApp({ onLogout, onUserUpdated, user }) {
   const [page, setPage] = useState("dashboard");
   const [selectedStudent, setSelectedStudent] = useState(students[0]);
   const [query, setQuery] = useState("");
@@ -172,7 +181,12 @@ function PlannerApp({ onLogout, user }) {
           )}
 
           {page === "account" && (
-            <AccountPage user={user} name={userName} initials={userInitials} />
+            <AccountPage
+              user={user}
+              name={userName}
+              initials={userInitials}
+              onUserUpdated={onUserUpdated}
+            />
           )}
         </main>
       </div>

@@ -8,6 +8,10 @@ import {
   UserRound,
 } from "lucide-react";
 
+const API_BASE_URL = (
+  import.meta.env.VITE_API_URL || "http://localhost:8000"
+).replace(/\/+$/, "");
+
 const preferences = [
   "Weekly email summaries",
   "Session reminders",
@@ -17,28 +21,80 @@ const preferences = [
 // onUserUpdated(updatedUser) lets the parent refresh its user state after a save.
 const AccountPage = ({ user, name, initials, onUserUpdated }) => {
   const [editing, setEditing] = useState(false);
-  const [school, setSchool] = useState(user?.school || "");
+  const [schoolId, setSchoolId] = useState(
+    user?.school == null ? "" : String(user.school)
+  );
   const [schools, setSchools] = useState([]);
+  const [schoolLoadError, setSchoolLoadError] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
 
-  // Load all schools once
   useEffect(() => {
-    fetch("/api/schools", { credentials: "include" })
-      .then((res) => res.json())
-      .then((data) => setSchools(data.map((s) => s.name ?? s)))
-      .catch(() => setSchools([]));
-  }, []);
+    const loadSchools = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/schools-fetch`);
+        if (!response.ok) {
+          throw new Error(`School request failed (${response.status}).`);
+        }
+
+        const data = await response.json();
+        if (!Array.isArray(data.schools)) {
+          throw new Error("The schools response has an unexpected format.");
+        }
+
+        const schoolOptions = data.schools
+          .map((record) =>
+            typeof record === "string"
+              ? null
+              : {
+                  id: record.school_id ?? record.id,
+                  name: record.school_name ?? record.name,
+                }
+          )
+          .filter(
+            (option) =>
+              option &&
+              option.id != null &&
+              typeof option.name === "string" &&
+              option.name.trim()
+          )
+          .map((option) => ({
+            id: String(option.id),
+            name: option.name.trim(),
+          }));
+        setSchools(schoolOptions);
+        setSchoolId((currentId) => {
+          if (currentId) return currentId;
+          const currentSchool = user?.school_name || user?.school;
+          return (
+            schoolOptions.find((option) => option.name === currentSchool)?.id ||
+            ""
+          );
+        });
+      } catch {
+        setSchoolLoadError("Could not load the school list. Please try again.");
+      }
+    };
+
+    loadSchools();
+  }, [user?.school, user?.school_name]);
+
+  const selectedSchool = schools.find((option) => option.id === schoolId);
+  const schoolName =
+    selectedSchool?.name ||
+    user?.school_name ||
+    user?.school ||
+    "No school assigned";
 
   const details = [
     { label: "Name: ", value: name },
     { label: "Email: ", value: user?.email || "Not provided" },
     { label: "Role: ", value: user?.role || "Not provided" },
-    { label: "School: ", value: user?.school || "No school assigned" },
+    { label: "School: ", value: schoolName },
   ];
 
   const startEditing = () => {
-    setSchool(user?.school || "");
+    setSchoolId(user?.school_id == null ? "" : String(user.school_id));
     setSaveError("");
     setEditing(true);
   };
@@ -47,18 +103,40 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
     setSaving(true);
     setSaveError("");
     try {
-      // Adjust the URL / method / body to match your backend route
-      const res = await fetch("", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ school }),
+      if (!user?.id) {
+        throw new Error("The logged-in user ID is missing.");
+      }
+      if (!selectedSchool) {
+        throw new Error("Select a school from the list.");
+      }
+
+      const params = new URLSearchParams({
+        user_id: String(user.id),
+        new_school_id: selectedSchool.id,
       });
-      if (!res.ok) throw new Error("Request failed");
-      onUserUpdated?.({ ...user, school });
+      const response = await fetch(`${API_BASE_URL}/schools-update?${params}`, {
+        method: "PUT",
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw new Error(
+          error?.detail || `School update failed (${response.status}).`
+        );
+      }
+
+      onUserUpdated?.({
+        ...user,
+        school_id: selectedSchool.id,
+        school_name: selectedSchool.name,
+        school: selectedSchool.name,
+      });
       setEditing(false);
-    } catch {
-      setSaveError("Couldn't save your school. Please try again.");
+    } catch (error) {
+      setSaveError(
+        error instanceof Error
+          ? error.message
+          : "Couldn't save your school. Please try again."
+      );
     } finally {
       setSaving(false);
     }
@@ -78,55 +156,17 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
           <h2>{name}</h2>
           <p>
             {user?.role || "Account"}
-            {` · ${user?.school || "No school assigned"}`}
+            {` · ${schoolName}`}
           </p>
         </div>
         
       </section>
 
-      {editing && (
-        <section className="card account-card">
-          <div className="card-title">
-            <h2>Edit school</h2>
-          </div>
-
-          <input
-            list="school-options"
-            value={school}
-            onChange={(e) => setSchool(e.target.value)}
-            placeholder="Start typing your school"
-          />
-          <datalist id="school-options">
-            {schools.map((schoolName) => (
-              <option key={schoolName} value={schoolName} />
-            ))}
-          </datalist>
-
-          {saveError && <small>{saveError}</small>}
-
-          <div className="edit-actions">
-            <button
-              className="primary-button"
-              onClick={handleSave}
-              disabled={!schools.includes(school) || saving}
-            >
-              {saving ? "Saving…" : "Save changes"}
-            </button>
-            <button
-              className="secondary-button"
-              onClick={() => setEditing(false)}
-              disabled={saving}
-            >
-              Cancel
-            </button>
-          </div>
-        </section>
-      )}
-
       <div className="account-grid">
         <section className="card account-card">
           <div className="card-title">
-            <h2>Account details</h2> 
+            <h2>Account details</h2>
+
             <span className="status-pill">
               <CheckCircle2 size={15} /> {!editing && (<button className="text-button" onClick={startEditing}><h2>Edit profile</h2></button>)}
             </span>
@@ -140,6 +180,48 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
               </div>
             ))}
           </div>
+
+          {editing && (
+            <div className="edit-school">
+              <h3>Edit school</h3>
+              <label htmlFor="school-select">School</label>
+              <select
+                id="school-select"
+                value={schoolId}
+                onChange={(e) => setSchoolId(e.target.value)}
+                disabled={schools.length === 0}
+              >
+                <option value="" disabled>
+                  {schoolLoadError ? "School list unavailable" : "Select a school"}
+                </option>
+                {schools.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}
+                  </option>
+                ))}
+              </select>
+
+              {schoolLoadError && <small>{schoolLoadError}</small>}
+              {saveError && <small>{saveError}</small>}
+
+              <div className="edit-actions">
+                <button
+                  className="primary-button"
+                  onClick={handleSave}
+                  disabled={!selectedSchool || !user?.id || saving}
+                >
+                  {saving ? "Saving…" : "Save changes"}
+                </button>
+                <button
+                  className="secondary-button"
+                  onClick={() => setEditing(false)}
+                  disabled={saving}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </section>
 
         <section className="card account-card">
