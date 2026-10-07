@@ -271,15 +271,14 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
 
         <section className="card account-card">
           <div className="card-title">
-            <h2>Profile</h2>
+            <h2>Notes</h2>
             <UserRound size={18} />
           </div>
 
-          <p className="profile-note">
-            Support for student progress tracking, intervention planning, and data review
-            is enabled for this account.
+          <p className="Note-description">
+            Add any notes or comments about your students and job responsibilities.
           </p>
-          <button className="secondary-button">View access overview</button>
+          <button className="secondary-button">Edit Notes</button>
         </section>
       </div>
     </div>
