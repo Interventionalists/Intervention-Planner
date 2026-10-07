@@ -1,11 +1,6 @@
 // Placeholder data.
 // Later, replace these objects with the results of your API calls.
 
-export const currentUser = {
-  name: "Ms. Pytleski",
-  initials: "MP",
-};
-
 export const students = [
   {
     id: 1,

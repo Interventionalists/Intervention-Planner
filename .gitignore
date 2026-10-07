@@ -1,6 +1,8 @@
 backend/__pycache__/main.cpython-314.pyc
 backend/.env
+frontend/.env
 __pycache__/
 .pytest_cache/
 .venv/
 backend/__pycache__/main.cpython-314.pyc
+PasswordTesting.py
