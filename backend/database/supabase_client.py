@@ -81,3 +81,22 @@ def fetch_user_school(user_id):
 def fetch_school_name(school_id):
     response = supabase.table("schools").select("school_name").eq("school_id", school_id).execute()
     return response.data[0]["school_name"] if response.data else None
+
+
+########################### NOTES FUNCTIONS #######################################
+
+def fetch_notes_from_user(user_id):
+    response = supabase.table("notes").select("*").eq("created_by", user_id).execute()
+    return response.data
+
+def fetch_notes_from_date(timestamp):
+    response = supabase.table("notes").select("*").eq("date", timestamp).execute()
+    return response.data
+
+def fetch_notes_for_student(user_id, student_id):
+    response = supabase.table("notes").select("*").eq("created_by", user_id).eq("student_id", student_id).execute()
+    return response.data
+
+def edit_text(note_id, new_text):
+    response = supabase.table("notes").update({"text": new_text}).eq("id", note_id).execute()
+    return response.data
