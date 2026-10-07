@@ -40,6 +40,33 @@ def fetch_students():
     response = supabase.table("students").select("*").execute()
     return response.data
 
+def create_student(
+    first_name: str,
+    last_name: str,
+    grade_level: int | None = None,
+    teacher: str | None = None,
+    interventionist: str | None = None,
+    school: int | None = None,
+    profile_api_link: str | None = None,
+):
+    student = {
+        "first_name": first_name,
+        "last_name": last_name,
+        "grade_level": grade_level,
+        "teacher": teacher,
+        "interventionist": interventionist,
+        "school": school,
+        "profile_api_link": profile_api_link,
+    }
+    response = (
+        supabase.table("students")
+        .insert(student)
+        .select("*")
+        .execute()
+    )
+    if not response.data:
+        raise RuntimeError("Student insert returned no row.")
+    return response.data[0]
 
 ################################# TEACHER FUNCTIONS ########################################
 def fetch_teachers():
