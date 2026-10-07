@@ -7,6 +7,7 @@ import {
   ShieldCheck,
   UserRound,
 } from "lucide-react";
+import { ResetPasswordForm } from "./LoginPage";
 
 const API_BASE_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:8000"
@@ -28,6 +29,8 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
   const [schoolLoadError, setSchoolLoadError] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [passwordNotice, setPasswordNotice] = useState("");
 
   useEffect(() => {
     const loadSchools = async () => {
@@ -254,8 +257,32 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
               <strong>Password</strong>
               <small>Last updated 2 weeks ago</small>
             </div>
-            <button className="text-button">Change</button>
+            <button
+              className="text-button"
+              type="button"
+              onClick={() => {
+                setChangingPassword((changing) => !changing);
+                setPasswordNotice("");
+              }}
+            >
+              {changingPassword ? "Cancel" : "Change"}
+            </button>
           </div>
+
+          {passwordNotice && <p className="login-notice">{passwordNotice}</p>}
+          {changingPassword && (
+            <ResetPasswordForm
+              email={user?.email || ""}
+              showEmailField={false}
+              showHeading={false}
+              backLabel="Cancel"
+              onBack={() => setChangingPassword(false)}
+              onSuccess={() => {
+                setChangingPassword(false);
+                setPasswordNotice("Password updated successfully.");
+              }}
+            />
+          )}
 
           <div className="security-item">
             <div className="security-icon muted-icon">
