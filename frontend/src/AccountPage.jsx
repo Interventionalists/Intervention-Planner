@@ -13,11 +13,62 @@ const API_BASE_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:8000"
 ).replace(/\/+$/, "");
 
-const preferences = [
-  "Weekly email summaries",
-  "Session reminders",
-  "Student risk alerts",
-];
+async function fetchUserNotes(userId) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/notes-userFetch/${userId}`);
+        const data = await response.json();
+        return data.notes;
+    } catch (error) {
+        console.error("Error fetching user notes:", error);
+        throw error;
+    }
+}
+
+
+async function loadSchools(currentSchool, setSchools, setSchoolId, setSchoolLoadError) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/schools-fetch`);
+    if (!response.ok) {
+      throw new Error(`School request failed (${response.status}).`);
+    }
+
+    const data = await response.json();
+    if (!Array.isArray(data.schools)) {
+      throw new Error("The schools response has an unexpected format.");
+    }
+
+    const schoolOptions = data.schools
+      .map((record) =>
+        typeof record === "string"
+          ? null
+          : {
+              id: record.school_id ?? record.id,
+              name: record.school_name ?? record.name,
+            }
+      )
+      .filter(
+        (option) =>
+          option &&
+          option.id != null &&
+          typeof option.name === "string" &&
+          option.name.trim()
+      )
+      .map((option) => ({
+        id: String(option.id),
+        name: option.name.trim(),
+      }));
+
+    setSchools(schoolOptions);
+    setSchoolId((currentId) =>
+      currentId ||
+      schoolOptions.find((option) => option.name === currentSchool)?.id ||
+      ""
+    );
+    setSchoolLoadError("");
+  } catch {
+    setSchoolLoadError("Could not load the school list. Please try again.");
+  }
+}
 
 // onUserUpdated(updatedUser) lets the parent refresh its user state after a save.
 const AccountPage = ({ user, name, initials, onUserUpdated }) => {
@@ -33,53 +84,17 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
   const [passwordNotice, setPasswordNotice] = useState("");
 
   useEffect(() => {
-    const loadSchools = async () => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/schools-fetch`);
-        if (!response.ok) {
-          throw new Error(`School request failed (${response.status}).`);
-        }
+    loadSchools(
+      user?.school_name || user?.school,
+      setSchools,
+      setSchoolId,
+      setSchoolLoadError
+    );
 
-        const data = await response.json();
-        if (!Array.isArray(data.schools)) {
-          throw new Error("The schools response has an unexpected format.");
-        }
-
-        const schoolOptions = data.schools
-          .map((record) =>
-            typeof record === "string"
-              ? null
-              : {
-                  id: record.school_id ?? record.id,
-                  name: record.school_name ?? record.name,
-                }
-          )
-          .filter(
-            (option) =>
-              option &&
-              option.id != null &&
-              typeof option.name === "string" &&
-              option.name.trim()
-          )
-          .map((option) => ({
-            id: String(option.id),
-            name: option.name.trim(),
-          }));
-        setSchools(schoolOptions);
-        setSchoolId((currentId) => {
-          if (currentId) return currentId;
-          const currentSchool = user?.school_name || user?.school;
-          return (
-            schoolOptions.find((option) => option.name === currentSchool)?.id ||
-            ""
-          );
-        });
-      } catch {
-        setSchoolLoadError("Could not load the school list. Please try again.");
-      }
-    };
-
-    loadSchools();
+    fetchUserNotes(user?.id).then((notes) => {
+      // Handle the fetched notes if needed
+    });
+    
   }, [user?.school, user?.school_name]);
 
   const selectedSchool = schools.find((option) => option.id === schoolId);
@@ -227,22 +242,6 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
           )}
         </section>
 
-        <section className="card account-card">
-          <div className="card-title">
-            <h2>Preferences</h2>
-            <Bell size={18} />
-          </div>
-
-          <ul className="check-list">
-            {preferences.map((item) => (
-              <li key={item}>
-                <CheckCircle2 size={16} />
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-
         <section className="card account-card security-card">
           <div className="card-title">
             <h2>Security</h2>
@@ -305,7 +304,20 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
           <p className="Note-description">
             Add any notes or comments about your students and job responsibilities.
           </p>
-          <button className="secondary-button">Edit Notes</button>
+
+          <div className="card student-table-card">
+          <div className="table-head">
+            <span>Text</span>
+            <span>Date</span>
+            <span>Student</span>
+          </div>
+
+          <div className="table-body">
+            <div className="table-row">
+              
+            </div>
+          </div>
+        </div>
         </section>
       </div>
     </div>

@@ -6,7 +6,7 @@ router = APIRouter()
 
 ################################ FETCH ENDPOINTS ######################################
 
-@router.get("/notes-userFetch")
+@router.get("/notes-userFetch/{user_id}")
 def get_notes_from_user(user_id: str):
     try:
         notes = fetch_notes_from_user(user_id)
@@ -14,7 +14,7 @@ def get_notes_from_user(user_id: str):
         raise HTTPException(status_code=500, detail=str(e))
     return {"notes": notes}
 
-@router.get("/notes-fetchFromDate")
+@router.get("/notes-fetchFromDate/{timestamp}")
 def get_notes_from_date(timestamp: str):
     try:
         notes = fetch_notes_from_date(timestamp)
@@ -22,7 +22,7 @@ def get_notes_from_date(timestamp: str):
         raise HTTPException(status_code=500, detail=str(e))
     return {"notes": notes}
 
-@router.get("/notes-fetchForStudent")
+@router.get("/notes-fetchForStudent/{user_id}/{student_id}")
 def get_notes_for_student(user_id: str, student_id: str):
     try:
         notes = fetch_notes_for_student(user_id, student_id)
@@ -30,7 +30,7 @@ def get_notes_for_student(user_id: str, student_id: str):
         raise HTTPException(status_code=500, detail=str(e))
     return {"notes": notes}
 
-@router.put("/notes-editText")
+@router.put("/notes-editText/{note_id}")
 def update_note_text(note_id: str, new_text: str):
     try:
         updated_note = edit_text(note_id, new_text)
