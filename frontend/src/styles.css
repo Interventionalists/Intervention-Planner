@@ -397,6 +397,35 @@ nav { display: grid; gap: 6px; }
 
 .student-notes span { font-weight: 600; font-size: 12px; }
 .student-notes p { color: #777; font-size: 12px; margin: 6px 0; }
+.student-notes textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 90px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-top: 8px;
+  font: inherit;
+  color: #222;
+}
+
+.notes-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.ghost-button {
+  border: 1px solid var(--border);
+  background: #fff;
+  color: #555;
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
 
 .student-card select {
   display: none;

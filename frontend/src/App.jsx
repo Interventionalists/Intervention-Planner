@@ -81,6 +81,7 @@ function App() {
 
 function PlannerApp({ onLogout }) {
   const [page, setPage] = useState("dashboard");
+  const [studentsData, setStudentsData] = useState(students);
   const [selectedStudent, setSelectedStudent] = useState(students[0]);
   const [query, setQuery] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -88,15 +89,25 @@ function PlannerApp({ onLogout }) {
 
   const filteredStudents = useMemo(
     () =>
-      students.filter((student) =>
+      studentsData.filter((student) =>
         student.name.toLowerCase().includes(query.toLowerCase())
       ),
-    [query]
+    [query, studentsData]
   );
 
   const selectPage = (id) => {
     setPage(id);
     setMobileOpen(false);
+  };
+
+  const handleSaveStudentNotes = (studentId, notes) => {
+    const updatedStudents = studentsData.map((student) =>
+      student.id === studentId ? { ...student, notes } : student
+    );
+
+    setStudentsData(updatedStudents);
+    const updatedStudent = updatedStudents.find((student) => student.id === studentId);
+    setSelectedStudent(updatedStudent);
   };
 
   return (
@@ -129,6 +140,7 @@ function PlannerApp({ onLogout }) {
               student={selectedStudent}
               onStudentChange={setSelectedStudent}
               onStudents={() => selectPage("students")}
+              onSaveNotes={handleSaveStudentNotes}
             />
           )}
 
@@ -219,7 +231,25 @@ function Header({ query, setQuery, openMenu }) {
   );
 }
 
-function Dashboard({ student, onStudentChange, onStudents }) {
+function Dashboard({ student, onStudentChange, onStudents, onSaveNotes }) {
+  const [isEditingNotes, setIsEditingNotes] = useState(false);
+  const [draftNotes, setDraftNotes] = useState(student.notes || "");
+
+  React.useEffect(() => {
+    setDraftNotes(student.notes || "");
+    setIsEditingNotes(false);
+  }, [student]);
+
+  const saveNotes = () => {
+    onSaveNotes(student.id, draftNotes.trim());
+    setIsEditingNotes(false);
+  };
+
+  const cancelNotes = () => {
+    setDraftNotes(student.notes || "");
+    setIsEditingNotes(false);
+  };
+
   return (
     <>
       <PageHeading
@@ -239,13 +269,44 @@ function Dashboard({ student, onStudentChange, onStudents }) {
           <p>Group: {student.group}</p>
           <p>Int. Teacher: {student.interventionTeacher}</p>
           <div className="student-notes">
-            <span>Notes</span>
-            <p>{student.notes || "No notes yet."}</p>
+            {isEditingNotes ? (
+              <>
+                <span>Notes</span>
+                <textarea
+                  value={draftNotes}
+                  onChange={(e) => setDraftNotes(e.target.value)}
+                  rows={4}
+                  placeholder="Add notes for this student..."
+                />
+                <div className="notes-actions">
+                  <button type="button" className="text-button" onClick={saveNotes}>
+                    Save
+                  </button>
+                  <button type="button" className="ghost-button" onClick={cancelNotes}>
+                    Cancel
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <span>Notes</span>
+                <p>{student.notes?.trim() ? student.notes : "No notes yet."}</p>
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() => setIsEditingNotes(true)}
+                >
+                  {student.notes?.trim() ? "Edit notes" : "Add notes"}
+                </button>
+              </>
+            )}
           </div>
           <select
             value={student.id}
             onChange={(e) =>
-              onStudentChange(students.find((s) => s.id === Number(e.target.value)))
+              onStudentChange(
+                students.find((s) => s.id === Number(e.target.value))
+              )
             }
             aria-label="Select student"
           >
