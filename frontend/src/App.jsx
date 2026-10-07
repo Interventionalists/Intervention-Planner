@@ -16,8 +16,9 @@ import {
   Users,
   X
 } from "lucide-react";
-import { currentUser, events, students, themePresets } from "./data";
+import { events, students, themePresets } from "./data";
 import LoginPage from "./LoginPage";
+import AccountPage from "./AccountPage";
 
 const AUTH_SESSION_KEY = "interventioner-demo-authenticated";
 const AUTH_USER_KEY = "interventioner-auth-user";
@@ -27,23 +28,34 @@ const navItems = [
   { id: "students", label: "Students", icon: Users },
   { id: "calendar", label: "Calendar", icon: CalendarDays },
   { id: "reports", label: "Reports", icon: BarChart3 },
-  { id: "settings", label: "Settings", icon: Settings },
+  { id: "settings", label: "Settings", icon: Settings }
 ];
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(
     () => sessionStorage.getItem(AUTH_SESSION_KEY) === "true"
   );
+  const [currentUser, setCurrentUser] = useState(() => {
+    const savedUser = sessionStorage.getItem(AUTH_USER_KEY);
+    return savedUser ? JSON.parse(savedUser) : null;
+  });
 
   const logIn = (user) => {
     sessionStorage.setItem(AUTH_SESSION_KEY, "true");
     sessionStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+    setCurrentUser(user);
     setIsAuthenticated(true);
+  };
+
+  const updateUser = (user) => {
+    sessionStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+    setCurrentUser(user);
   };
 
   const logOut = () => {
     sessionStorage.removeItem(AUTH_SESSION_KEY);
     sessionStorage.removeItem(AUTH_USER_KEY);
+    setCurrentUser(null);
     setIsAuthenticated(false);
   };
 
@@ -64,7 +76,11 @@ function App() {
           path="/app"
           element={
             isAuthenticated ? (
-              <PlannerApp onLogout={logOut} />
+              <PlannerApp
+                onLogout={logOut}
+                onUserUpdated={updateUser}
+                user={currentUser}
+              />
             ) : (
               <Navigate to="/login" replace />
             )
@@ -79,13 +95,24 @@ function App() {
   );
 }
 
-function PlannerApp({ onLogout }) {
+function PlannerApp({ onLogout, onUserUpdated, user }) {
   const [page, setPage] = useState("dashboard");
   const [studentsData, setStudentsData] = useState(students);
   const [selectedStudent, setSelectedStudent] = useState(students[0]);
   const [query, setQuery] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [theme, setTheme] = useState(themePresets[0].colors);
+  const userName =
+    user?.name ||
+    [user?.first_name, user?.last_name].filter(Boolean).join(" ") ||
+    user?.email ||
+    "User";
+  const userInitials = userName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0].toUpperCase())
+    .join("");
 
   const filteredStudents = useMemo(
     () =>
@@ -125,6 +152,7 @@ function PlannerApp({ onLogout }) {
         mobileOpen={mobileOpen}
         closeMobile={() => setMobileOpen(false)}
         onLogout={onLogout}
+        userName={userName}
       />
 
       <div className="main-shell">
@@ -132,6 +160,9 @@ function PlannerApp({ onLogout }) {
           query={query}
           setQuery={setQuery}
           openMenu={() => setMobileOpen(true)}
+          userName={userName}
+          userInitials={userInitials}
+          onAccountClick={() => selectPage("account")}
         />
 
         <main className="content">
@@ -140,6 +171,7 @@ function PlannerApp({ onLogout }) {
               student={selectedStudent}
               onStudentChange={setSelectedStudent}
               onStudents={() => selectPage("students")}
+              userName={userName}
               onSaveNotes={handleSaveStudentNotes}
             />
           )}
@@ -159,13 +191,29 @@ function PlannerApp({ onLogout }) {
           {page === "settings" && (
             <SettingsPage theme={theme} setTheme={setTheme} />
           )}
+
+          {page === "account" && (
+            <AccountPage
+              user={user}
+              name={userName}
+              initials={userInitials}
+              onUserUpdated={onUserUpdated}
+            />
+          )}
         </main>
       </div>
     </div>
   );
 }
 
-function Sidebar({ page, onPageChange, mobileOpen, closeMobile, onLogout }) {
+function Sidebar({
+  page,
+  onPageChange,
+  mobileOpen,
+  closeMobile,
+  onLogout,
+  userName,
+}) {
   return (
     <>
       {mobileOpen && <div className="mobile-overlay" onClick={closeMobile} />}
@@ -192,9 +240,9 @@ function Sidebar({ page, onPageChange, mobileOpen, closeMobile, onLogout }) {
         </nav>
 
         <div className="sidebar-bottom">
-          <button className="nav-item">
+          <button className="nav-item" onClick={() => onPageChange("account")}>
             <CircleUserRound size={19} strokeWidth={1.8} />
-            <span>{currentUser.name}</span>
+            <span>{userName}</span>
           </button>
           <button className="nav-item" onClick={onLogout}>
             <LogOut size={19} strokeWidth={1.8} />
@@ -206,7 +254,14 @@ function Sidebar({ page, onPageChange, mobileOpen, closeMobile, onLogout }) {
   );
 }
 
-function Header({ query, setQuery, openMenu }) {
+function Header({
+  query,
+  setQuery,
+  openMenu,
+  userName,
+  userInitials,
+  onAccountClick,
+}) {
   return (
     <header className="topbar">
       <button className="mobile-menu" onClick={openMenu} aria-label="Open menu">
@@ -224,14 +279,21 @@ function Header({ query, setQuery, openMenu }) {
       </div>
 
       <div className="profile">
-        <span>Hello, {currentUser.name}</span>
-        <div className="avatar-small">{currentUser.initials}</div>
+        <span>Hello, {userName}</span>
+        <button
+          className="avatar-small"
+          type="button"
+          onClick={onAccountClick}
+          aria-label={`Open ${userName}'s account`}
+        >
+          {userInitials}
+        </button>
       </div>
     </header>
   );
 }
 
-function Dashboard({ student, onStudentChange, onStudents, onSaveNotes }) {
+function Dashboard({ student, onStudentChange, onStudents, userName, onSaveNotes }) {
   const [isEditingNotes, setIsEditingNotes] = useState(false);
   const [draftNotes, setDraftNotes] = useState(student.notes || "");
 
@@ -254,7 +316,7 @@ function Dashboard({ student, onStudentChange, onStudents, onSaveNotes }) {
     <>
       <PageHeading
         eyebrow="Overview"
-        title={`Good morning, ${currentUser.name}!`}
+        title={`Good morning, ${userName}!`}
         subtitle="Here’s what’s happening with your intervention students."
       />
 

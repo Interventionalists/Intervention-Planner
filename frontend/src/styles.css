@@ -194,6 +194,29 @@ button { cursor: pointer; }
   font-size: 13px;
 }
 
+.login-notice {
+  margin: -6px 0 4px;
+  color: #1c7c4a;
+  font-size: 13px;
+}
+
+.login-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 18px;
+  padding: 0;
+  border: 0;
+  color: #172c50;
+  background: none;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.login-link:hover { color: #079bd8; text-decoration: underline; }
+.login-link:focus-visible { outline: 3px solid #48b7f2; outline-offset: 3px; }
+
 .app {
   min-height: 100vh;
   display: flex;
