@@ -49,9 +49,62 @@ def record_login_attempt(user_id: int, success: bool, max_attempts: int, lock_mi
 
 ################################## STUDENT FUNCTIONS ########################################
 def fetch_students():
-    response = supabase.table("students").select("*").execute()
+    response = supabase.table("students").select(
+        "*, teacher_user:users!students_teacher_fkey(first_name,last_name), "
+        "interventionist_user:users!students_interventionist_fkey(first_name,last_name)"
+    ).execute()
+    grade_response = supabase.table("student_grades").select(
+        "id,math,english,social_studies,science,art,p_e"
+    ).execute()
+    grade_columns = {
+        "Math": "math",
+        "English": "english",
+        "Social Studies": "social_studies",
+        "Science": "science",
+        "Art": "art",
+        "P.E.": "p_e",
+    }
+    grades_by_student = {
+        str(grade["id"]): {
+            subject: grade[column]
+            for subject, column in grade_columns.items()
+            if grade.get(column) is not None
+        }
+        for grade in grade_response.data
+    }
+
+    for student in response.data:
+        student["scores"] = grades_by_student.get(str(student["id"]), {})
+
     return response.data
 
+def create_student(
+    first_name: str,
+    last_name: str,
+    grade_level: int | None = None,
+    teacher: str | None = None,
+    interventionist: str | None = None,
+    school: int | None = None,
+    profile_api_link: str | None = None,
+):
+    student = {
+        "first_name": first_name,
+        "last_name": last_name,
+        "grade_level": grade_level,
+        "teacher": teacher,
+        "interventionist": interventionist,
+        "school": school,
+        "profile_api_link": profile_api_link,
+    }
+    response = (
+        supabase.table("students")
+        .insert(student)
+        .select("*")
+        .execute()
+    )
+    if not response.data:
+        raise RuntimeError("Student insert returned no row.")
+    return response.data[0]
 
 ################################# TEACHER FUNCTIONS ########################################
 def fetch_teachers():
@@ -97,8 +150,8 @@ def fetch_school_name(school_id):
 
 ########################### NOTES FUNCTIONS #######################################
 
-def fetch_notes_from_user(user_id):
-    response = supabase.table("notes").select("*").eq("created_by", user_id).execute()
+def fetch_notes_from_user(public_id):
+    response = supabase.table("notes").select("*").eq("created_by", public_id).execute()
     return response.data
 
 def fetch_notes_from_date(timestamp):
@@ -106,9 +159,27 @@ def fetch_notes_from_date(timestamp):
     return response.data
 
 def fetch_notes_for_student(user_id, student_id):
-    response = supabase.table("notes").select("*").eq("created_by", user_id).eq("student_id", student_id).execute()
+    response = (supabase.table("notes").select("*").eq("created_by", user_id).eq("student_id", student_id).order("date", desc=True).execute())
     return response.data
+
+def create_note(student_id, created_by, text):
+    response = supabase.table("notes").insert({
+        "student_id": student_id,
+        "created_by": created_by,
+        "text": text,
+    }).execute()
+    return response.data[0] if response.data else None
 
 def edit_text(note_id, new_text):
     response = supabase.table("notes").update({"text": new_text}).eq("id", note_id).execute()
     return response.data
+
+def delete_note(note_id, user_id):
+    response = (
+        supabase.table("notes")
+        .delete()
+        .eq("id", note_id)
+        .eq("created_by", user_id)
+        .execute()
+    )
+    return bool(response.data)
