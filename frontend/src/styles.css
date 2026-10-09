@@ -505,9 +505,11 @@ nav { display: grid; gap: 6px; }
   justify-content: space-between;
   min-height: 28px;
 }
+.note-entry-actions { display: flex; align-items: center; gap: 3px; }
 .note-entry time { color: #777; font-size: 11px; }
 .note-entry p { white-space: pre-wrap; overflow-wrap: anywhere; }
-.note-edit-button {
+.note-edit-button,
+.note-delete-button {
   display: grid;
   place-items: center;
   width: 28px;
@@ -521,11 +523,17 @@ nav { display: grid; gap: 6px; }
   cursor: pointer;
 }
 .note-entry:hover .note-edit-button,
+.note-entry:hover .note-delete-button,
 .note-entry:focus-within .note-edit-button,
-.note-edit-button:focus-visible { opacity: 1; }
+.note-entry:focus-within .note-delete-button,
+.note-edit-button:focus-visible,
+.note-delete-button:focus-visible { opacity: 1; }
 .note-edit-button:hover { color: var(--primary); background: #f2f5f7; }
+.note-delete-button { color: #9b2c2c; }
+.note-delete-button:hover { color: #b42318; background: #fff1f0; }
 @media (hover: none) {
-  .note-edit-button { opacity: 1; }
+  .note-edit-button,
+  .note-delete-button { opacity: 1; }
 }
 .student-notes textarea,
 .profile-notes textarea {

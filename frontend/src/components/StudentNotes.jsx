@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Pencil } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { useStudentNotes } from "../hooks/useStudentNotes";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
@@ -14,6 +14,7 @@ function StudentNotes({ studentId, userId, variant = "profile" }) {
   const [editingNoteId, setEditingNoteId] = useState(null);
   const [draftNote, setDraftNote] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [deletingNoteId, setDeletingNoteId] = useState(null);
   const [saveError, setSaveError] = useState("");
 
   const startAdding = () => {
@@ -77,6 +78,36 @@ function StudentNotes({ studentId, userId, variant = "profile" }) {
     }
   };
 
+  const deleteNote = async (note) => {
+    const noteDate = note.date
+      ? new Date(note.date).toLocaleDateString()
+      : "this note";
+    if (!window.confirm(`Delete the note from ${noteDate}? This cannot be undone.`)) {
+      return;
+    }
+
+    setDeletingNoteId(note.id);
+    setSaveError("");
+    const params = new URLSearchParams({
+      note_id: String(note.id),
+      user_id: userId,
+    });
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/notes-delete?${params}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        throw new Error("Unable to delete this note.");
+      }
+      await refreshNotes();
+    } catch (error) {
+      setSaveError(error.message || "Unable to delete this note.");
+    } finally {
+      setDeletingNoteId(null);
+    }
+  };
+
   return (
     <section
       className={variant === "dashboard" ? "student-notes" : "profile-notes"}
@@ -124,15 +155,28 @@ function StudentNotes({ studentId, userId, variant = "profile" }) {
                     <time>
                       {note.date ? new Date(note.date).toLocaleDateString() : ""}
                     </time>
-                    <button
-                      type="button"
-                      className="note-edit-button"
-                      title="Edit this note"
-                      aria-label={`Edit note from ${note.date ? new Date(note.date).toLocaleDateString() : "this date"}`}
-                      onClick={() => startEditing(note)}
-                    >
-                      <Pencil size={14} aria-hidden="true" />
-                    </button>
+                    <div className="note-entry-actions">
+                      <button
+                        type="button"
+                        className="note-edit-button"
+                        title="Edit this note"
+                        aria-label={`Edit note from ${note.date ? new Date(note.date).toLocaleDateString() : "this date"}`}
+                        onClick={() => startEditing(note)}
+                        disabled={deletingNoteId !== null}
+                      >
+                        <Pencil size={14} aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        className="note-delete-button"
+                        title="Delete this note"
+                        aria-label={`Delete note from ${note.date ? new Date(note.date).toLocaleDateString() : "this date"}`}
+                        onClick={() => deleteNote(note)}
+                        disabled={!userId || deletingNoteId !== null}
+                      >
+                        <Trash2 size={14} aria-hidden="true" />
+                      </button>
+                    </div>
                   </div>
                   <p>{note.text || ""}</p>
                 </article>

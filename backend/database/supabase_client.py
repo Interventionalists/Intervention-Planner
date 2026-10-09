@@ -134,3 +134,13 @@ def create_note(student_id, created_by, text):
 def edit_text(note_id, new_text):
     response = supabase.table("notes").update({"text": new_text}).eq("id", note_id).execute()
     return response.data
+
+def delete_note(note_id, user_id):
+    response = (
+        supabase.table("notes")
+        .delete()
+        .eq("id", note_id)
+        .eq("created_by", user_id)
+        .execute()
+    )
+    return bool(response.data)

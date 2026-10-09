@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from database.supabase_client import (
     create_note,
+    delete_note,
     edit_text,
     fetch_notes_for_student,
     fetch_notes_from_date,
@@ -60,3 +61,14 @@ def add_note(payload: NoteCreate):
     if not note:
         raise HTTPException(status_code=500, detail="Note creation failed")
     return {"note": note}
+
+
+@router.delete("/notes-delete")
+def remove_note(note_id: str, user_id: str):
+    try:
+        deleted = delete_note(note_id, user_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Note not found or not owned by user")
+    return {"deleted": True}
