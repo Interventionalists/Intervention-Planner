@@ -3,13 +3,13 @@ import {
   CalendarDays,
   CircleUserRound,
   LayoutDashboard,
+  LogOut,
   Menu,
   Search,
   Settings,
   Users,
   X,
 } from "lucide-react";
-import { currentUser } from "../data";
 
 const navItems = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -19,7 +19,14 @@ const navItems = [
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
-export function Sidebar({ page, onPageChange, mobileOpen, closeMobile }) {
+export function Sidebar({
+  page,
+  onPageChange,
+  mobileOpen,
+  closeMobile,
+  onLogout,
+  userName = "User",
+}) {
   return (
     <>
       {mobileOpen && <div className="mobile-overlay" onClick={closeMobile} />}
@@ -46,17 +53,30 @@ export function Sidebar({ page, onPageChange, mobileOpen, closeMobile }) {
         </nav>
 
         <div className="sidebar-bottom">
-          <button className="nav-item">
+          <button className="nav-item" onClick={() => onPageChange("account")}>
             <CircleUserRound size={19} strokeWidth={1.8} />
-            <span>{currentUser.name}</span>
+            <span>{userName}</span>
           </button>
+          {onLogout && (
+            <button className="nav-item" onClick={onLogout}>
+              <LogOut size={19} strokeWidth={1.8} />
+              <span>Sign out</span>
+            </button>
+          )}
         </div>
       </aside>
     </>
   );
 }
 
-export function Header({ query, setQuery, openMenu }) {
+export function Header({
+  query,
+  setQuery,
+  openMenu,
+  userName = "User",
+  userInitials = "U",
+  onAccountClick,
+}) {
   return (
     <header className="topbar">
       <button className="mobile-menu" onClick={openMenu} aria-label="Open menu">
@@ -74,8 +94,15 @@ export function Header({ query, setQuery, openMenu }) {
       </div>
 
       <div className="profile">
-        <span>Hello, {currentUser.name}</span>
-        <div className="avatar-small">{currentUser.initials}</div>
+        <span>Hello, {userName}</span>
+        <button
+          className="avatar-small"
+          type="button"
+          onClick={onAccountClick}
+          aria-label={`Open ${userName}'s account`}
+        >
+          {userInitials}
+        </button>
       </div>
     </header>
   );

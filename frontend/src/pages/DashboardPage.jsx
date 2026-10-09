@@ -1,13 +1,19 @@
 import { BarChart3, ClipboardList, SlidersHorizontal } from "lucide-react";
-import { currentUser, events } from "../data";
+import { events } from "../data";
 import { CardTitle, PageHeading, ProgressChart } from "../components/PageElements";
 
-function DashboardPage({ student, students, onStudentChange, onStudents }) {
+function DashboardPage({
+  student,
+  students,
+  onStudentChange,
+  onStudents,
+  userName = "User",
+}) {
   return (
     <>
       <PageHeading
         eyebrow="Overview"
-        title={`Good morning, ${currentUser.name}!`}
+        title={`Good morning, ${userName}!`}
         subtitle="Here’s what’s happening with your intervention students."
       />
 
