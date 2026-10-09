@@ -527,7 +527,8 @@ nav { display: grid; gap: 6px; }
 @media (hover: none) {
   .note-edit-button { opacity: 1; }
 }
-.student-notes textarea {
+.student-notes textarea,
+.profile-notes textarea {
   width: 100%;
   box-sizing: border-box;
   resize: vertical;

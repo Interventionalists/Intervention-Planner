@@ -1,8 +1,9 @@
 import { ArrowLeft, BarChart3, ClipboardList } from "lucide-react";
 import { events } from "../data";
 import { CardTitle, PageHeading, ProgressChart } from "../components/PageElements";
+import StudentNotes from "../components/StudentNotes";
 
-function StudentProfilePage({ student, onBack }) {
+function StudentProfilePage({ student, onBack, userId }) {
   const scores = Object.entries(student.scores);
 
   return (
@@ -33,10 +34,7 @@ function StudentProfilePage({ student, onBack }) {
             <div><dt>Group</dt><dd>{student.group}</dd></div>
             <div><dt>Intervention teacher</dt><dd>{student.interventionTeacher}</dd></div>
           </dl>
-          <div className="profile-notes">
-            <h3>Notes</h3>
-            <p>{student.notes || "No notes yet."}</p>
-          </div>
+          <StudentNotes studentId={student.id} userId={userId} />
         </div>
 
         <div className="card profile-scores-card">

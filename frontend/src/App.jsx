@@ -227,6 +227,7 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
                 <StudentProfilePage
                   student={selectedStudent}
                   onBack={() => selectPage("students")}
+                  userId={user?.public_id}
                 />
               )}
               {page === "students" && (
