@@ -66,6 +66,33 @@ def fetch_students():
 
     return response.data
 
+def create_student(
+    first_name: str,
+    last_name: str,
+    grade_level: int | None = None,
+    teacher: str | None = None,
+    interventionist: str | None = None,
+    school: int | None = None,
+    profile_api_link: str | None = None,
+):
+    student = {
+        "first_name": first_name,
+        "last_name": last_name,
+        "grade_level": grade_level,
+        "teacher": teacher,
+        "interventionist": interventionist,
+        "school": school,
+        "profile_api_link": profile_api_link,
+    }
+    response = (
+        supabase.table("students")
+        .insert(student)
+        .select("*")
+        .execute()
+    )
+    if not response.data:
+        raise RuntimeError("Student insert returned no row.")
+    return response.data[0]
 
 ################################# TEACHER FUNCTIONS ########################################
 def fetch_teachers():
@@ -111,8 +138,8 @@ def fetch_school_name(school_id):
 
 ########################### NOTES FUNCTIONS #######################################
 
-def fetch_notes_from_user(user_id):
-    response = supabase.table("notes").select("*").eq("created_by", user_id).execute()
+def fetch_notes_from_user(public_id):
+    response = supabase.table("notes").select("*").eq("created_by", public_id).execute()
     return response.data
 
 def fetch_notes_from_date(timestamp):
