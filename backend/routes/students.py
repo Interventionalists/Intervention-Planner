@@ -1,5 +1,4 @@
-from http.client import HTTPException
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from database.supabase_client import fetch_students
 
 router = APIRouter()
