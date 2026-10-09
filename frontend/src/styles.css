@@ -497,6 +497,82 @@ nav { display: grid; gap: 6px; }
 
 .student-notes span { font-weight: 600; font-size: 12px; }
 .student-notes p { color: #777; font-size: 12px; margin: 6px 0; }
+.note-history { display: grid; gap: 10px; margin-top: 8px; }
+.note-entry { padding-bottom: 9px; border-bottom: 1px solid #eee; }
+.note-entry-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 28px;
+}
+.note-entry-actions { display: flex; align-items: center; gap: 3px; }
+.note-entry time { color: #777; font-size: 11px; }
+.note-entry p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.note-edit-button,
+.note-delete-button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  color: #555;
+  background: transparent;
+  opacity: 0;
+  cursor: pointer;
+}
+.note-entry:hover .note-edit-button,
+.note-entry:hover .note-delete-button,
+.note-entry:focus-within .note-edit-button,
+.note-entry:focus-within .note-delete-button,
+.note-edit-button:focus-visible,
+.note-delete-button:focus-visible { opacity: 1; }
+.note-edit-button:hover { color: var(--primary); background: #f2f5f7; }
+.note-delete-button { color: #9b2c2c; }
+.note-delete-button:hover { color: #b42318; background: #fff1f0; }
+@media (hover: none) {
+  .note-edit-button,
+  .note-delete-button { opacity: 1; }
+}
+.student-notes textarea,
+.profile-notes textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 90px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-top: 8px;
+  font: inherit;
+  color: #222;
+}
+
+.notes-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.ghost-button {
+  border: 1px solid var(--border);
+  background: #fff;
+  color: #555;
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.data-state {
+  padding: 28px 0;
+  color: #555;
+  font-size: 14px;
+}
+
+.error-state { color: #b42318 !important; }
 
 .student-card select {
   display: none;
