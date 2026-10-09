@@ -37,7 +37,33 @@ def update_user_password(email: str, password_hash: str):
 
 ################################## STUDENT FUNCTIONS ########################################
 def fetch_students():
-    response = supabase.table("students").select("*").execute()
+    response = supabase.table("students").select(
+        "*, teacher_user:users!students_teacher_fkey(first_name,last_name), "
+        "interventionist_user:users!students_interventionist_fkey(first_name,last_name)"
+    ).execute()
+    grade_response = supabase.table("student_grades").select(
+        "id,math,english,social_studies,science,art,p_e"
+    ).execute()
+    grade_columns = {
+        "Math": "math",
+        "English": "english",
+        "Social Studies": "social_studies",
+        "Science": "science",
+        "Art": "art",
+        "P.E.": "p_e",
+    }
+    grades_by_student = {
+        str(grade["id"]): {
+            subject: grade[column]
+            for subject, column in grade_columns.items()
+            if grade.get(column) is not None
+        }
+        for grade in grade_response.data
+    }
+
+    for student in response.data:
+        student["scores"] = grades_by_student.get(str(student["id"]), {})
+
     return response.data
 
 def fetch_student_name(student_id):
@@ -124,10 +150,28 @@ def fetch_notes_from_date(timestamp):
     response = supabase.table("notes").select("*").eq("date", timestamp).execute()
     return response.data
 
-def fetch_notes_for_student(student_id):
-    response = supabase.table("notes").select("*").eq("student_id", student_id).execute()
+def fetch_notes_for_student(user_id, student_id):
+    response = (supabase.table("notes").select("*").eq("created_by", user_id).eq("student_id", student_id).order("date", desc=True).execute())
     return response.data
+
+def create_note(student_id, created_by, text):
+    response = supabase.table("notes").insert({
+        "student_id": student_id,
+        "created_by": created_by,
+        "text": text,
+    }).execute()
+    return response.data[0] if response.data else None
 
 def edit_text(note_id, new_text):
     response = supabase.table("notes").update({"text": new_text}).eq("id", note_id).execute()
     return response.data
+
+def delete_note(note_id, user_id):
+    response = (
+        supabase.table("notes")
+        .delete()
+        .eq("id", note_id)
+        .eq("created_by", user_id)
+        .execute()
+    )
+    return bool(response.data)
