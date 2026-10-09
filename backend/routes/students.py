@@ -2,6 +2,8 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 from database.supabase_client import create_student, fetch_student_name, fetch_students
+from fastapi import APIRouter, HTTPException
+from database.supabase_client import fetch_students
 
 router = APIRouter()
 
