@@ -13,10 +13,16 @@ const API_BASE_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:8000"
 ).replace(/\/+$/, "");
 
-async function fetchUserNotes(userId) {
+async function fetchUserNotes(publicId) {
     try {
-        const response = await fetch(`${API_BASE_URL}/notes-userFetch/${userId}`);
+        const response = await fetch(`${API_BASE_URL}/notes-userFetch/${publicId}`);
+        if (!response.ok) {
+            throw new Error(`Notes request failed (${response.status}).`);
+        }
         const data = await response.json();
+        if (!Array.isArray(data.notes)) {
+            throw new Error("The notes response has an unexpected format.");
+        }
         return data.notes;
     } catch (error) {
         console.error("Error fetching user notes:", error);
@@ -73,6 +79,8 @@ async function loadSchools(currentSchool, setSchools, setSchoolId, setSchoolLoad
 // onUserUpdated(updatedUser) lets the parent refresh its user state after a save.
 const AccountPage = ({ user, name, initials, onUserUpdated }) => {
   const [editing, setEditing] = useState(false);
+  const [notes, setNotes] = useState([]);
+  const [notesError, setNotesError] = useState("");
   const [schoolId, setSchoolId] = useState(
     user?.school == null ? "" : String(user.school)
   );
@@ -91,11 +99,11 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
       setSchoolLoadError
     );
 
-    fetchUserNotes(user?.id).then((notes) => {
-      // Handle the fetched notes if needed
-    });
+    fetchUserNotes(user?.public_id)
+      .then(setNotes)
+      .catch((error) => setNotesError(error.message));
     
-  }, [user?.school, user?.school_name]);
+  }, [user?.public_id, user?.school, user?.school_name]);
 
   const selectedSchool = schools.find((option) => option.id === schoolId);
   const schoolName =
@@ -305,19 +313,24 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
             Add any notes or comments about your students and job responsibilities.
           </p>
 
-          <div className="card student-table-card">
-          <div className="table-head">
-            <span>Text</span>
-            <span>Date</span>
-            <span>Student</span>
-          </div>
+          <div className="card student-table-card notes-table">
+            <div className="table-head">
+              <span>Text</span>
+              <span>Date</span>
+              <span>Student</span>
+            </div>
 
-          <div className="table-body">
-            <div className="table-row">
-              
+            <div className="table-body">
+              {notes.map((note) => (
+                <div className="student-row note-row" key={note.id}>
+                  <span>{note.text}</span>
+                  <span>{note.date}</span>
+                  <span>{note.student_id}</span>
+                </div>
+              ))}
             </div>
           </div>
-        </div>
+          {notesError && <p role="alert">{notesError}</p>}
         </section>
       </div>
     </div>

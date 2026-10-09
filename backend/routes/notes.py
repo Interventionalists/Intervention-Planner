@@ -1,15 +1,14 @@
-from http.client import HTTPException
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from database.supabase_client import fetch_notes_from_user, fetch_notes_from_date, fetch_notes_for_student, edit_text
 
 router = APIRouter()
 
 ################################ FETCH ENDPOINTS ######################################
 
-@router.get("/notes-userFetch/{user_id}")
-def get_notes_from_user(user_id: str):
+@router.get("/notes-userFetch/{public_id}")
+def get_notes_from_user(public_id: str):
     try:
-        notes = fetch_notes_from_user(user_id)
+        notes = fetch_notes_from_user(public_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     return {"notes": notes}

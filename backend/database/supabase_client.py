@@ -112,8 +112,8 @@ def fetch_school_name(school_id):
 
 ########################### NOTES FUNCTIONS #######################################
 
-def fetch_notes_from_user(user_id):
-    response = supabase.table("notes").select("*").eq("created_by", user_id).execute()
+def fetch_notes_from_user(public_id):
+    response = supabase.table("notes").select("*").eq("created_by", public_id).execute()
     return response.data
 
 def fetch_notes_from_date(timestamp):
