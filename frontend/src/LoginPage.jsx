@@ -133,7 +133,15 @@ function LoginPage({ onSubmit }) {
 
 //changes the password via /change-password. There is no email-based reset
 //yet, so the user must know their current password.
-function ResetPasswordForm({ email, onEmailChange, onBack, onSuccess }) {
+export function ResetPasswordForm({
+  email,
+  onEmailChange,
+  onBack,
+  onSuccess,
+  showEmailField = true,
+  showHeading = true,
+  backLabel = "Back to sign in",
+}) {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -189,24 +197,32 @@ function ResetPasswordForm({ email, onEmailChange, onBack, onSuccess }) {
 
   return (
     <>
-      <div className="login-lock-icon">
-        <KeyRound size={20} strokeWidth={1.8} />
-      </div>
-      <p className="login-eyebrow">Account security</p>
-      <h2>Reset password</h2>
-      <p className="login-intro">Enter your current password and choose a new one.</p>
+      {showHeading && (
+        <>
+          <div className="login-lock-icon">
+            <KeyRound size={20} strokeWidth={1.8} />
+          </div>
+          <p className="login-eyebrow">Account security</p>
+          <h2>Reset password</h2>
+          <p className="login-intro">Enter your current password and choose a new one.</p>
+        </>
+      )}
       <form className="login-form" onSubmit={handleSubmit}>
-        <label htmlFor="reset-email">Email address</label>
-        <input
-          id="reset-email"
-          name="email"
-          type="email"
-          autoComplete="username"
-          placeholder="you@school.edu"
-          value={email}
-          onChange={(event) => onEmailChange(event.target.value)}
-          required
-        />
+        {showEmailField && (
+          <>
+            <label htmlFor="reset-email">Email address</label>
+            <input
+              id="reset-email"
+              name="email"
+              type="email"
+              autoComplete="username"
+              placeholder="you@school.edu"
+              value={email}
+              onChange={(event) => onEmailChange(event.target.value)}
+              required
+            />
+          </>
+        )}
         <label htmlFor="reset-current-password">Current password</label>
         <input
           id="reset-current-password"
@@ -247,8 +263,8 @@ function ResetPasswordForm({ email, onEmailChange, onBack, onSuccess }) {
         </button>
       </form>
       <button className="login-link" type="button" onClick={onBack}>
-        <ArrowLeft size={14} />
-        Back to sign in
+        {backLabel === "Back to sign in" && <ArrowLeft size={14} />}
+        {backLabel}
       </button>
     </>
   );

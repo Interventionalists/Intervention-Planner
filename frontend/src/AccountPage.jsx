@@ -7,20 +7,80 @@ import {
   ShieldCheck,
   UserRound,
 } from "lucide-react";
+import { ResetPasswordForm } from "./LoginPage";
 
 const API_BASE_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:8000"
 ).replace(/\/+$/, "");
 
-const preferences = [
-  "Weekly email summaries",
-  "Session reminders",
-  "Student risk alerts",
-];
+async function fetchUserNotes(publicId) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/notes-userFetch/${publicId}`);
+        if (!response.ok) {
+            throw new Error(`Notes request failed (${response.status}).`);
+        }
+        const data = await response.json();
+        if (!Array.isArray(data.notes)) {
+            throw new Error("The notes response has an unexpected format.");
+        }
+        return data.notes;
+    } catch (error) {
+        console.error("Error fetching user notes:", error);
+        throw error;
+    }
+}
+
+
+async function loadSchools(currentSchool, setSchools, setSchoolId, setSchoolLoadError) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/schools-fetch`);
+    if (!response.ok) {
+      throw new Error(`School request failed (${response.status}).`);
+    }
+
+    const data = await response.json();
+    if (!Array.isArray(data.schools)) {
+      throw new Error("The schools response has an unexpected format.");
+    }
+
+    const schoolOptions = data.schools
+      .map((record) =>
+        typeof record === "string"
+          ? null
+          : {
+              id: record.school_id ?? record.id,
+              name: record.school_name ?? record.name,
+            }
+      )
+      .filter(
+        (option) =>
+          option &&
+          option.id != null &&
+          typeof option.name === "string" &&
+          option.name.trim()
+      )
+      .map((option) => ({
+        id: String(option.id),
+        name: option.name.trim(),
+      }));
+
+    setSchools(schoolOptions);
+    setSchoolId((currentId) =>
+      currentId ||
+      schoolOptions.find((option) => option.name === currentSchool)?.id ||
+      ""
+    );
+    setSchoolLoadError("");
+  } catch {
+    setSchoolLoadError("Could not load the school list. Please try again.");
+  }
+}
 
 // onUserUpdated(updatedUser) lets the parent refresh its user state after a save.
 const AccountPage = ({ user, name, initials, onUserUpdated }) => {
   const [editing, setEditing] = useState(false);
+  const [notes, setNotes] = useState([]);
+  const [notesError, setNotesError] = useState("");
   const [schoolId, setSchoolId] = useState(
     user?.school == null ? "" : String(user.school)
   );
@@ -28,56 +88,22 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
   const [schoolLoadError, setSchoolLoadError] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [passwordNotice, setPasswordNotice] = useState("");
 
   useEffect(() => {
-    const loadSchools = async () => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/schools-fetch`);
-        if (!response.ok) {
-          throw new Error(`School request failed (${response.status}).`);
-        }
+    loadSchools(
+      user?.school_name || user?.school,
+      setSchools,
+      setSchoolId,
+      setSchoolLoadError
+    );
 
-        const data = await response.json();
-        if (!Array.isArray(data.schools)) {
-          throw new Error("The schools response has an unexpected format.");
-        }
-
-        const schoolOptions = data.schools
-          .map((record) =>
-            typeof record === "string"
-              ? null
-              : {
-                  id: record.school_id ?? record.id,
-                  name: record.school_name ?? record.name,
-                }
-          )
-          .filter(
-            (option) =>
-              option &&
-              option.id != null &&
-              typeof option.name === "string" &&
-              option.name.trim()
-          )
-          .map((option) => ({
-            id: String(option.id),
-            name: option.name.trim(),
-          }));
-        setSchools(schoolOptions);
-        setSchoolId((currentId) => {
-          if (currentId) return currentId;
-          const currentSchool = user?.school_name || user?.school;
-          return (
-            schoolOptions.find((option) => option.name === currentSchool)?.id ||
-            ""
-          );
-        });
-      } catch {
-        setSchoolLoadError("Could not load the school list. Please try again.");
-      }
-    };
-
-    loadSchools();
-  }, [user?.school, user?.school_name]);
+    fetchUserNotes(user?.public_id)
+      .then(setNotes)
+      .catch((error) => setNotesError(error.message));
+    
+  }, [user?.public_id, user?.school, user?.school_name]);
 
   const selectedSchool = schools.find((option) => option.id === schoolId);
   const schoolName =
@@ -224,22 +250,6 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
           )}
         </section>
 
-        <section className="card account-card">
-          <div className="card-title">
-            <h2>Preferences</h2>
-            <Bell size={18} />
-          </div>
-
-          <ul className="check-list">
-            {preferences.map((item) => (
-              <li key={item}>
-                <CheckCircle2 size={16} />
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-
         <section className="card account-card security-card">
           <div className="card-title">
             <h2>Security</h2>
@@ -254,8 +264,32 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
               <strong>Password</strong>
               <small>Last updated 2 weeks ago</small>
             </div>
-            <button className="text-button">Change</button>
+            <button
+              className="text-button"
+              type="button"
+              onClick={() => {
+                setChangingPassword((changing) => !changing);
+                setPasswordNotice("");
+              }}
+            >
+              {changingPassword ? "Cancel" : "Change"}
+            </button>
           </div>
+
+          {passwordNotice && <p className="login-notice">{passwordNotice}</p>}
+          {changingPassword && (
+            <ResetPasswordForm
+              email={user?.email || ""}
+              showEmailField={false}
+              showHeading={false}
+              backLabel="Cancel"
+              onBack={() => setChangingPassword(false)}
+              onSuccess={() => {
+                setChangingPassword(false);
+                setPasswordNotice("Password updated successfully.");
+              }}
+            />
+          )}
 
           <div className="security-item">
             <div className="security-icon muted-icon">
@@ -278,7 +312,25 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
           <p className="Note-description">
             Add any notes or comments about your students and job responsibilities.
           </p>
-          <button className="secondary-button">Edit Notes</button>
+
+          <div className="card student-table-card notes-table">
+            <div className="table-head">
+              <span>Text</span>
+              <span>Date</span>
+              <span>Student</span>
+            </div>
+
+            <div className="table-body">
+              {notes.map((note) => (
+                <div className="student-row note-row" key={note.id}>
+                  <span>{note.text}</span>
+                  <span>{note.date}</span>
+                  <span>{note.student_id}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          {notesError && <p role="alert">{notesError}</p>}
         </section>
       </div>
     </div>
