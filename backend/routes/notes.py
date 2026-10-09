@@ -1,8 +1,20 @@
-from http.client import HTTPException
-from fastapi import APIRouter
-from database.supabase_client import fetch_notes_from_user, fetch_notes_from_date, fetch_notes_for_student, edit_text
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+from database.supabase_client import (
+    create_note,
+    edit_text,
+    fetch_notes_for_student,
+    fetch_notes_from_date,
+    fetch_notes_from_user,
+)
 
 router = APIRouter()
+
+
+class NoteCreate(BaseModel):
+    student_id: int
+    created_by: str
+    text: str
 
 ################################ FETCH ENDPOINTS ######################################
 
@@ -37,3 +49,14 @@ def update_note_text(note_id: str, new_text: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     return {"note": updated_note}
+
+
+@router.post("/notes-create")
+def add_note(payload: NoteCreate):
+    try:
+        note = create_note(payload.student_id, payload.created_by, payload.text)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    if not note:
+        raise HTTPException(status_code=500, detail="Note creation failed")
+    return {"note": note}

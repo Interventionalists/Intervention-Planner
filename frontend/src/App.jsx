@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import {
   LogOut,
@@ -10,18 +10,62 @@ import {
   ClipboardList,
   LayoutDashboard,
   Menu,
+  Pencil,
   Search,
   Settings,
   SlidersHorizontal,
   Users,
   X
 } from "lucide-react";
-import { events, students, themePresets } from "./data";
+import { events, themePresets } from "./data";
 import LoginPage from "./LoginPage";
 import AccountPage from "./AccountPage";
 
 const AUTH_SESSION_KEY = "interventioner-demo-authenticated";
 const AUTH_USER_KEY = "interventioner-auth-user";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
+function relatedUserName(user) {
+  return user
+    ? [user.first_name, user.last_name].filter(Boolean).join(" ")
+    : "";
+}
+
+function mapStudent(row) {
+  return {
+    ...row,
+    name:
+      row.name ||
+      [row.first_name, row.last_name].filter(Boolean).join(" ") ||
+      "Unnamed student",
+    grade: row.grade_level ?? row.grade ?? "—",
+    teacher: relatedUserName(row.teacher_user) || "Not assigned",
+    interventionTeacher:
+      relatedUserName(row.interventionist_user) || "Not assigned",
+    group: row.group ?? "—",
+    avatar: `https://api.dicebear.com/9.x/adventurer/svg?seed=${encodeURIComponent(
+      [row.first_name, row.last_name].filter(Boolean).join(" ") || row.id
+    )}`,
+    scores: row.scores || {},
+    recentScores: row.recent_scores || [],
+  };
+}
+
+async function fetchStudentNotes(userId, studentId, signal) {
+  const params = new URLSearchParams({
+    user_id: userId,
+    student_id: String(studentId),
+  });
+  const response = await fetch(
+    `${API_BASE_URL}/notes-fetchForStudent?${params}`,
+    { signal }
+  );
+  if (!response.ok) {
+    throw new Error("Unable to load notes for this student.");
+  }
+  const result = await response.json();
+  return result.notes || [];
+}
 
 const navItems = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -97,8 +141,10 @@ function App() {
 
 function PlannerApp({ onLogout, onUserUpdated, user }) {
   const [page, setPage] = useState("dashboard");
-  const [studentsData, setStudentsData] = useState(students);
-  const [selectedStudent, setSelectedStudent] = useState(students[0]);
+  const [studentsData, setStudentsData] = useState([]);
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [studentsLoading, setStudentsLoading] = useState(true);
+  const [studentsError, setStudentsError] = useState("");
   const [query, setQuery] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [theme, setTheme] = useState(themePresets[0].colors);
@@ -114,6 +160,36 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
     .map((part) => part[0].toUpperCase())
     .join("");
 
+  useEffect(() => {
+    const controller = new AbortController();
+
+    fetch(`${API_BASE_URL}/students-fetch`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error("Unable to load students from the database.");
+        }
+        return response.json();
+      })
+      .then((result) => {
+        const records = (result.students || []).map(mapStudent);
+        setStudentsData(records);
+        setSelectedStudent(records[0] || null);
+        setStudentsError("");
+      })
+      .catch((error) => {
+        if (error.name !== "AbortError") {
+          setStudentsError(error.message || "Unable to load students.");
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setStudentsLoading(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, []);
+
   const filteredStudents = useMemo(
     () =>
       studentsData.filter((student) =>
@@ -125,16 +201,6 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
   const selectPage = (id) => {
     setPage(id);
     setMobileOpen(false);
-  };
-
-  const handleSaveStudentNotes = (studentId, notes) => {
-    const updatedStudents = studentsData.map((student) =>
-      student.id === studentId ? { ...student, notes } : student
-    );
-
-    setStudentsData(updatedStudents);
-    const updatedStudent = updatedStudents.find((student) => student.id === studentId);
-    setSelectedStudent(updatedStudent);
   };
 
   return (
@@ -166,17 +232,26 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
         />
 
         <main className="content">
-          {page === "dashboard" && (
+          {studentsLoading ? (
+            <div className="data-state" role="status">Loading students...</div>
+          ) : studentsError ? (
+            <div className="data-state error-state" role="alert">
+              {studentsError} Check that the backend is running and VITE_API_URL is correct.
+            </div>
+          ) : studentsData.length === 0 ? (
+            <div className="data-state">No students were returned by the database.</div>
+          ) : page === "dashboard" && (
             <Dashboard
               student={selectedStudent}
+              studentOptions={studentsData}
               onStudentChange={setSelectedStudent}
               onStudents={() => selectPage("students")}
               userName={userName}
-              onSaveNotes={handleSaveStudentNotes}
+              userId={user?.public_id}
             />
           )}
 
-          {page === "students" && (
+          {!studentsLoading && !studentsError && studentsData.length > 0 && page === "students" && (
             <StudentsPage
               students={filteredStudents}
               selectedStudent={selectedStudent}
@@ -293,23 +368,104 @@ function Header({
   );
 }
 
-function Dashboard({ student, onStudentChange, onStudents, userName, onSaveNotes }) {
+function Dashboard({
+  student,
+  studentOptions,
+  onStudentChange,
+  onStudents,
+  userName,
+  userId,
+}) {
   const [isEditingNotes, setIsEditingNotes] = useState(false);
-  const [draftNotes, setDraftNotes] = useState(student.notes || "");
+  const [isAddingNote, setIsAddingNote] = useState(false);
+  const [editingNoteId, setEditingNoteId] = useState(null);
+  const [draftNotes, setDraftNotes] = useState("");
+  const [noteRows, setNoteRows] = useState([]);
+  const [notesLoading, setNotesLoading] = useState(true);
+  const [notesSaving, setNotesSaving] = useState(false);
+  const [notesError, setNotesError] = useState("");
 
-  React.useEffect(() => {
-    setDraftNotes(student.notes || "");
+  useEffect(() => {
+    const controller = new AbortController();
+    setNoteRows([]);
+    setDraftNotes("");
     setIsEditingNotes(false);
-  }, [student]);
+    setIsAddingNote(false);
+    setEditingNoteId(null);
+    setNotesError("");
+    setNotesLoading(true);
 
-  const saveNotes = () => {
-    onSaveNotes(student.id, draftNotes.trim());
-    setIsEditingNotes(false);
+    if (!userId) {
+      setNotesError("Your account ID is missing; notes cannot be loaded.");
+      setNotesLoading(false);
+      return () => controller.abort();
+    }
+
+    fetchStudentNotes(userId, student.id, controller.signal)
+      .then((notes) => {
+        setNoteRows(notes);
+        setDraftNotes(notes[0]?.text || "");
+      })
+      .catch((error) => {
+        if (error.name !== "AbortError") {
+          setNotesError(error.message || "Unable to load notes.");
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setNotesLoading(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [student.id, userId]);
+
+  const saveNotes = async () => {
+    setNotesSaving(true);
+    setNotesError("");
+    const addNewNote = isAddingNote || editingNoteId === null;
+    const params = new URLSearchParams({
+      ...(!addNewNote ? { note_id: String(editingNoteId) } : {}),
+      ...(!addNewNote ? { new_text: draftNotes.trim() } : {}),
+    });
+
+    try {
+      const response = addNewNote
+        ? await fetch(`${API_BASE_URL}/notes-create`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              student_id: student.id,
+              created_by: userId,
+              text: draftNotes.trim(),
+            }),
+          })
+        : await fetch(`${API_BASE_URL}/notes-editText?${params}`, {
+            method: "PUT",
+          });
+
+      if (!response.ok) {
+        throw new Error("Unable to save this note.");
+      }
+
+      const updatedNotes = await fetchStudentNotes(userId, student.id);
+      setNoteRows(updatedNotes);
+      setDraftNotes(updatedNotes[0]?.text || "");
+      setIsEditingNotes(false);
+      setIsAddingNote(false);
+      setEditingNoteId(null);
+    } catch (error) {
+      setNotesError(error.message || "Unable to save this note.");
+    } finally {
+      setNotesSaving(false);
+    }
   };
 
   const cancelNotes = () => {
-    setDraftNotes(student.notes || "");
+    setDraftNotes(noteRows[0]?.text || "");
     setIsEditingNotes(false);
+    setIsAddingNote(false);
+    setEditingNoteId(null);
   };
 
   return (
@@ -328,21 +484,23 @@ function Dashboard({ student, onStudentChange, onStudents, userName, onSaveNotes
           <h2>{student.name}</h2>
           <p>Grade: {student.grade}</p>
           <p>Teacher: {student.teacher}</p>
-          <p>Group: {student.group}</p>
+          {student.group !== "—" && <p>Group: {student.group}</p>}
           <p>Int. Teacher: {student.interventionTeacher}</p>
           <div className="student-notes">
-            {isEditingNotes ? (
+            {notesLoading ? (
+              <p className="muted">Loading notes...</p>
+            ) : isEditingNotes ? (
               <>
                 <span>Notes</span>
                 <textarea
                   value={draftNotes}
                   onChange={(e) => setDraftNotes(e.target.value)}
                   rows={4}
-                  placeholder="Add notes for this student..."
+                  placeholder={isAddingNote ? "Write another note..." : "Edit this note..."}
                 />
                 <div className="notes-actions">
-                  <button type="button" className="text-button" onClick={saveNotes}>
-                    Save
+                  <button type="button" className="text-button" onClick={saveNotes} disabled={notesSaving}>
+                    {notesSaving ? "Saving..." : isAddingNote ? "Add note" : "Save changes"}
                   </button>
                   <button type="button" className="ghost-button" onClick={cancelNotes}>
                     Cancel
@@ -352,27 +510,60 @@ function Dashboard({ student, onStudentChange, onStudents, userName, onSaveNotes
             ) : (
               <>
                 <span>Notes</span>
-                <p>{student.notes?.trim() ? student.notes : "No notes yet."}</p>
-                <button
-                  type="button"
-                  className="text-button"
-                  onClick={() => setIsEditingNotes(true)}
-                >
-                  {student.notes?.trim() ? "Edit notes" : "Add notes"}
-                </button>
+                {noteRows.length ? (
+                  <div className="note-history">
+                    {noteRows.map((note) => (
+                      <article className="note-entry" key={note.id}>
+                          <div className="note-entry-header">
+                            <time>{note.date ? new Date(note.date).toLocaleDateString() : ""}</time>
+                            <button
+                              type="button"
+                              className="note-edit-button"
+                              title="Edit this note"
+                              aria-label={`Edit note from ${note.date ? new Date(note.date).toLocaleDateString() : "this date"}`}
+                              onClick={() => {
+                                setDraftNotes(note.text || "");
+                                setEditingNoteId(note.id);
+                                setIsAddingNote(false);
+                                setIsEditingNotes(true);
+                              }}
+                            >
+                              <Pencil size={14} aria-hidden="true" />
+                            </button>
+                          </div>
+                        <p>{note.text || ""}</p>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p>No notes yet.</p>
+                )}
+                <div className="notes-actions">
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => {
+                      setDraftNotes("");
+                      setIsAddingNote(true);
+                      setEditingNoteId(null);
+                      setIsEditingNotes(true);
+                    }}
+                  >
+                    Add note
+                  </button>
+                </div>
               </>
             )}
+            {notesError && <p className="error-state" role="alert">{notesError}</p>}
           </div>
           <select
             value={student.id}
             onChange={(e) =>
-              onStudentChange(
-                students.find((s) => s.id === Number(e.target.value))
-              )
+              onStudentChange(studentOptions.find((s) => String(s.id) === e.target.value))
             }
             aria-label="Select student"
           >
-            {students.map((s) => (
+            {studentOptions.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
               </option>
@@ -395,6 +586,9 @@ function Dashboard({ student, onStudentChange, onStudents, userName, onSaveNotes
                 <strong>{score.toFixed(2)}%</strong>
               </div>
             ))}
+            {!Object.keys(student.scores).length && (
+              <p className="muted">No score data is available yet.</p>
+            )}
           </div>
         </div>
 
@@ -410,6 +604,9 @@ function Dashboard({ student, onStudentChange, onStudents, userName, onSaveNotes
                 <strong>{score.toFixed(2)}%</strong>
               </div>
             ))}
+            {!Object.keys(student.scores).length && (
+              <p className="muted">No grade data is available yet.</p>
+            )}
           </div>
         </div>
 
@@ -473,8 +670,8 @@ function StudentsPage({ students: list, selectedStudent, onSelect }) {
               </span>
               <span>{student.grade}</span>
               <span>{student.teacher}</span>
-              <span className={student.scores.Math < 60 ? "grade-alert" : ""}>
-                {student.scores.Math}%
+              <span className={student.scores?.Math != null && student.scores.Math < 60 ? "grade-alert" : ""}>
+                {student.scores?.Math != null ? `${student.scores.Math}%` : "—"}
               </span>
             </button>
           ))}
@@ -645,6 +842,9 @@ function CardTitle({ title, action }) {
 }
 
 function ProgressChart({ values }) {
+  if (!values.length) {
+    return <p className="muted">No progress data is available yet.</p>;
+  }
   const max = Math.max(...values, 100);
   return (
     <div className="bar-chart" aria-label="Progress chart">
