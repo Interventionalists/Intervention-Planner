@@ -561,6 +561,9 @@ nav { display: grid; gap: 6px; }
   letter-spacing: .05em;
 }
 
+.notes-table .table-head,
+.notes-table .note-row { grid-template-columns: 2fr .6fr 1fr; }
+
 .student-row {
   border: 0;
   border-top: 1px solid #eee;

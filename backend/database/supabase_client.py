@@ -40,6 +40,10 @@ def fetch_students():
     response = supabase.table("students").select("*").execute()
     return response.data
 
+def fetch_student_name(student_id):
+    response = supabase.table("students").select("first_name", "last_name").eq("id", student_id).execute()
+    return response.data
+
 def create_student(
     first_name: str,
     last_name: str,
