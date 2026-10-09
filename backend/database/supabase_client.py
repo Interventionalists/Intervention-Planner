@@ -120,8 +120,8 @@ def fetch_notes_from_date(timestamp):
     response = supabase.table("notes").select("*").eq("date", timestamp).execute()
     return response.data
 
-def fetch_notes_for_student(user_id, student_id):
-    response = supabase.table("notes").select("*").eq("created_by", user_id).eq("student_id", student_id).execute()
+def fetch_notes_for_student(student_id):
+    response = supabase.table("notes").select("*").eq("student_id", student_id).execute()
     return response.data
 
 def edit_text(note_id, new_text):

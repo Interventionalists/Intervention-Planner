@@ -22,10 +22,10 @@ def get_notes_from_date(timestamp: str):
         raise HTTPException(status_code=500, detail=str(e))
     return {"notes": notes}
 
-@router.get("/notes-fetchForStudent/{user_id}/{student_id}")
-def get_notes_for_student(user_id: str, student_id: str):
+@router.get("/notes-fetchForStudent/{student_id}")
+def get_notes_for_student(student_id: str):
     try:
-        notes = fetch_notes_for_student(user_id, student_id)
+        notes = fetch_notes_for_student(student_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     return {"notes": notes}
