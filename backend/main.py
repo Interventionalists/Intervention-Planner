@@ -9,7 +9,6 @@ from routes.admins import router as admins_router
 from routes.auth import router as auth_router
 from routes.notes import router as notes_router
 from routes.schools import router as schools_router
-from routes.notes import router as notes_router
 
 load_dotenv()
 
@@ -38,4 +37,3 @@ app.include_router(admins_router)
 app.include_router(auth_router)
 app.include_router(notes_router)
 app.include_router(schools_router)
-app.include_router(notes_router)
