@@ -281,13 +281,11 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
           <div className="security-item">
             <div className="security-icon">
               <Lock size={17} />
-            </div>
-            <div>
+              {" "}
               <strong>Password</strong>
-              <small>Last updated 2 weeks ago</small>
             </div>
             <button
-              className="text-button"
+              className="ghost-button"
               type="button"
               onClick={() => {
                 setChangingPassword((changing) => !changing);
@@ -316,12 +314,10 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
           <div className="security-item">
             <div className="security-icon muted-icon">
               <Mail size={17} />
+              {" "}
+              <strong>Email notifications (not implemented yet)</strong>
             </div>
-            <div>
-              <strong>Email notifications</strong>
-              <small>Verified and enabled</small>
-            </div>
-            <button className="text-button">Manage</button>
+            <button className="ghost-button" type="button">Manage</button>
           </div>
         </section>
 
@@ -332,7 +328,7 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
           </div>
 
           <p className="Note-description">
-            Add any notes or comments about your students and job responsibilities.
+            Filter your notes, add new notes, edit or delete existing notes. You can also view which student each note is associated with.
           </p>
 
           <div className="card student-table-card notes-table">

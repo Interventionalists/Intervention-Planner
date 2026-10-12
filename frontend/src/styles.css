@@ -594,7 +594,24 @@ nav { display: grid; gap: 6px; }
   background: transparent;
   color: var(--primary);
   font-size: 12px;
-  margin-top: 16px;
+  margin-top: 8px;
+}
+
+.security-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.security-item + .security-item {
+  margin-top: 18px;
+}
+
+.security-icon {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .card-title {
