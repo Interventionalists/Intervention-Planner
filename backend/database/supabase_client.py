@@ -32,6 +32,18 @@ def update_user_password(email: str, password_hash: str):
     response = supabase.table("users").update({"password_hash": password_hash}).eq("email", email).execute()
     return response.data[0] if response.data else None
 
+#records a login attempt via the record_login_attempt Postgres function, which
+#increments/resets the counter and sets locked_until in one atomic update.
+#returns {"failed_login_attempts": int, "locked_until": str | None}.
+def record_login_attempt(user_id: int, success: bool, max_attempts: int, lock_minutes: int):
+    response = supabase.rpc("record_login_attempt", {
+        "p_user_id": user_id,
+        "p_success": success,
+        "p_max_attempts": max_attempts,
+        "p_lock_minutes": lock_minutes,
+    }).execute()
+    return response.data[0] if response.data else None
+
 #fetches all student data from the database.
 
 
