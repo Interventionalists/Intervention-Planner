@@ -36,9 +36,94 @@ def update_user_password(email: str, password_hash: str):
 
 
 ################################## STUDENT FUNCTIONS ########################################
+def _add_student_user_names(students):
+    user_ids = {
+        str(student[field])
+        for student in students
+        for field in ("teacher", "interventionist")
+        if student.get(field)
+    }
+    if not user_ids:
+        return students
+
+    users_response = (
+        supabase.table("users")
+        .select("public_id, first_name, last_name")
+        .in_("public_id", list(user_ids))
+        .execute()
+    )
+    user_names = {
+        str(user["public_id"]): " ".join(
+            part for part in (user.get("first_name"), user.get("last_name")) if part
+        )
+        for user in users_response.data
+    }
+
+    return [
+        {
+            **student,
+            "teacher_name": user_names.get(str(student.get("teacher"))),
+            "interventionist_name": user_names.get(
+                str(student.get("interventionist"))
+            ),
+        }
+        for student in students
+    ]
+
+
 def fetch_students():
     response = supabase.table("students").select("*").execute()
-    return response.data
+    return _add_student_user_names(response.data)
+
+def fetch_user_school_by_public_id(public_id: str):
+    response = (
+        supabase.table("users")
+        .select("school")
+        .eq("public_id", public_id)
+        .limit(1)
+        .execute()
+    )
+    return response.data[0]["school"] if response.data else None
+
+def fetch_unassigned_students(school_id: int):
+    response = (
+        supabase.table("students")
+        .select("*")
+        .eq("school", school_id)
+        .is_("interventionist", "null")
+        .execute()
+    )
+    return _add_student_user_names(response.data)
+
+def assign_student_to_interventionist(
+    student_id: int,
+    interventionist_id: str,
+    school_id: int,
+):
+    interventionist = (
+        supabase.table("users")
+        .select("public_id")
+        .eq("public_id", interventionist_id)
+        .eq("role", "interventionist")
+        .eq("school", school_id)
+        .limit(1)
+        .execute()
+    )
+    if not interventionist.data:
+        raise ValueError("Interventionist not found.")
+
+    response = (
+        supabase.table("students")
+        .update({"interventionist": interventionist_id})
+        .eq("id", student_id)
+        .eq("school", school_id)
+        .is_("interventionist", "null")
+        .select("*")
+        .execute()
+    )
+    if not response.data:
+        return None
+    return _add_student_user_names(response.data)[0]
 
 def create_student(
     first_name: str,
@@ -76,13 +161,27 @@ def fetch_teachers():
 
 
 ################################ INTERVENTIONIST FUNCTIONS ########################################
-def fetch_interventionists():
-    response = supabase.table("users").select("*").eq("role", "interventionist").execute()
+def fetch_interventionists(school_id: int | None = None):
+    query = (
+        supabase.table("users")
+        .select("id, public_id, first_name, last_name, email")
+        .eq("role", "interventionist")
+    )
+    if school_id is not None:
+        query = query.eq("school", school_id)
+    response = query.execute()
     return response.data
 
-def fetch_interventionist_students(interventionist_id: str):
-    response = supabase.table("students").select("*").eq("interventionist", interventionist_id).execute()
-    return response.data
+def fetch_interventionist_students(interventionist_id: str, school_id: int | None = None):
+    query = (
+        supabase.table("students")
+        .select("*")
+        .eq("interventionist", interventionist_id)
+    )
+    if school_id is not None:
+        query = query.eq("school", school_id)
+    response = query.execute()
+    return _add_student_user_names(response.data)
 
 
 ################################ ADMIN FUNCTIONS ########################################

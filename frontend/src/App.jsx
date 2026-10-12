@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { students, themePresets } from "./data";
 import { Header, Sidebar } from "./components/AppNavigation";
@@ -96,14 +96,6 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
     .map((part) => part[0].toUpperCase())
     .join("");
 
-  const filteredStudents = useMemo(
-    () =>
-      students.filter((student) =>
-        student.name.toLowerCase().includes(query.toLowerCase())
-      ),
-    [query]
-  );
-
   const selectPage = (id) => {
     setPage(id);
     setMobileOpen(false);
@@ -160,9 +152,10 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
           )}
           {page === "students" && (
             <StudentsPage
-              students={filteredStudents}
+              query={query}
               selectedStudent={selectedStudent}
               onSelect={openStudentProfile}
+              user={user}
             />
           )}
           {page === "calendar" && <CalendarPage />}
