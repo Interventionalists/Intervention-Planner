@@ -44,7 +44,12 @@ function LoginPage({ onSubmit }) {
       });
 
       if (!response.ok) {
-        setError("Invalid email or password.");
+        if (response.status === 423) {
+          const body = await response.json().catch(() => ({}));
+          setError(body.detail || "Account locked. Please try again later.");
+        } else {
+          setError("Invalid email or password.");
+        }
         return;
       }
 
