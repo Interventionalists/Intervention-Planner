@@ -629,7 +629,24 @@ nav { display: grid; gap: 6px; }
   background: transparent;
   color: var(--primary);
   font-size: 12px;
-  margin-top: 16px;
+  margin-top: 8px;
+}
+
+.security-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.security-item + .security-item {
+  margin-top: 18px;
+}
+
+.security-icon {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .card-title {
@@ -865,7 +882,78 @@ nav { display: grid; gap: 6px; }
 }
 
 .notes-table .table-head,
-.notes-table .note-row { grid-template-columns: 2fr .6fr 1fr; }
+.notes-table .note-row { grid-template-columns: minmax(220px, 2fr) .7fr 1fr 72px; }
+
+.account-notes-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.account-notes-toolbar input,
+.account-notes-toolbar select,
+.account-note-form select,
+.account-note-form textarea {
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: white;
+  color: #344054;
+  font: inherit;
+  font-size: 12px;
+}
+
+.account-notes-toolbar input {
+  flex: 1 1 220px;
+}
+
+.account-notes-toolbar select {
+  flex: 0 1 180px;
+}
+
+.account-note-form {
+  display: grid;
+  gap: 12px;
+  margin: 16px 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fafbfc;
+}
+
+.account-note-form label {
+  display: grid;
+  gap: 6px;
+  color: #475467;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.account-note-form textarea {
+  width: 100%;
+  resize: vertical;
+  font-weight: 400;
+}
+
+.account-note-actions {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+}
+
+.account-note-actions .note-edit-button,
+.account-note-actions .note-delete-button {
+  opacity: 1;
+}
+
+.account-notes-empty {
+  padding: 16px 20px;
+  color: #758095;
+  font-size: 13px;
+}
 
 .student-row {
   position: relative;
