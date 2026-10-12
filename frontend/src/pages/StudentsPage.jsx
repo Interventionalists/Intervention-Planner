@@ -52,6 +52,7 @@ function StudentsPage({ query = "", selectedStudent, onSelect, user }) {
   const [assignmentMessage, setAssignmentMessage] = useState("");
   const [assigningStudentId, setAssigningStudentId] = useState(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [selectedGroup, setSelectedGroup] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -172,12 +173,25 @@ function StudentsPage({ query = "", selectedStudent, onSelect, user }) {
     }
   };
 
-  const filteredStudents = students.filter((student) =>
-    student.name.toLowerCase().includes(query.toLowerCase())
+  const groups = [...new Set(students.map((student) => String(student.group)))].sort(
+    (first, second) => {
+      const firstNumber = Number(first);
+      const secondNumber = Number(second);
+      if (Number.isFinite(firstNumber) && Number.isFinite(secondNumber)) {
+        return firstNumber - secondNumber;
+      }
+      return first.localeCompare(second);
+    }
   );
-  const filteredUnassignedStudents = unassignedStudents.filter((student) =>
-    student.name.toLowerCase().includes(query.toLowerCase())
+  const normalizedQuery = query.trim().toLowerCase();
+  const matchesNameSearch = (student) =>
+    student.name.toLowerCase().includes(normalizedQuery);
+  const filteredStudents = students.filter(
+    (student) =>
+      matchesNameSearch(student) &&
+      (!selectedGroup || String(student.group) === selectedGroup)
   );
+  const filteredUnassignedStudents = unassignedStudents.filter(matchesNameSearch);
 
   const interventionistName = (interventionist) =>
     interventionist.name ||
@@ -203,6 +217,23 @@ function StudentsPage({ query = "", selectedStudent, onSelect, user }) {
         </div>
       ) : (
         <>
+          {groups.length > 0 && (
+            <div className="student-list-filters">
+              <label htmlFor="student-group-filter">Filter by group</label>
+              <select
+                id="student-group-filter"
+                value={selectedGroup}
+                onChange={(event) => setSelectedGroup(event.target.value)}
+              >
+                <option value="">All groups</option>
+                {groups.map((group) => (
+                  <option key={group} value={group}>
+                    {group === "—" ? "No group" : `Group ${group}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           {assignmentMessage && <p className="assignment-success" role="status">{assignmentMessage}</p>}
           <section className="student-list-section">
             <h2>Assigned to you</h2>
@@ -214,7 +245,7 @@ function StudentsPage({ query = "", selectedStudent, onSelect, user }) {
               />
             ) : (
               <div className="card">
-                <p>{students.length ? "No students match your search." : "No students are assigned to you."}</p>
+                <p>{students.length ? "No assigned students match these filters." : "No students are assigned to you."}</p>
               </div>
             )}
           </section>
@@ -285,7 +316,7 @@ function StudentsPage({ query = "", selectedStudent, onSelect, user }) {
               </div>
             ) : (
               <div className="card">
-                <p>{unassignedStudents.length ? "No unassigned students match your search." : "There are no unassigned students."}</p>
+                <p>{unassignedStudents.length ? "No unassigned students match these filters." : "There are no unassigned students."}</p>
               </div>
             )}
           </section>

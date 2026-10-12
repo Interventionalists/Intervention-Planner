@@ -800,6 +800,25 @@ nav { display: grid; gap: 6px; }
   border: 1px solid #e4e8ee;
   box-shadow: 0 8px 28px rgba(26, 42, 68, .06);
 }
+.student-list-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 18px;
+}
+.student-list-filters label {
+  color: #758095;
+  font-size: 12px;
+  font-weight: 600;
+}
+.student-list-filters select {
+  min-width: 150px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: white;
+  color: #344054;
+}
 .table-head, .student-row {
   display: grid;
   grid-template-columns: minmax(220px, 1.8fr) minmax(80px, .6fr) minmax(150px, 1.2fr) minmax(80px, .6fr) minmax(150px, 1fr);
