@@ -18,8 +18,8 @@ function StudentsList({ list, selectedStudent, onSelect }) {
 
           return (
             <button
-              className={`student-row ${selectedStudent.id === student.id ? "selected" : ""}`}
-              key={student.id}
+              className={`student-row ${selectedStudent?.id === student.id ? "selected" : ""}`}
+              key={student.id ?? student.name}
               onClick={() => onSelect(student)}
             >
               <span className="student-name-cell">

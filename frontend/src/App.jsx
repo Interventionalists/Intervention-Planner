@@ -29,10 +29,12 @@ function mapStudent(row) {
       [row.first_name, row.last_name].filter(Boolean).join(" ") ||
       "Unnamed student",
     grade: row.grade_level ?? row.grade ?? "—",
-    teacher: relatedUserName(row.teacher_user) || "Not assigned",
+    teacher: row.teacher_name || relatedUserName(row.teacher_user) || "Not assigned",
     interventionTeacher:
-      relatedUserName(row.interventionist_user) || "Not assigned",
-    group: row.group ?? "—",
+      row.interventionist_name ||
+      relatedUserName(row.interventionist_user) ||
+      "Not assigned",
+    group: row.group_number ?? row.group ?? "—",
     avatar: `https://api.dicebear.com/9.x/adventurer/svg?seed=${encodeURIComponent(
       [row.first_name, row.last_name].filter(Boolean).join(" ") || row.id
     )}`,
@@ -166,6 +168,16 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
     selectPage("student-profile");
   };
 
+  const updateSelectedStudent = (record) => {
+    const updatedStudent = mapStudent(record);
+    setSelectedStudent(updatedStudent);
+    setStudentsData((currentStudents) =>
+      currentStudents.map((student) =>
+        student.id === updatedStudent.id ? updatedStudent : student
+      )
+    );
+  };
+
   return (
     <div
       className="app"
@@ -220,6 +232,7 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
                   student={selectedStudent}
                   onBack={() => selectPage("students")}
                   userId={user?.public_id}
+                onStudentUpdated={updateSelectedStudent}
                 />
               )}
               {page === "students" && (
@@ -228,7 +241,8 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
                   query={query}
                   selectedStudent={selectedStudent}
                   onSelect={openStudentProfile}
-                />
+                  user={user}
+            />
               )}
               {page === "calendar" && <CalendarPage />}
               {page === "reports" && <ReportsPage />}

@@ -403,6 +403,36 @@ nav { display: grid; gap: 6px; }
 .profile-details dt { color: #758095; }
 .profile-details dd { margin: 0; color: #344054; font-weight: 600; text-align: right; }
 
+.profile-edit-controls {
+  display: grid;
+  gap: 12px;
+  padding-top: 4px;
+}
+.profile-edit-controls form > label {
+  display: block;
+  margin-bottom: 6px;
+  color: #758095;
+  font-size: 12px;
+}
+.profile-edit-controls form > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.profile-edit-controls input {
+  width: 110px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.profile-edit-controls .text-button {
+  margin: 0;
+  padding: 8px 10px;
+}
+.profile-edit-controls button:disabled { opacity: .55; cursor: not-allowed; }
+.unassign-button { justify-self: start; color: #a83232; }
+.profile-update-success { margin: 0; color: #18794e; font-size: 12px; }
+
 .profile-notes {
   margin-top: auto;
   padding-top: 16px;
@@ -414,7 +444,12 @@ nav { display: grid; gap: 6px; }
 
 .profile-scores-card,
 .profile-grades-card,
+.profile-parent-contact-card,
 .profile-upcoming-card { align-self: start; }
+
+.parent-contact-details { margin-bottom: 0; }
+.parent-contact-details a { color: var(--primary); text-decoration: none; }
+.parent-contact-details a:hover { text-decoration: underline; }
 
 .back-button {
   display: inline-flex;
@@ -464,6 +499,12 @@ nav { display: grid; gap: 6px; }
   border-radius: var(--radius);
   padding: 20px;
   min-width: 0;
+}
+
+.account-page,
+.account-grid {
+  display: grid;
+  gap: 10px;
 }
 
 .student-card {
@@ -689,6 +730,63 @@ nav { display: grid; gap: 6px; }
   gap: 16px;
 }
 
+.student-list-section { margin-bottom: 28px; }
+.student-list-section > h2 { margin: 0 0 12px; font-size: 18px; }
+.unassigned-student-list { display: grid; gap: 10px; }
+.unassigned-student-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.unassigned-student-info {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #202a3a;
+  text-align: left;
+  cursor: pointer;
+}
+.unassigned-student-info:hover strong { color: var(--primary); }
+.unassigned-student-info:focus-visible {
+  outline: 2px solid var(--secondary);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+.unassigned-student-info img {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--accent);
+}
+.unassigned-student-info > div { display: grid; gap: 4px; }
+.unassigned-student-info strong { font-size: 14px; }
+.unassigned-student-info small { color: #758095; font-size: 12px; }
+.student-assignment-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.student-assignment-controls label { color: #758095; font-size: 12px; }
+.student-assignment-controls select {
+  min-width: 210px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: white;
+  color: #344054;
+}
+.student-assignment-controls button:disabled { opacity: .55; cursor: not-allowed; }
+.assignment-error, .assignment-success { margin: 8px 0 0; font-size: 12px; }
+.assignment-error { color: #c03936; }
+.assignment-success { color: #18794e; }
+
 .students-layout { grid-template-columns: minmax(0, 1fr); }
 .calendar-grid { grid-template-columns: 1.6fr .8fr; }
 .settings-grid { grid-template-columns: 1.2fr .8fr; }
@@ -763,12 +861,11 @@ nav { display: grid; gap: 6px; }
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: .08em;
+  letter-spacing: .05em;
 }
 
-.student-name-header {
-  text-align: left;
-}
+.notes-table .table-head,
+.notes-table .note-row { grid-template-columns: 2fr .6fr 1fr; }
 
 .student-row {
   position: relative;
@@ -938,6 +1035,9 @@ nav { display: grid; gap: 6px; }
 }
 
 @media (max-width: 760px) {
+  .unassigned-student-row { align-items: stretch; flex-direction: column; }
+  .student-assignment-controls { align-items: stretch; flex-direction: column; }
+  .student-assignment-controls select { width: 100%; }
   .student-filter-field { flex: 1 1 140px; }
   .student-filter-count { margin-left: 0; }
 
