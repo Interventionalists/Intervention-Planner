@@ -18,6 +18,10 @@ export function CardTitle({ title, action }) {
 }
 
 export function ProgressChart({ values }) {
+  if (!values.length) {
+    return <p className="muted">No progress data is available yet.</p>;
+  }
+
   const max = Math.max(...values, 100);
 
   return (

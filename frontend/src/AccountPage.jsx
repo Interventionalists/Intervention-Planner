@@ -30,6 +30,22 @@ async function fetchUserNotes(publicId) {
     }
 }
 
+async function fetchStudentNames() {
+  const response = await fetch(`${API_BASE_URL}/students-fetch`);
+  if (!response.ok) {
+    throw new Error(`Students request failed (${response.status}).`);
+  }
+  const data = await response.json();
+  if (!Array.isArray(data.students)) {
+    throw new Error("The students response has an unexpected format.");
+  }
+  return Object.fromEntries(
+    data.students.map(({ id, first_name, last_name }) => [
+      id,
+      `${first_name} ${last_name}`.trim(),
+    ])
+  );
+}
 
 async function loadSchools(currentSchool, setSchools, setSchoolId, setSchoolLoadError) {
   try {
@@ -80,6 +96,7 @@ async function loadSchools(currentSchool, setSchools, setSchoolId, setSchoolLoad
 const AccountPage = ({ user, name, initials, onUserUpdated }) => {
   const [editing, setEditing] = useState(false);
   const [notes, setNotes] = useState([]);
+  const [studentNames, setStudentNames] = useState({});
   const [notesError, setNotesError] = useState("");
   const [schoolId, setSchoolId] = useState(
     user?.school == null ? "" : String(user.school)
@@ -99,11 +116,16 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
       setSchoolLoadError
     );
 
+  }, [user?.school, user?.school_name]);
+
+  useEffect(() => {
     fetchUserNotes(user?.public_id)
       .then(setNotes)
       .catch((error) => setNotesError(error.message));
-    
-  }, [user?.public_id, user?.school, user?.school_name]);
+    fetchStudentNames()
+      .then(setStudentNames)
+      .catch((error) => setNotesError(error.message));
+  }, [user?.public_id]);
 
   const selectedSchool = schools.find((option) => option.id === schoolId);
   const schoolName =
@@ -325,7 +347,7 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
                 <div className="student-row note-row" key={note.id}>
                   <span>{note.text}</span>
                   <span>{note.date}</span>
-                  <span>{note.student_id}</span>
+                  <span>{studentNames[note.student_id] || "N/A"}</span>
                 </div>
               ))}
             </div>

@@ -9,6 +9,9 @@ from database.supabase_client import (
     fetch_unassigned_students,
     fetch_user_school_by_public_id,
 )
+from database.supabase_client import create_student, fetch_student_name, fetch_students
+from fastapi import APIRouter, HTTPException
+from database.supabase_client import fetch_students
 
 router = APIRouter()
 
@@ -101,6 +104,13 @@ def assign_student(student_id: int, payload: StudentAssignmentRequest):
         )
     return {"student": student}
 
+@router.get("/students-fetchName/{student_id}")
+def get_student_name(student_id: str):
+    try:
+        student_name = fetch_student_name(student_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"student_name": student_name}
 
 #insert a new student into the database
 @router.post("/students-insert", status_code=status.HTTP_201_CREATED)

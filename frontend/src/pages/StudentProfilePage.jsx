@@ -6,8 +6,9 @@ import { CardTitle, PageHeading, ProgressChart } from "../components/PageElement
 const API_BASE_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:8000"
 ).replace(/\/+$/, "");
+import StudentNotes from "../components/StudentNotes";
 
-function StudentProfilePage({ student, onBack }) {
+function StudentProfilePage({ student, onBack, userId }) {
   const [notes, setNotes] = useState([]);
   const [notesError, setNotesError] = useState("");
   const [notesLoading, setNotesLoading] = useState(true);
@@ -100,20 +101,7 @@ function StudentProfilePage({ student, onBack }) {
             <div><dt>Group</dt><dd>{student.group ?? student.intervention_group ?? "—"}</dd></div>
             <div><dt>Intervention teacher</dt><dd>{interventionTeacher ?? "—"}</dd></div>
           </dl>
-          <div className="profile-notes">
-            <h3>Notes</h3>
-            {notesLoading ? (
-              <p role="status">Loading notes…</p>
-            ) : notesError ? (
-              <p role="alert">{notesError}</p>
-            ) : notes.length ? (
-              notes.map((note) => (
-                <p key={note.id}>{note.text ?? note.note ?? note.content ?? ""}</p>
-              ))
-            ) : (
-              <p>No notes yet.</p>
-            )}
-          </div>
+          <StudentNotes studentId={student.id} userId={userId} />
         </div>
 
         <div className="card profile-scores-card">

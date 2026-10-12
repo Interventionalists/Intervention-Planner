@@ -1,6 +1,7 @@
 import { BarChart3, ClipboardList, SlidersHorizontal } from "lucide-react";
 import { events } from "../data";
 import { CardTitle, PageHeading, ProgressChart } from "../components/PageElements";
+import StudentNotes from "../components/StudentNotes";
 
 function DashboardPage({
   student,
@@ -8,6 +9,7 @@ function DashboardPage({
   onStudentChange,
   onStudents,
   userName = "User",
+  userId,
 }) {
   return (
     <>
@@ -25,12 +27,9 @@ function DashboardPage({
           <h2>{student.name}</h2>
           <p>Grade: {student.grade}</p>
           <p>Teacher: {student.teacher}</p>
-          <p>Group: {student.group}</p>
+          {student.group !== "—" && <p>Group: {student.group}</p>}
           <p>Int. Teacher: {student.interventionTeacher}</p>
-          <div className="student-notes">
-            <span>Notes</span>
-            <p>{student.notes || "No notes yet."}</p>
-          </div>
+          <StudentNotes studentId={student.id} userId={userId} variant="dashboard" />
           <select
             value={student.id ?? ""}
             onChange={(event) =>
@@ -63,6 +62,9 @@ function DashboardPage({
                 <strong>{score.toFixed(2)}%</strong>
               </div>
             ))}
+            {!Object.keys(student.scores).length && (
+              <p className="muted">No score data is available yet.</p>
+            )}
           </div>
         </div>
 
@@ -75,6 +77,9 @@ function DashboardPage({
                 <strong>{score.toFixed(2)}%</strong>
               </div>
             ))}
+            {!Object.keys(student.scores).length && (
+              <p className="muted">No grade data is available yet.</p>
+            )}
           </div>
         </div>
 
