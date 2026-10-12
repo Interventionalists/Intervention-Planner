@@ -17,7 +17,11 @@ function formatStudent(record) {
     name,
     grade: record.grade ?? record.grade_level ?? "—",
     teacher: record.teacher_name ?? record.teacher ?? "—",
-    group: record.group ?? record.intervention_group ?? "—",
+    group:
+      record.group_number ??
+      record.group ??
+      record.intervention_group ??
+      "—",
     interventionTeacher:
       record.intervention_teacher_name ??
       record.interventionist_name ??
@@ -230,6 +234,7 @@ function StudentsPage({ query = "", selectedStudent, onSelect, user }) {
                       <div>
                         <strong>{student.name}</strong>
                         <small>Grade {student.grade}</small>
+                        <small>Group {student.group}</small>
                       </div>
                     </button>
                     <div className="student-assignment-controls">

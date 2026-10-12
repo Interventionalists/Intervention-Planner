@@ -8,10 +8,16 @@ const API_BASE_URL = (
 ).replace(/\/+$/, "");
 import StudentNotes from "../components/StudentNotes";
 
-function StudentProfilePage({ student, onBack, userId }) {
+function StudentProfilePage({ student, onBack, userId, onStudentUpdated }) {
   const [notes, setNotes] = useState([]);
   const [notesError, setNotesError] = useState("");
   const [notesLoading, setNotesLoading] = useState(true);
+  const [groupNumber, setGroupNumber] = useState(
+    student.group_number == null ? "" : String(student.group_number)
+  );
+  const [profileUpdateError, setProfileUpdateError] = useState("");
+  const [profileUpdateMessage, setProfileUpdateMessage] = useState("");
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
   const scores = Object.entries(student.scores ?? {}).filter(([, score]) =>
     Number.isFinite(Number(score))
   );
@@ -25,6 +31,73 @@ function StudentProfilePage({ student, onBack, userId }) {
     student.intervention_teacher_name ??
     student.interventionist_name ??
     student.interventionist;
+
+  useEffect(() => {
+    setGroupNumber(
+      student.group_number == null ? "" : String(student.group_number)
+    );
+    setProfileUpdateError("");
+    setProfileUpdateMessage("");
+  }, [student.id, student.group_number]);
+
+  const updateStudentProfile = async (updates, successMessage) => {
+    setIsUpdatingProfile(true);
+    setProfileUpdateError("");
+    setProfileUpdateMessage("");
+
+    try {
+      if (!userId) {
+        throw new Error("The signed-in user's ID is missing.");
+      }
+
+      const response = await fetch(
+        `${API_BASE_URL}/students-profile/${encodeURIComponent(student.id)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...updates, requester_id: userId }),
+        }
+      );
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.detail || `Profile update failed (${response.status}).`);
+      }
+      if (!result.student) {
+        throw new Error("The profile update response has an unexpected format.");
+      }
+
+      onStudentUpdated(result.student);
+      setProfileUpdateMessage(successMessage);
+    } catch (error) {
+      console.error("Error updating student profile:", error);
+      setProfileUpdateError(error.message || "Could not update this student.");
+    } finally {
+      setIsUpdatingProfile(false);
+    }
+  };
+
+  const saveGroupNumber = (event) => {
+    event.preventDefault();
+    const parsedGroupNumber = groupNumber.trim() ? Number(groupNumber) : null;
+    if (
+      parsedGroupNumber !== null &&
+      (!Number.isInteger(parsedGroupNumber) || parsedGroupNumber < 1)
+    ) {
+      setProfileUpdateError("Enter a whole group number greater than zero.");
+      return;
+    }
+
+    updateStudentProfile(
+      { group_number: parsedGroupNumber },
+      "Group number saved."
+    );
+  };
+
+  const unassignInterventionist = () =>
+    updateStudentProfile(
+      { interventionist: null },
+      "Interventionist unassigned."
+    );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -98,10 +171,95 @@ function StudentProfilePage({ student, onBack, userId }) {
           </div>
           <dl className="profile-details">
             <div><dt>Teacher</dt><dd>{teacher ?? "—"}</dd></div>
-            <div><dt>Group</dt><dd>{student.group ?? student.intervention_group ?? "—"}</dd></div>
-            <div><dt>Intervention teacher</dt><dd>{interventionTeacher ?? "—"}</dd></div>
+            <div>
+              <dt>Group</dt>
+              <dd>
+                {student.group_number ??
+                  student.group ??
+                  student.intervention_group ??
+                  "—"}
+              </dd>
+            </div>
+            <div>
+              <dt>Intervention teacher</dt>
+              <dd>{interventionTeacher || "Not assigned"}</dd>
+            </div>
           </dl>
+          <div className="profile-edit-controls">
+            <form onSubmit={saveGroupNumber}>
+              <label htmlFor="student-group-number">Group number</label>
+              <div>
+                <input
+                  id="student-group-number"
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={groupNumber}
+                  onChange={(event) => setGroupNumber(event.target.value)}
+                />
+                <button
+                  className="text-button"
+                  type="submit"
+                  disabled={isUpdatingProfile}
+                >
+                  Save group
+                </button>
+              </div>
+            </form>
+            {student.interventionist && (
+              <button
+                className="text-button unassign-button"
+                type="button"
+                disabled={isUpdatingProfile}
+                onClick={unassignInterventionist}
+              >
+                Unassign interventionist
+              </button>
+            )}
+            {profileUpdateMessage && (
+              <p className="profile-update-success" role="status">
+                {profileUpdateMessage}
+              </p>
+            )}
+            {profileUpdateError && (
+              <p className="assignment-error" role="alert">
+                {profileUpdateError}
+              </p>
+            )}
+          </div>
           <StudentNotes studentId={student.id} userId={userId} />
+        </div>
+
+        <div className="card profile-parent-contact-card">
+          <CardTitle title="Parent contact information" />
+          <dl className="profile-details parent-contact-details">
+            <div>
+              <dt>Parent/guardian</dt>
+              <dd>{student.parent_name || "Not provided"}</dd>
+            </div>
+            <div>
+              <dt>Phone</dt>
+              <dd>
+                {student.parent_phone ? (
+                  <a href={`tel:${student.parent_phone}`}>
+                    {student.parent_phone}
+                  </a>
+                ) : (
+                  "Not provided"
+                )}
+              </dd>
+            </div>
+            {(student.parent_email || student.guardian_email) && (
+              <div>
+                <dt>Email</dt>
+                <dd>
+                  <a href={`mailto:${student.parent_email || student.guardian_email}`}>
+                    {student.parent_email || student.guardian_email}
+                  </a>
+                </dd>
+              </div>
+            )}
+          </dl>
         </div>
 
         <div className="card profile-scores-card">

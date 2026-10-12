@@ -4,14 +4,13 @@ from pydantic import BaseModel, ConfigDict, Field
 from database.supabase_client import (
     assign_student_to_interventionist,
     create_student,
+    fetch_interventionists,
     fetch_interventionist_students,
     fetch_students,
     fetch_unassigned_students,
     fetch_user_school_by_public_id,
+    update_student_profile,
 )
-from database.supabase_client import create_student, fetch_student_name, fetch_students
-from fastapi import APIRouter, HTTPException
-from database.supabase_client import fetch_students
 
 router = APIRouter()
 
@@ -31,6 +30,12 @@ class StudentCreateRequest(BaseModel):
 class StudentAssignmentRequest(BaseModel):
     interventionist_id: UUID
     requester_id: UUID
+
+
+class StudentProfileUpdateRequest(BaseModel):
+    requester_id: UUID
+    interventionist: UUID | None = None
+    group_number: int | None = Field(default=None, ge=1)
 
 
 @router.get("/students-fetch")
@@ -103,6 +108,53 @@ def assign_student(student_id: int, payload: StudentAssignmentRequest):
             detail="Unassigned student not found.",
         )
     return {"student": student}
+
+
+@router.patch("/students-profile/{student_id}")
+def update_student(student_id: int, payload: StudentProfileUpdateRequest):
+    updates = payload.model_dump(
+        exclude={"requester_id"},
+        exclude_unset=True,
+    )
+    if not updates:
+        raise HTTPException(
+            status_code=422,
+            detail="Provide an interventionist or group number to update.",
+        )
+    if "interventionist" in updates and updates["interventionist"] is None:
+        updates["group_number"] = None
+
+    try:
+        school_id = fetch_user_school_by_public_id(str(payload.requester_id))
+        if school_id is None:
+            raise HTTPException(
+                status_code=403,
+                detail="The signed-in user does not have a school assigned.",
+            )
+
+        interventionist_id = updates.get("interventionist")
+        if interventionist_id is not None:
+            interventionist = fetch_interventionists(school_id)
+            if not any(
+                str(candidate["public_id"]) == str(interventionist_id)
+                for candidate in interventionist
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail="The interventionist must belong to your school.",
+                )
+            updates["interventionist"] = str(interventionist_id)
+
+        student = update_student_profile(student_id, school_id, updates)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+    if student is None:
+        raise HTTPException(status_code=404, detail="Student not found.")
+    return {"student": student}
+
 
 @router.get("/students-fetchName/{student_id}")
 def get_student_name(student_id: str):
