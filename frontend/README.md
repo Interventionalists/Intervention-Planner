@@ -11,10 +11,11 @@ npm run dev
 
 Then open the local Vite URL shown in your terminal.
 
-The app loads student records from the FastAPI `GET /students-fetch` endpoint.
-For local development, Vite proxies that request to `http://127.0.0.1:8000`;
-start the backend before using the dashboard or Students page. To use a remote
-backend, set `VITE_API_BASE_URL` to its base URL.
+The Students page loads students and interventionists scoped to the signed-in
+user's school from the FastAPI endpoints. Unassigned students can be assigned to
+an interventionist at that school from the page.
+Start the backend before using the Students page. The frontend defaults to
+`http://localhost:8000`; set `VITE_API_URL` to use a different backend URL.
 
 ## Structure
 
