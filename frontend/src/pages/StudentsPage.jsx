@@ -52,7 +52,9 @@ function StudentsPage({ query = "", selectedStudent, onSelect, user }) {
   const [assignmentMessage, setAssignmentMessage] = useState("");
   const [assigningStudentId, setAssigningStudentId] = useState(null);
   const [reloadKey, setReloadKey] = useState(0);
-  const [selectedGroup, setSelectedGroup] = useState("");
+  const [gradeFilter, setGradeFilter] = useState("all");
+  const [teacherFilter, setTeacherFilter] = useState("all");
+  const [groupFilter, setGroupFilter] = useState("all");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -173,31 +175,40 @@ function StudentsPage({ query = "", selectedStudent, onSelect, user }) {
     }
   };
 
+  const allStudents = [...students, ...unassignedStudents];
+  const grades = [...new Set(allStudents.map((student) => student.grade))].sort(
+    (left, right) =>
+      String(left).localeCompare(String(right), undefined, { numeric: true })
+  );
+  const teachers = [...new Set(allStudents.map((student) => student.teacher))].sort(
+    (left, right) => left.localeCompare(right)
+  );
   const groups = [...new Set(students.map((student) => String(student.group)))].sort(
-    (first, second) => {
-      const firstNumber = Number(first);
-      const secondNumber = Number(second);
-      if (Number.isFinite(firstNumber) && Number.isFinite(secondNumber)) {
-        return firstNumber - secondNumber;
-      }
-      return first.localeCompare(second);
-    }
+    (left, right) =>
+      left.localeCompare(right, undefined, { numeric: true })
   );
   const normalizedQuery = query.trim().toLowerCase();
-  const matchesNameSearch = (student) =>
-    student.name.toLowerCase().includes(normalizedQuery);
+  const matchesFilters = (student) =>
+    student.name.toLowerCase().includes(normalizedQuery) &&
+    (gradeFilter === "all" || String(student.grade) === gradeFilter) &&
+    (teacherFilter === "all" || student.teacher === teacherFilter);
   const filteredStudents = students.filter(
     (student) =>
-      matchesNameSearch(student) &&
-      (!selectedGroup || String(student.group) === selectedGroup)
+      matchesFilters(student) &&
+      (groupFilter === "all" || String(student.group) === groupFilter)
   );
-  const filteredUnassignedStudents = unassignedStudents.filter(matchesNameSearch);
-
+  const filteredUnassignedStudents = unassignedStudents.filter(matchesFilters);
   const interventionistName = (interventionist) =>
     interventionist.name ||
     [interventionist.first_name, interventionist.last_name].filter(Boolean).join(" ") ||
     interventionist.email ||
     "Interventionist";
+
+  const clearFilters = () => {
+    setGradeFilter("all");
+    setTeacherFilter("all");
+    setGroupFilter("all");
+  };
 
   return (
     <>
@@ -207,7 +218,7 @@ function StudentsPage({ query = "", selectedStudent, onSelect, user }) {
         subtitle="Students assigned to you and students available to assign."
       />
       {isLoading ? (
-        <div className="card" role="status">Loading students…</div>
+        <div className="card" role="status">Loading students...</div>
       ) : error ? (
         <div className="card" role="alert">
           <p>{error}</p>
@@ -217,23 +228,56 @@ function StudentsPage({ query = "", selectedStudent, onSelect, user }) {
         </div>
       ) : (
         <>
-          {groups.length > 0 && (
-            <div className="student-list-filters">
-              <label htmlFor="student-group-filter">Filter by group</label>
+          <div className="student-filters">
+            <label className="student-filter-field">
+              <span>Grade</span>
               <select
-                id="student-group-filter"
-                value={selectedGroup}
-                onChange={(event) => setSelectedGroup(event.target.value)}
+                value={gradeFilter}
+                onChange={(event) => setGradeFilter(event.target.value)}
               >
-                <option value="">All groups</option>
+                <option value="all">All grades</option>
+                {grades.map((grade) => (
+                  <option key={grade} value={String(grade)}>{grade}</option>
+                ))}
+              </select>
+            </label>
+            <label className="student-filter-field">
+              <span>Teacher</span>
+              <select
+                value={teacherFilter}
+                onChange={(event) => setTeacherFilter(event.target.value)}
+              >
+                <option value="all">All teachers</option>
+                {teachers.map((teacher) => (
+                  <option key={teacher} value={teacher}>{teacher}</option>
+                ))}
+              </select>
+            </label>
+            <label className="student-filter-field">
+              <span>Group</span>
+              <select
+                value={groupFilter}
+                onChange={(event) => setGroupFilter(event.target.value)}
+              >
+                <option value="all">All groups</option>
                 {groups.map((group) => (
                   <option key={group} value={group}>
                     {group === "—" ? "No group" : `Group ${group}`}
                   </option>
                 ))}
               </select>
-            </div>
-          )}
+            </label>
+            <span className="student-filter-count" aria-live="polite">
+              Assigned: {filteredStudents.length} of {students.length}; unassigned: {filteredUnassignedStudents.length} of {unassignedStudents.length}
+            </span>
+            {(gradeFilter !== "all" ||
+              teacherFilter !== "all" ||
+              groupFilter !== "all") && (
+              <button className="student-filter-clear" type="button" onClick={clearFilters}>
+                Clear filters
+              </button>
+            )}
+          </div>
           {assignmentMessage && <p className="assignment-success" role="status">{assignmentMessage}</p>}
           <section className="student-list-section">
             <h2>Assigned to you</h2>
@@ -245,7 +289,7 @@ function StudentsPage({ query = "", selectedStudent, onSelect, user }) {
               />
             ) : (
               <div className="card">
-                <p>{students.length ? "No assigned students match these filters." : "No students are assigned to you."}</p>
+                <p>{students.length ? "No students match your search and filters." : "No students are assigned to you."}</p>
               </div>
             )}
           </section>
@@ -303,7 +347,7 @@ function StudentsPage({ query = "", selectedStudent, onSelect, user }) {
                         }
                         onClick={() => assignStudent(student)}
                       >
-                        {assigningStudentId === student.id ? "Assigning…" : "Assign"}
+                        {assigningStudentId === student.id ? "Assigning..." : "Assign"}
                       </button>
                     </div>
                     {assignmentErrors[student.id] && (
@@ -316,7 +360,7 @@ function StudentsPage({ query = "", selectedStudent, onSelect, user }) {
               </div>
             ) : (
               <div className="card">
-                <p>{unassignedStudents.length ? "No unassigned students match these filters." : "There are no unassigned students."}</p>
+                <p>{unassignedStudents.length ? "No unassigned students match your search and filters." : "There are no unassigned students."}</p>
               </div>
             )}
           </section>

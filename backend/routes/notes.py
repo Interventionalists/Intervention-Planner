@@ -13,7 +13,7 @@ router = APIRouter()
 
 
 class NoteCreate(BaseModel):
-    student_id: int
+    student_id: int | None
     created_by: str
     text: str
 
