@@ -466,6 +466,12 @@ nav { display: grid; gap: 6px; }
   min-width: 0;
 }
 
+.account-page,
+.account-grid {
+  display: grid;
+  gap: 10px;
+}
+
 .student-card {
   grid-row: span 2;
   text-align: center;
