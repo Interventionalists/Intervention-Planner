@@ -4,7 +4,9 @@ import {
   CheckCircle2,
   Lock,
   Mail,
+  Pencil,
   ShieldCheck,
+  Trash2,
   UserRound,
 } from "lucide-react";
 import { ResetPasswordForm } from "./LoginPage";
@@ -39,12 +41,18 @@ async function fetchStudentNames() {
   if (!Array.isArray(data.students)) {
     throw new Error("The students response has an unexpected format.");
   }
-  return Object.fromEntries(
-    data.students.map(({ id, first_name, last_name }) => [
-      id,
-      `${first_name} ${last_name}`.trim(),
-    ])
-  );
+  return {
+    names: Object.fromEntries(
+      data.students.map(({ id, first_name, last_name }) => [
+        id,
+        `${first_name} ${last_name}`.trim(),
+      ])
+    ),
+    students: data.students.map(({ id, first_name, last_name }) => ({
+      id: String(id),
+      name: `${first_name} ${last_name}`.trim(),
+    })),
+  };
 }
 
 async function loadSchools(currentSchool, setSchools, setSchoolId, setSchoolLoadError) {
@@ -97,7 +105,17 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
   const [editing, setEditing] = useState(false);
   const [notes, setNotes] = useState([]);
   const [studentNames, setStudentNames] = useState({});
+  const [students, setStudents] = useState([]);
   const [notesError, setNotesError] = useState("");
+  const [noteActionError, setNoteActionError] = useState("");
+  const [noteFilter, setNoteFilter] = useState("");
+  const [studentFilter, setStudentFilter] = useState("");
+  const [noteDraft, setNoteDraft] = useState("");
+  const [noteStudentId, setNoteStudentId] = useState("");
+  const [editingNoteId, setEditingNoteId] = useState(null);
+  const [isAddingNote, setIsAddingNote] = useState(false);
+  const [isSavingNote, setIsSavingNote] = useState(false);
+  const [deletingNoteId, setDeletingNoteId] = useState(null);
   const [schoolId, setSchoolId] = useState(
     user?.school == null ? "" : String(user.school)
   );
@@ -119,11 +137,18 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
   }, [user?.school, user?.school_name]);
 
   useEffect(() => {
-    fetchUserNotes(user?.public_id)
-      .then(setNotes)
-      .catch((error) => setNotesError(error.message));
+    if (user?.public_id) {
+      fetchUserNotes(user.public_id)
+        .then(setNotes)
+        .catch((error) => setNotesError(error.message));
+    } else {
+      setNotesError("Your account ID is missing; notes cannot be loaded.");
+    }
     fetchStudentNames()
-      .then(setStudentNames)
+      .then(({ names, students: studentOptions }) => {
+        setStudentNames(names);
+        setStudents(studentOptions);
+      })
       .catch((error) => setNotesError(error.message));
   }, [user?.public_id]);
 
@@ -190,6 +215,128 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
     }
   };
 
+  const closeNoteForm = () => {
+    setIsAddingNote(false);
+    setEditingNoteId(null);
+    setNoteDraft("");
+    setNoteStudentId("");
+    setNoteActionError("");
+  };
+
+  const startAddingNote = () => {
+    setNoteDraft("");
+    setNoteStudentId("");
+    setEditingNoteId(null);
+    setIsAddingNote(true);
+    setNoteActionError("");
+  };
+
+  const startEditingNote = (note) => {
+    setNoteDraft(note.text || "");
+    setNoteStudentId(String(note.student_id));
+    setEditingNoteId(note.id);
+    setIsAddingNote(false);
+    setNoteActionError("");
+  };
+
+  const saveNote = async (event) => {
+    event.preventDefault();
+    const text = noteDraft.trim();
+    if (!text || (!isAddingNote && editingNoteId === null)) {
+      setNoteActionError("Enter note text before saving.");
+      return;
+    }
+    if (isAddingNote && !noteStudentId) {
+      setNoteActionError("Select a student or personal note.");
+      return;
+    }
+    if (!user?.public_id) {
+      setNoteActionError("Your account ID is missing; this note cannot be saved.");
+      return;
+    }
+
+    setIsSavingNote(true);
+    setNoteActionError("");
+    try {
+      const response = isAddingNote
+        ? await fetch(`${API_BASE_URL}/notes-create`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              student_id:
+                noteStudentId === "personal" ? null : Number(noteStudentId),
+              created_by: user.public_id,
+              text,
+            }),
+          })
+        : await fetch(
+            `${API_BASE_URL}/notes-editText?${new URLSearchParams({
+              note_id: String(editingNoteId),
+              new_text: text,
+            })}`,
+            { method: "PUT" }
+          );
+      if (!response.ok) {
+        throw new Error("Unable to save this note.");
+      }
+
+      setNotes(await fetchUserNotes(user.public_id));
+      closeNoteForm();
+    } catch (error) {
+      setNoteActionError(error.message || "Unable to save this note.");
+    } finally {
+      setIsSavingNote(false);
+    }
+  };
+
+  const deleteNote = async (note) => {
+    if (
+      !window.confirm(
+        "Delete this note? This action cannot be undone."
+      )
+    ) {
+      return;
+    }
+    if (!user?.public_id) {
+      setNoteActionError("Your account ID is missing; this note cannot be deleted.");
+      return;
+    }
+
+    setDeletingNoteId(note.id);
+    setNoteActionError("");
+    try {
+      const params = new URLSearchParams({
+        note_id: String(note.id),
+        user_id: user.public_id,
+      });
+      const response = await fetch(`${API_BASE_URL}/notes-delete?${params}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        throw new Error("Unable to delete this note.");
+      }
+      setNotes(await fetchUserNotes(user.public_id));
+    } catch (error) {
+      setNoteActionError(error.message || "Unable to delete this note.");
+    } finally {
+      setDeletingNoteId(null);
+    }
+  };
+
+  const filteredNotes = notes.filter((note) => {
+    const studentName = studentNames[note.student_id] || "";
+    const query = noteFilter.trim().toLowerCase();
+    return (
+      (!query ||
+        note.text?.toLowerCase().includes(query) ||
+        studentName.toLowerCase().includes(query)) &&
+      (!studentFilter ||
+        (studentFilter === "personal"
+          ? note.student_id == null
+          : String(note.student_id) === studentFilter))
+    );
+  });
+
   return (
     <div className="account-page">
       <div className="page-heading">
@@ -254,7 +401,7 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
 
               <div className="edit-actions">
                 <button
-                  className="primary-button"
+                  className="ghost-button"
                   onClick={handleSave}
                   disabled={!selectedSchool || !user?.id || saving}
                 >
@@ -331,21 +478,134 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
             Filter your notes, add new notes, edit or delete existing notes. You can also view which student each note is associated with.
           </p>
 
+          <div className="account-notes-toolbar">
+            <input
+              type="search"
+              aria-label="Filter notes"
+              placeholder="Filter notes by text or student"
+              value={noteFilter}
+              onChange={(event) => setNoteFilter(event.target.value)}
+            />
+            <select
+              aria-label="Filter notes by student"
+              value={studentFilter}
+              onChange={(event) => setStudentFilter(event.target.value)}
+            >
+              <option value="">All students</option>
+              <option value="personal">Personal notes (N/A)</option>
+              {students.map((student) => (
+                <option key={student.id} value={student.id}>
+                  {student.name || "Unnamed student"}
+                </option>
+              ))}
+            </select>
+            <button
+              className="ghost-button"
+              type="button"
+              onClick={startAddingNote}
+              disabled={!user?.public_id}
+            >
+              Add note
+            </button>
+          </div>
+
+          {(isAddingNote || editingNoteId !== null) && (
+            <form className="account-note-form" onSubmit={saveNote}>
+              {isAddingNote && (
+                <label>
+                  Student
+                  <select
+                    value={noteStudentId}
+                    onChange={(event) => setNoteStudentId(event.target.value)}
+                    required
+                  >
+                    <option value="">Select a student</option>
+                    <option value="personal">Personal note (student: N/A)</option>
+                    {students.map((student) => (
+                      <option key={student.id} value={student.id}>
+                        {student.name || "Unnamed student"}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <label>
+                Note
+                <textarea
+                  value={noteDraft}
+                  onChange={(event) => setNoteDraft(event.target.value)}
+                  rows={3}
+                  required
+                  autoFocus
+                />
+              </label>
+              <div className="notes-actions">
+                <button
+                  className="primary-button"
+                  type="submit"
+                  disabled={isSavingNote}
+                >
+                  {isSavingNote ? "Saving..." : "Save note"}
+                </button>
+                <button
+                  className="ghost-button"
+                  type="button"
+                  onClick={closeNoteForm}
+                  disabled={isSavingNote}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
+
+          {noteActionError && (
+            <p className="error-state" role="alert">{noteActionError}</p>
+          )}
+
           <div className="card student-table-card notes-table">
             <div className="table-head">
               <span>Text</span>
               <span>Date</span>
               <span>Student</span>
+              <span>Actions</span>
             </div>
 
             <div className="table-body">
-              {notes.map((note) => (
+              {filteredNotes.map((note) => (
                 <div className="student-row note-row" key={note.id}>
                   <span>{note.text}</span>
                   <span>{note.date}</span>
                   <span>{studentNames[note.student_id] || "N/A"}</span>
+                  <span className="account-note-actions">
+                    <button
+                      className="note-edit-button"
+                      type="button"
+                      aria-label="Edit note"
+                      title="Edit note"
+                      onClick={() => startEditingNote(note)}
+                      disabled={deletingNoteId !== null || isSavingNote}
+                    >
+                      <Pencil size={14} aria-hidden="true" />
+                    </button>
+                    <button
+                      className="note-delete-button"
+                      type="button"
+                      aria-label="Delete note"
+                      title="Delete note"
+                      onClick={() => deleteNote(note)}
+                      disabled={!user?.public_id || deletingNoteId !== null}
+                    >
+                      <Trash2 size={14} aria-hidden="true" />
+                    </button>
+                  </span>
                 </div>
               ))}
+              {!notesError && filteredNotes.length === 0 && (
+                <p className="account-notes-empty">
+                  {notes.length ? "No notes match these filters." : "No notes yet."}
+                </p>
+              )}
             </div>
           </div>
           {notesError && <p role="alert">{notesError}</p>}
