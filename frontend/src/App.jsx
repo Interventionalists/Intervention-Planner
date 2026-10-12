@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { themePresets } from "./data";
 import { Header, Sidebar } from "./components/AppNavigation";
@@ -158,14 +158,6 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
     return () => controller.abort();
   }, []);
 
-  const filteredStudents = useMemo(
-    () =>
-      studentsData.filter((student) =>
-        student.name.toLowerCase().includes(query.toLowerCase())
-      ),
-    [query, studentsData]
-  );
-
   const selectPage = (id) => {
     setPage(id);
     setMobileOpen(false);
@@ -245,6 +237,7 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
               )}
               {page === "students" && (
                 <StudentsPage
+                  students={studentsData}
                   query={query}
                   selectedStudent={selectedStudent}
                   onSelect={openStudentProfile}

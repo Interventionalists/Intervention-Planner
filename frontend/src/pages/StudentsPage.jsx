@@ -52,6 +52,8 @@ function StudentsPage({ query = "", selectedStudent, onSelect, user }) {
   const [assignmentMessage, setAssignmentMessage] = useState("");
   const [assigningStudentId, setAssigningStudentId] = useState(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [gradeFilter, setGradeFilter] = useState("all");
+  const [teacherFilter, setTeacherFilter] = useState("all");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -172,18 +174,31 @@ function StudentsPage({ query = "", selectedStudent, onSelect, user }) {
     }
   };
 
-  const filteredStudents = students.filter((student) =>
-    student.name.toLowerCase().includes(query.toLowerCase())
+  const allStudents = [...students, ...unassignedStudents];
+  const grades = [...new Set(allStudents.map((student) => student.grade))].sort(
+    (left, right) =>
+      String(left).localeCompare(String(right), undefined, { numeric: true })
   );
-  const filteredUnassignedStudents = unassignedStudents.filter((student) =>
-    student.name.toLowerCase().includes(query.toLowerCase())
+  const teachers = [...new Set(allStudents.map((student) => student.teacher))].sort(
+    (left, right) => left.localeCompare(right)
   );
-
+  const normalizedQuery = query.trim().toLowerCase();
+  const matchesFilters = (student) =>
+    student.name.toLowerCase().includes(normalizedQuery) &&
+    (gradeFilter === "all" || String(student.grade) === gradeFilter) &&
+    (teacherFilter === "all" || student.teacher === teacherFilter);
+  const filteredStudents = students.filter(matchesFilters);
+  const filteredUnassignedStudents = unassignedStudents.filter(matchesFilters);
   const interventionistName = (interventionist) =>
     interventionist.name ||
     [interventionist.first_name, interventionist.last_name].filter(Boolean).join(" ") ||
     interventionist.email ||
     "Interventionist";
+
+  const clearFilters = () => {
+    setGradeFilter("all");
+    setTeacherFilter("all");
+  };
 
   return (
     <>
@@ -193,7 +208,7 @@ function StudentsPage({ query = "", selectedStudent, onSelect, user }) {
         subtitle="Students assigned to you and students available to assign."
       />
       {isLoading ? (
-        <div className="card" role="status">Loading students…</div>
+        <div className="card" role="status">Loading students...</div>
       ) : error ? (
         <div className="card" role="alert">
           <p>{error}</p>
@@ -203,6 +218,40 @@ function StudentsPage({ query = "", selectedStudent, onSelect, user }) {
         </div>
       ) : (
         <>
+          <div className="student-filters">
+            <label className="student-filter-field">
+              <span>Grade</span>
+              <select
+                value={gradeFilter}
+                onChange={(event) => setGradeFilter(event.target.value)}
+              >
+                <option value="all">All grades</option>
+                {grades.map((grade) => (
+                  <option key={grade} value={String(grade)}>{grade}</option>
+                ))}
+              </select>
+            </label>
+            <label className="student-filter-field">
+              <span>Teacher</span>
+              <select
+                value={teacherFilter}
+                onChange={(event) => setTeacherFilter(event.target.value)}
+              >
+                <option value="all">All teachers</option>
+                {teachers.map((teacher) => (
+                  <option key={teacher} value={teacher}>{teacher}</option>
+                ))}
+              </select>
+            </label>
+            <span className="student-filter-count" aria-live="polite">
+              Assigned: {filteredStudents.length} of {students.length}; unassigned: {filteredUnassignedStudents.length} of {unassignedStudents.length}
+            </span>
+            {(gradeFilter !== "all" || teacherFilter !== "all") && (
+              <button className="student-filter-clear" type="button" onClick={clearFilters}>
+                Clear filters
+              </button>
+            )}
+          </div>
           {assignmentMessage && <p className="assignment-success" role="status">{assignmentMessage}</p>}
           <section className="student-list-section">
             <h2>Assigned to you</h2>
@@ -214,7 +263,7 @@ function StudentsPage({ query = "", selectedStudent, onSelect, user }) {
               />
             ) : (
               <div className="card">
-                <p>{students.length ? "No students match your search." : "No students are assigned to you."}</p>
+                <p>{students.length ? "No students match your search and filters." : "No students are assigned to you."}</p>
               </div>
             )}
           </section>
@@ -272,7 +321,7 @@ function StudentsPage({ query = "", selectedStudent, onSelect, user }) {
                         }
                         onClick={() => assignStudent(student)}
                       >
-                        {assigningStudentId === student.id ? "Assigning…" : "Assign"}
+                        {assigningStudentId === student.id ? "Assigning..." : "Assign"}
                       </button>
                     </div>
                     {assignmentErrors[student.id] && (
@@ -285,7 +334,7 @@ function StudentsPage({ query = "", selectedStudent, onSelect, user }) {
               </div>
             ) : (
               <div className="card">
-                <p>{unassignedStudents.length ? "No unassigned students match your search." : "There are no unassigned students."}</p>
+                <p>{unassignedStudents.length ? "No unassigned students match your search and filters." : "There are no unassigned students."}</p>
               </div>
             )}
           </section>
