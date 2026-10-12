@@ -466,6 +466,12 @@ nav { display: grid; gap: 6px; }
   min-width: 0;
 }
 
+.account-page,
+.account-grid {
+  display: grid;
+  gap: 10px;
+}
+
 .student-card {
   grid-row: span 2;
   text-align: center;
@@ -721,12 +727,11 @@ nav { display: grid; gap: 6px; }
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: .08em;
+  letter-spacing: .05em;
 }
 
-.student-name-header {
-  text-align: left;
-}
+.notes-table .table-head,
+.notes-table .note-row { grid-template-columns: 2fr .6fr 1fr; }
 
 .student-row {
   position: relative;
