@@ -1,9 +1,3 @@
-import { BarChart3, ClipboardList, SlidersHorizontal } from "lucide-react";
-import { events } from "../data";
-import { CardTitle, PageHeading, ProgressChart } from "../components/PageElements";
-import StudentNotes from "../components/StudentNotes";
-
-
 import { PageHeading } from "../components/PageElements";
 import { canShowModule } from "../components/ModuleTile";
 import DailyCalendarTile from "../dashtiles/DailyCalendarTile";
@@ -15,6 +9,7 @@ import SelectedStudentTile from "../dashtiles/SelectedStudentTile";
 import StudentsNeedingAttentionTile from "../dashtiles/StudentsNeedingAttentionTile";
 import ViewSessionPlanTile from "../dashtiles/ViewSessionPlanTile";
 import ViewSessionTile from "../dashtiles/ViewSessionTile";
+
 function DashboardPage({
   student,
   students,
@@ -22,7 +17,6 @@ function DashboardPage({
   onStudentSelect,
   onStudents,
   userName = "User",
-  userId,
   role,
 }) {
   return (

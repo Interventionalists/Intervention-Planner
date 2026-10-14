@@ -1,7 +1,8 @@
 import { ArrowLeft, BarChart3, ClipboardList } from "lucide-react";
+import { useEffect, useState } from "react";
 import { events } from "../data";
 import { canShowModule } from "../components/ModuleTile";
-import { CardTitle, PageHeading } from "../components/PageElements";
+import { CardTitle, PageHeading, ProgressChart } from "../components/PageElements";
 import AddGradesTile from "../studtiles/AddGradesTile";
 import ChangeParentNameTile from "../studtiles/ChangeParentNameTile";
 import ChangeStudentGradeTile from "../studtiles/ChangeStudentGradeTile";
@@ -15,17 +16,12 @@ import ViewProgressTile from "../studtiles/ViewProgressTile";
 import ViewSessionPlanTile from "../studtiles/ViewSessionPlanTile";
 import ViewSessionTile from "../studtiles/ViewSessionTile";
 import ViewStateTestingTile from "../studtiles/ViewStateTestingTile";
-import { useEffect, useState } from "react";
-import { ArrowLeft, BarChart3, ClipboardList } from "lucide-react";
-import { events } from "../data";
-import { CardTitle, PageHeading, ProgressChart } from "../components/PageElements";
 
 const API_BASE_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:8000"
 ).replace(/\/+$/, "");
-import StudentNotes from "../components/StudentNotes";
 
-function StudentProfilePage({ student, onBack, userId, onStudentUpdated }) {
+function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role }) {
   const [notes, setNotes] = useState([]);
   const [notesError, setNotesError] = useState("");
   const [notesLoading, setNotesLoading] = useState(true);
