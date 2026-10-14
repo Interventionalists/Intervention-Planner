@@ -1,15 +1,23 @@
-import { BarChart3, ClipboardList, SlidersHorizontal } from "lucide-react";
-import { events } from "../data";
-import { CardTitle, PageHeading, ProgressChart } from "../components/PageElements";
-import StudentNotes from "../components/StudentNotes";
+import { PageHeading } from "../components/PageElements";
+import { canShowModule } from "../components/ModuleTile";
+import DailyCalendarTile from "../dashtiles/DailyCalendarTile";
+import EditSessionPlansTile from "../dashtiles/EditSessionPlansTile";
+import EditSessionTile from "../dashtiles/EditSessionTile";
+import PersonalMeetingsTile from "../dashtiles/PersonalMeetingsTile";
+import PersonalTodoTile from "../dashtiles/PersonalTodoTile";
+import SelectedStudentTile from "../dashtiles/SelectedStudentTile";
+import StudentsNeedingAttentionTile from "../dashtiles/StudentsNeedingAttentionTile";
+import ViewSessionPlanTile from "../dashtiles/ViewSessionPlanTile";
+import ViewSessionTile from "../dashtiles/ViewSessionTile";
 
 function DashboardPage({
   student,
   students,
   onStudentChange,
+  onStudentSelect,
   onStudents,
   userName = "User",
-  userId,
+  role,
 }) {
   return (
     <>
@@ -20,96 +28,33 @@ function DashboardPage({
       />
 
       <section className="dashboard-grid">
-        <div className="card student-card">
-          <div className="student-avatar-wrap">
-            <img src={student.avatar} alt="" />
-          </div>
-          <h2>{student.name}</h2>
-          <p>Grade: {student.grade}</p>
-          <p>Teacher: {student.teacher}</p>
-          {student.group !== "—" && <p>Group: {student.group}</p>}
-          <p>Int. Teacher: {student.interventionTeacher}</p>
-          <StudentNotes studentId={student.id} userId={userId} variant="dashboard" />
-          <select
-            value={student.id ?? ""}
-            onChange={(event) =>
-              onStudentChange(
-                students.find((candidate) => String(candidate.id) === event.target.value)
-              )
-            }
-            aria-label="Select student"
-          >
-            {students.map((candidate) => (
-              <option key={candidate.id ?? candidate.name} value={candidate.id ?? ""}>
-                {candidate.name}
-              </option>
-            ))}
-          </select>
-          <button className="text-button" onClick={onStudents}>
-            View all students →
-          </button>
-        </div>
-
-        <div className="card">
-          <CardTitle title="Scores" action={<SlidersHorizontal size={18} />} />
-          <div className="score-list">
-            {Object.entries(student.scores).slice(0, 6).map(([subject, score]) => (
-              <div className="score-row" key={subject}>
-                <span>{subject}</span>
-                <div className="score-bar">
-                  <span style={{ width: `${score}%` }} />
-                </div>
-                <strong>{score.toFixed(2)}%</strong>
-              </div>
-            ))}
-            {!Object.keys(student.scores).length && (
-              <p className="muted">No score data is available yet.</p>
-            )}
-          </div>
-        </div>
-
-        <div className="card">
-          <CardTitle title="Grades" />
-          <div className="grade-list">
-            {Object.entries(student.scores).map(([subject, score]) => (
-              <div key={subject} className={score < 60 ? "grade-alert" : ""}>
-                <span>{subject}</span>
-                <strong>{score.toFixed(2)}%</strong>
-              </div>
-            ))}
-            {!Object.keys(student.scores).length && (
-              <p className="muted">No grade data is available yet.</p>
-            )}
-          </div>
-        </div>
-
-        <div className="card chart-card">
-          <CardTitle
-            title="Progress"
-            action={
-              <div className="chart-actions">
-                <button aria-label="Bar chart"><BarChart3 size={19} /></button>
-                <button aria-label="Line chart"><ClipboardList size={18} /></button>
-              </div>
-            }
+        <SelectedStudentTile
+          student={student}
+          students={students}
+          onStudentChange={onStudentChange}
+          onStudents={onStudents}
+        />
+        {canShowModule("studentsNeedingAttention", "dashboard", role) && (
+          <StudentsNeedingAttentionTile
+            students={students}
+            onStudentSelect={onStudentSelect}
           />
-          <ProgressChart values={student.recentScores} />
-        </div>
-
-        <div className="card">
-          <CardTitle title="Upcoming" />
-          <div className="event-list">
-            {events.map((event) => (
-              <div className="event" key={event.id}>
-                <span className="event-dot" style={{ background: event.color }} />
-                <div>
-                  <strong>{event.title}</strong>
-                  <small>{event.time}</small>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        )}
+        {canShowModule("editSession", "dashboard", role) && <EditSessionTile />}
+        {canShowModule("viewSession", "dashboard", role) && <ViewSessionTile />}
+        {canShowModule("personalTodo", "dashboard", role) && <PersonalTodoTile />}
+        {canShowModule("personalMeetings", "dashboard", role) && (
+          <PersonalMeetingsTile />
+        )}
+        {canShowModule("editSessionPlans", "dashboard", role) && (
+          <EditSessionPlansTile />
+        )}
+        {canShowModule("viewSessionPlan", "dashboard", role) && (
+          <ViewSessionPlanTile />
+        )}
+        {canShowModule("dailyCalendar", "dashboard", role) && (
+          <DailyCalendarTile />
+        )}
       </section>
     </>
   );

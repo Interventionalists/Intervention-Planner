@@ -1,6 +1,9 @@
 import { CardTitle, PageHeading, ProgressChart } from "../components/PageElements";
+import { getStudentsNeedingAttention } from "../components/studentsNeedingAttention";
 
-function ReportsPage() {
+function ReportsPage({ students }) {
+  const studentsNeedingAttention = getStudentsNeedingAttention(students);
+
   return (
     <>
       <PageHeading
@@ -11,8 +14,12 @@ function ReportsPage() {
       <div className="reports-grid">
         <div className="card report-hero">
           <span className="eyebrow">Students needing attention</span>
-          <strong>2</strong>
-          <p>students currently have a subject score below 60%.</p>
+          <strong>{studentsNeedingAttention.length}</strong>
+          <p>
+            {studentsNeedingAttention.length === 1 ? "student" : "students"} currently
+            {` ${studentsNeedingAttention.length === 1 ? "has" : "have"} `}
+            a subject score below 60%.
+          </p>
         </div>
         <div className="card">
           <CardTitle title="Average scores" />
