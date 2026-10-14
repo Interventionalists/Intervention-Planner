@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { apiFetch } from "../api";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -7,7 +8,7 @@ async function requestStudentNotes(userId, studentId, signal) {
     user_id: userId,
     student_id: String(studentId),
   });
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE_URL}/notes-fetchForStudent?${params}`,
     { signal }
   );

@@ -218,8 +218,12 @@ def create_student(
     return response.data[0]
 
 ################################# TEACHER FUNCTIONS ########################################
+#columns safe to return for other users; never includes password_hash or
+#lockout state.
+PUBLIC_USER_COLUMNS = "id, public_id, first_name, last_name, email, role, school"
+
 def fetch_teachers():
-    response = supabase.table("users").select("*").eq("role", "teacher").execute()
+    response = supabase.table("users").select(PUBLIC_USER_COLUMNS).eq("role", "teacher").execute()
     return response.data
 
 
@@ -250,7 +254,7 @@ def fetch_interventionist_students(interventionist_id: str, school_id: int | Non
 
 ################################ ADMIN FUNCTIONS ########################################
 def fetch_admins():
-    response = supabase.table("users").select("*").eq("role", "admin").execute()
+    response = supabase.table("users").select(PUBLIC_USER_COLUMNS).eq("role", "admin").execute()
     return response.data
 
 
@@ -295,8 +299,8 @@ def create_note(student_id, created_by, text):
     }).execute()
     return response.data[0] if response.data else None
 
-def edit_text(note_id, new_text):
-    response = supabase.table("notes").update({"text": new_text}).eq("id", note_id).execute()
+def edit_text(note_id, new_text, user_id):
+    response = supabase.table("notes").update({"text": new_text}).eq("id", note_id).eq("created_by", user_id).execute()
     return response.data
 
 def delete_note(note_id, user_id):

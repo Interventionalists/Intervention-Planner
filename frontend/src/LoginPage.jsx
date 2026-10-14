@@ -53,8 +53,8 @@ function LoginPage({ onSubmit }) {
         return;
       }
 
-      const user = await response.json();
-      onSubmit(user);
+      // { access_token, token_type, user }
+      onSubmit(await response.json());
     } catch (err) {
       setError("Unable to reach the server. Please try again.");
     } finally {

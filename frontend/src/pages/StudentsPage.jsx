@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import StudentsList from "../components/StudentsList";
 import { PageHeading } from "../components/PageElements";
+import { apiFetch } from "../api";
 
 const API_BASE_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:8000"
@@ -69,15 +70,15 @@ function StudentsPage({ query = "", selectedStudent, onSelect, user }) {
 
         const [assignedResponse, unassignedResponse, interventionistsResponse] =
           await Promise.all([
-            fetch(
+            apiFetch(
               `${API_BASE_URL}/students-fetch/${encodeURIComponent(user.public_id)}`,
               { signal: controller.signal }
             ),
-            fetch(
+            apiFetch(
               `${API_BASE_URL}/students-unassigned-fetch/${encodeURIComponent(user.public_id)}`,
               { signal: controller.signal }
             ),
-            fetch(
+            apiFetch(
               `${API_BASE_URL}/interventionists-fetch/${encodeURIComponent(user.public_id)}`,
               { signal: controller.signal }
             ),
@@ -141,7 +142,7 @@ function StudentsPage({ query = "", selectedStudent, onSelect, user }) {
     setAssignmentMessage("");
 
     try {
-      const response = await fetch(
+      const response = await apiFetch(
         `${API_BASE_URL}/students-assign/${encodeURIComponent(student.id)}`,
         {
           method: "PATCH",
