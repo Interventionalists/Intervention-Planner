@@ -529,6 +529,37 @@ nav { display: grid; gap: 6px; }
 .student-card h2 { margin: 0 0 10px; font-size: 22px; }
 .student-card > p { margin: 6px 0; font-size: 13px; }
 
+.attention-student-list {
+  display: grid;
+  gap: 8px;
+}
+
+.attention-student {
+  display: grid;
+  gap: 5px;
+  padding: 10px 0;
+  border: 0;
+  border-top: 1px solid #edf0f4;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.attention-student:hover .attention-student-name {
+  color: var(--primary);
+}
+
+.attention-student-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.attention-student-scores {
+  color: #758095;
+  font-size: 11px;
+}
+
 .student-notes {
   text-align: left;
   margin-top: 20px;

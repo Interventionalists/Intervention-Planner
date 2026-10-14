@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { themePresets } from "./data";
 import { Header, Sidebar } from "./components/AppNavigation";
@@ -29,12 +29,10 @@ function mapStudent(row) {
       [row.first_name, row.last_name].filter(Boolean).join(" ") ||
       "Unnamed student",
     grade: row.grade_level ?? row.grade ?? "—",
-    teacher: row.teacher_name || relatedUserName(row.teacher_user) || "Not assigned",
+    teacher: relatedUserName(row.teacher_user) || "Not assigned",
     interventionTeacher:
-      row.interventionist_name ||
-      relatedUserName(row.interventionist_user) ||
-      "Not assigned",
-    group: row.group_number ?? row.group ?? "—",
+      relatedUserName(row.interventionist_user) || "Not assigned",
+    group: row.group ?? "—",
     avatar: `https://api.dicebear.com/9.x/adventurer/svg?seed=${encodeURIComponent(
       [row.first_name, row.last_name].filter(Boolean).join(" ") || row.id
     )}`,
@@ -158,6 +156,14 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
     return () => controller.abort();
   }, []);
 
+  const filteredStudents = useMemo(
+    () =>
+      studentsData.filter((student) =>
+        student.name.toLowerCase().includes(query.toLowerCase())
+      ),
+    [query, studentsData]
+  );
+
   const selectPage = (id) => {
     setPage(id);
     setMobileOpen(false);
@@ -222,9 +228,11 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
                   student={selectedStudent}
                   students={studentsData}
                   onStudentChange={setSelectedStudent}
+                  onStudentSelect={openStudentProfile}
                   onStudents={() => selectPage("students")}
                   userName={userName}
-                  userId={user?.public_id}
+                   userId={user?.public_id}
+                  role={user?.role}
                 />
               )}
               {page === "student-profile" && (
@@ -232,20 +240,20 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
                   student={selectedStudent}
                   onBack={() => selectPage("students")}
                   userId={user?.public_id}
-                onStudentUpdated={updateSelectedStudent}
+                  role={user?.role}
                 />
               )}
               {page === "students" && (
                 <StudentsPage
-                  students={studentsData}
-                  query={query}
+                  students={filteredStudents}
                   selectedStudent={selectedStudent}
+                  userId={user?.public_id}
+                  role={user?.role}
                   onSelect={openStudentProfile}
-                  user={user}
-            />
+                />
               )}
               {page === "calendar" && <CalendarPage />}
-              {page === "reports" && <ReportsPage />}
+              {page === "reports" && <ReportsPage students={studentsData} />}
               {page === "settings" && (
                 <SettingsPage theme={theme} setTheme={setTheme} />
               )}
