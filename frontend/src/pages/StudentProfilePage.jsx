@@ -15,9 +15,147 @@ import ViewProgressTile from "../studtiles/ViewProgressTile";
 import ViewSessionPlanTile from "../studtiles/ViewSessionPlanTile";
 import ViewSessionTile from "../studtiles/ViewSessionTile";
 import ViewStateTestingTile from "../studtiles/ViewStateTestingTile";
+import { useEffect, useState } from "react";
+import { ArrowLeft, BarChart3, ClipboardList } from "lucide-react";
+import { events } from "../data";
+import { CardTitle, PageHeading, ProgressChart } from "../components/PageElements";
 
-function StudentProfilePage({ student, onBack, userId, role }) {
-  const scores = Object.entries(student.scores);
+const API_BASE_URL = (
+  import.meta.env.VITE_API_URL || "http://localhost:8000"
+).replace(/\/+$/, "");
+import StudentNotes from "../components/StudentNotes";
+
+function StudentProfilePage({ student, onBack, userId, onStudentUpdated }) {
+  const [notes, setNotes] = useState([]);
+  const [notesError, setNotesError] = useState("");
+  const [notesLoading, setNotesLoading] = useState(true);
+  const [groupNumber, setGroupNumber] = useState(
+    student.group_number == null ? "" : String(student.group_number)
+  );
+  const [profileUpdateError, setProfileUpdateError] = useState("");
+  const [profileUpdateMessage, setProfileUpdateMessage] = useState("");
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+  const scores = Object.entries(student.scores ?? {}).filter(([, score]) =>
+    Number.isFinite(Number(score))
+  );
+  const studentName =
+    student.name ||
+    [student.first_name, student.last_name].filter(Boolean).join(" ") ||
+    "Unnamed student";
+  const grade = student.grade ?? student.grade_level;
+  const teacher = student.teacher_name ?? student.teacher;
+  const interventionTeacher =
+    student.intervention_teacher_name ??
+    student.interventionist_name ??
+    student.interventionist;
+
+  useEffect(() => {
+    setGroupNumber(
+      student.group_number == null ? "" : String(student.group_number)
+    );
+    setProfileUpdateError("");
+    setProfileUpdateMessage("");
+  }, [student.id, student.group_number]);
+
+  const updateStudentProfile = async (updates, successMessage) => {
+    setIsUpdatingProfile(true);
+    setProfileUpdateError("");
+    setProfileUpdateMessage("");
+
+    try {
+      if (!userId) {
+        throw new Error("The signed-in user's ID is missing.");
+      }
+
+      const response = await fetch(
+        `${API_BASE_URL}/students-profile/${encodeURIComponent(student.id)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...updates, requester_id: userId }),
+        }
+      );
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.detail || `Profile update failed (${response.status}).`);
+      }
+      if (!result.student) {
+        throw new Error("The profile update response has an unexpected format.");
+      }
+
+      onStudentUpdated(result.student);
+      setProfileUpdateMessage(successMessage);
+    } catch (error) {
+      console.error("Error updating student profile:", error);
+      setProfileUpdateError(error.message || "Could not update this student.");
+    } finally {
+      setIsUpdatingProfile(false);
+    }
+  };
+
+  const saveGroupNumber = (event) => {
+    event.preventDefault();
+    const parsedGroupNumber = groupNumber.trim() ? Number(groupNumber) : null;
+    if (
+      parsedGroupNumber !== null &&
+      (!Number.isInteger(parsedGroupNumber) || parsedGroupNumber < 1)
+    ) {
+      setProfileUpdateError("Enter a whole group number greater than zero.");
+      return;
+    }
+
+    updateStudentProfile(
+      { group_number: parsedGroupNumber },
+      "Group number saved."
+    );
+  };
+
+  const unassignInterventionist = () =>
+    updateStudentProfile(
+      { interventionist: null },
+      "Interventionist unassigned."
+    );
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadNotes() {
+      setNotes([]);
+      setNotesError("");
+      setNotesLoading(true);
+
+      try {
+        if (student.id == null) {
+          throw new Error("This student does not have a database ID.");
+        }
+        const response = await fetch(
+          `${API_BASE_URL}/notes-fetchForStudent/${encodeURIComponent(student.id)}`,
+          { signal: controller.signal }
+        );
+        if (!response.ok) {
+          throw new Error(`Notes request failed (${response.status}).`);
+        }
+
+        const data = await response.json();
+        if (!Array.isArray(data.notes)) {
+          throw new Error("The notes response has an unexpected format.");
+        }
+        setNotes(data.notes);
+      } catch (error) {
+        if (error.name !== "AbortError") {
+          console.error("Error fetching student notes:", error);
+          setNotesError("Could not load this student's notes.");
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setNotesLoading(false);
+        }
+      }
+    }
+
+    loadNotes();
+    return () => controller.abort();
+  }, [student.id]);
 
   return (
     <>
@@ -28,7 +166,7 @@ function StudentProfilePage({ student, onBack, userId, role }) {
         </button>
         <PageHeading
           eyebrow="Student profile"
-          title={student.name}
+          title={studentName}
           subtitle="Student details, grades, and intervention progress."
         />
       </div>
@@ -117,6 +255,15 @@ function StudentProfilePage({ student, onBack, userId, role }) {
               </div>
             }
           />
+          {student.recentScores?.length ? (
+            <ProgressChart values={student.recentScores} />
+          ) : (
+            <p>No progress data available.</p>
+          )}
+        </div>
+
+        <div className="card profile-upcoming-card">
+          <CardTitle title="Upcoming" />
           <div className="event-list">
             {events.map((event) => (
               <div className="event" key={event.id}>

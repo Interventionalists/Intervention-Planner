@@ -174,6 +174,16 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
     selectPage("student-profile");
   };
 
+  const updateSelectedStudent = (record) => {
+    const updatedStudent = mapStudent(record);
+    setSelectedStudent(updatedStudent);
+    setStudentsData((currentStudents) =>
+      currentStudents.map((student) =>
+        student.id === updatedStudent.id ? updatedStudent : student
+      )
+    );
+  };
+
   return (
     <div
       className="app"
