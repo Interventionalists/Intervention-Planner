@@ -265,7 +265,11 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
                 />
               )}
               {page === "users" && user?.role === "admin" && (
-                <UsersPage role={user.role} />
+                <UsersPage
+                  role={user.role}
+                  signedInUser={user}
+                  onUserUpdated={onUserUpdated}
+                />
               )}
               {page === "calendar" && <CalendarPage />}
               {page === "reports" && <ReportsPage students={studentsData} />}

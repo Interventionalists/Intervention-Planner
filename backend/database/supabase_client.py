@@ -12,6 +12,8 @@ supabase: Client = create_client(
 
 ################################## USER FUNCTIONS ########################################
 
+PUBLIC_USER_COLUMNS = "id, public_id, first_name, last_name, email, role, school"
+
 #looks up a single user by email for login verification.
 def fetch_user_by_email(email):
     response = supabase.table("users").select("*").eq("email", email).limit(1).execute()
@@ -48,8 +50,15 @@ def fetch_allUsers():
     response = supabase.table("users").select(PUBLIC_USER_COLUMNS).execute()
     return response.data
 
-#fetches all student data from the database.
-
+def update_user(user_id, updates: dict):
+    response = (
+        supabase.table("users")
+        .update(updates)
+        .eq("id", user_id)
+        .select(PUBLIC_USER_COLUMNS)
+        .execute()
+    )
+    return response.data[0] if response.data else None
 
 ################################## STUDENT FUNCTIONS ########################################
 def _add_student_user_names(students):
@@ -227,8 +236,6 @@ def create_student(
 ################################# TEACHER FUNCTIONS ########################################
 #columns safe to return for other users; never includes password_hash or
 #lockout state.
-PUBLIC_USER_COLUMNS = "id, public_id, first_name, last_name, email, role, school"
-
 def fetch_teachers():
     response = supabase.table("users").select(PUBLIC_USER_COLUMNS).eq("role", "teacher").execute()
     return response.data

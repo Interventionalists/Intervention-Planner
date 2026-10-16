@@ -15,13 +15,22 @@ function displayName(user) {
   );
 }
 
-function UsersPage({ role }) {
+function UsersPage({ role, signedInUser, onUserUpdated }) {
   const [users, setUsers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const [userFilter, setUserFilter] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
+  const [editingUserId, setEditingUserId] = useState(null);
+  const [editDraft, setEditDraft] = useState({
+    first_name: "",
+    last_name: "",
+    email: "",
+  });
+  const [editError, setEditError] = useState("");
+  const [editMessage, setEditMessage] = useState("");
+  const [savingUserId, setSavingUserId] = useState(null);
 
   useEffect(() => {
     if (role !== "admin") {
@@ -89,6 +98,67 @@ function UsersPage({ role }) {
     );
   });
 
+  const startEditing = (user) => {
+    setEditingUserId(user.id);
+    setEditDraft({
+      first_name: user.first_name || "",
+      last_name: user.last_name || "",
+      email: user.email || "",
+    });
+    setEditError("");
+    setEditMessage("");
+  };
+
+  const cancelEditing = () => {
+    setEditingUserId(null);
+    setEditError("");
+  };
+
+  const saveUser = async (event, user) => {
+    event.preventDefault();
+    setSavingUserId(user.id);
+    setEditError("");
+    setEditMessage("");
+
+    try {
+      const response = await apiFetch(
+        `${API_BASE_URL}/admins-users/${encodeURIComponent(user.id)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(editDraft),
+        }
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(
+          typeof data.detail === "string"
+            ? data.detail
+            : `User update failed (${response.status}).`
+        );
+      }
+      if (!data.user || data.user.id !== user.id) {
+        throw new Error("The user update response has an unexpected format.");
+      }
+
+      setUsers((currentUsers) =>
+        currentUsers.map((currentUser) =>
+          currentUser.id === user.id ? data.user : currentUser
+        )
+      );
+      if (data.user.public_id === signedInUser?.public_id) {
+        onUserUpdated({ ...signedInUser, ...data.user });
+      }
+      setEditingUserId(null);
+      setEditMessage(`${displayName(data.user)} was updated.`);
+    } catch (saveError) {
+      console.error("Error updating user:", saveError);
+      setEditError(saveError.message || "Could not update this user.");
+    } finally {
+      setSavingUserId(null);
+    }
+  };
+
   return (
     <>
       <PageHeading
@@ -152,22 +222,109 @@ function UsersPage({ role }) {
           </div>
           <section className="student-list-section">
             <h2>Users</h2>
+            {editMessage && <p className="assignment-success" role="status">{editMessage}</p>}
             {filteredUsers.length ? (
               <div className="user-list">
-                {filteredUsers.map((user) => (
-                  <article className="card user-row" key={user.public_id}>
-                    <div>
-                      <strong>{displayName(user)}</strong>
-                      <span>{user.email || "No email address"}</span>
-                    </div>
-                    <span className="user-role">{user.role || "No role"}</span>
-                    <span className="user-school">
-                      {user.school
-                        ? `School ID ${user.school}`
-                        : "No school assigned"}
-                    </span>
-                  </article>
-                ))}
+                {filteredUsers.map((user) => {
+                  const isEditing = editingUserId === user.id;
+                  const isSaving = savingUserId === user.id;
+                  return (
+                    <article className="card user-row" key={user.public_id}>
+                      {isEditing ? (
+                        <form
+                          className="user-edit-form"
+                          onSubmit={(event) => saveUser(event, user)}
+                        >
+                          <label>
+                            First name
+                            <input
+                              required
+                              maxLength={100}
+                              value={editDraft.first_name}
+                              onChange={(event) =>
+                                setEditDraft((current) => ({
+                                  ...current,
+                                  first_name: event.target.value,
+                                }))
+                              }
+                            />
+                          </label>
+                          <label>
+                            Last name
+                            <input
+                              required
+                              maxLength={100}
+                              value={editDraft.last_name}
+                              onChange={(event) =>
+                                setEditDraft((current) => ({
+                                  ...current,
+                                  last_name: event.target.value,
+                                }))
+                              }
+                            />
+                          </label>
+                          <label className="user-edit-email">
+                            Email
+                            <input
+                              type="email"
+                              required
+                              maxLength={254}
+                              value={editDraft.email}
+                              onChange={(event) =>
+                                setEditDraft((current) => ({
+                                  ...current,
+                                  email: event.target.value,
+                                }))
+                              }
+                            />
+                          </label>
+                          <div className="user-edit-actions">
+                            <button
+                              className="ghost-button"
+                              type="submit"
+                              disabled={isSaving}
+                            >
+                              {isSaving ? "Saving..." : "Save"}
+                            </button>
+                            <button
+                              className="ghost-button"
+                              type="button"
+                              onClick={cancelEditing}
+                              disabled={isSaving}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                          {editError && (
+                            <p className="assignment-error" role="alert">
+                              {editError}
+                            </p>
+                          )}
+                        </form>
+                      ) : (
+                        <>
+                          <div>
+                            <strong>{displayName(user)}</strong>
+                            <span>{user.email || "No email address"}</span>
+                          </div>
+                          <span className="user-role">{user.role || "No role"}</span>
+                          <span className="user-school">
+                            {user.school
+                              ? `School ID ${user.school}`
+                              : "No school assigned"}
+                          </span>
+                          <button
+                            className="ghost-button user-edit-button"
+                            type="button"
+                            onClick={() => startEditing(user)}
+                          >
+                            Edit
+                          </button>
+                        </>
+                      )}
+                    </article>
+                  );
+                })}
               </div>
             ) : (
               <div className="card">
