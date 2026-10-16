@@ -8,12 +8,14 @@ import {
   Search,
   Settings,
   Users,
+  UserRoundCog,
   X,
 } from "lucide-react";
 
 const navItems = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "students", label: "Students", icon: Users },
+  { id: "users", label: "Users", icon: UserRoundCog, adminOnly: true },
   { id: "calendar", label: "Calendar", icon: CalendarDays },
   { id: "reports", label: "Reports", icon: BarChart3 },
   { id: "settings", label: "Settings", icon: Settings },
@@ -26,6 +28,7 @@ export function Sidebar({
   closeMobile,
   onLogout,
   userName = "User",
+  role,
 }) {
   return (
     <>
@@ -40,16 +43,18 @@ export function Sidebar({
         </div>
 
         <nav>
-          {navItems.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              className={`nav-item ${page === id ? "active" : ""}`}
-              onClick={() => onPageChange(id)}
-            >
-              <Icon size={19} strokeWidth={1.8} />
-              <span>{label}</span>
-            </button>
-          ))}
+          {navItems
+            .filter(({ adminOnly }) => !adminOnly || role === "admin")
+            .map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                className={`nav-item ${page === id ? "active" : ""}`}
+                onClick={() => onPageChange(id)}
+              >
+                <Icon size={19} strokeWidth={1.8} />
+                <span>{label}</span>
+              </button>
+            ))}
         </nav>
 
         <div className="sidebar-bottom">
@@ -76,6 +81,8 @@ export function Header({
   userName = "User",
   userInitials = "U",
   onAccountClick,
+  searchPlaceholder = "Search students...",
+  showSearch = true,
 }) {
   return (
     <header className="topbar">
@@ -83,15 +90,17 @@ export function Header({
         <Menu size={25} />
       </button>
 
-      <div className="search">
-        <Search size={17} />
-        <input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search students..."
-          aria-label="Search students"
-        />
-      </div>
+      {showSearch && (
+        <div className="search">
+          <Search size={17} />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={searchPlaceholder}
+            aria-label={searchPlaceholder.replace("...", "")}
+          />
+        </div>
+      )}
 
       <div className="profile">
         <span>Hello, {userName}</span>

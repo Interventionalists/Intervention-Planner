@@ -45,7 +45,7 @@ def record_login_attempt(user_id: int, success: bool, max_attempts: int, lock_mi
     return response.data[0] if response.data else None
 
 def fetch_allUsers():
-    response = supabase.table("users").select("*").execute()
+    response = supabase.table("users").select(PUBLIC_USER_COLUMNS).execute()
     return response.data
 
 #fetches all student data from the database.

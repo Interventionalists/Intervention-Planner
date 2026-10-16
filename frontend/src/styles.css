@@ -780,6 +780,25 @@ nav { display: grid; gap: 6px; }
 
 .student-list-section { margin-bottom: 28px; }
 .student-list-section > h2 { margin: 0 0 12px; font-size: 18px; }
+.user-list { display: grid; gap: 10px; }
+.user-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(100px, auto) minmax(150px, auto);
+  align-items: center;
+  gap: 14px;
+}
+.user-row > div { display: grid; gap: 4px; }
+.user-row > div span,
+.user-school { color: #758095; font-size: 12px; }
+.user-role {
+  width: fit-content;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #f2f4f7;
+  color: #475467;
+  font-size: 12px;
+  text-transform: capitalize;
+}
 .unassigned-student-list { display: grid; gap: 10px; }
 .unassigned-student-row {
   display: flex;
@@ -922,6 +941,8 @@ nav { display: grid; gap: 6px; }
   gap: 10px;
   margin: 16px 0;
 }
+
+.users-filter-toolbar { align-items: flex-end; }
 
 .account-notes-toolbar input,
 .account-notes-toolbar select,
@@ -1155,6 +1176,8 @@ nav { display: grid; gap: 6px; }
 
 @media (max-width: 760px) {
   .unassigned-student-row { align-items: stretch; flex-direction: column; }
+  .user-row { grid-template-columns: 1fr auto; }
+  .user-school { grid-column: 1 / -1; }
   .student-assignment-controls { align-items: stretch; flex-direction: column; }
   .student-assignment-controls select { width: 100%; }
   .student-filter-field { flex: 1 1 140px; }
