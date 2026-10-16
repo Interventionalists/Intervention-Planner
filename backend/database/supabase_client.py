@@ -116,8 +116,11 @@ def _add_student_grades(students):
     ]
 
 
-def fetch_students():
-    response = supabase.table("students").select("*").execute()
+def fetch_students(school_id: int | None = None):
+    query = supabase.table("students").select("*")
+    if school_id is not None:
+        query = query.eq("school", school_id)
+    response = query.execute()
     return _add_student_grades(_add_student_user_names(response.data))
 
 def fetch_student_name(student_id):
