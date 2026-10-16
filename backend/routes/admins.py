@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from database.supabase_client import fetch_admins
+from database.supabase_client import fetch_admins, fetch_allUsers
 
 router = APIRouter()
 
@@ -12,8 +12,10 @@ def get_admins():
         raise HTTPException(status_code=500, detail=str(e))
     return {"admins": admins}
 
-#insert a new admin into the database
-@router.post("/admins-insert")
-def insert_admin():
-    # TODO: Add logic to add admin
-    return {0}
+@router.get("/admins-fetch-all-users")
+def get_all_users():
+    try:
+        users = fetch_allUsers()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"users": users}
