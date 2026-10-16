@@ -20,6 +20,8 @@ import ViewStateTestingTile from "../studtiles/ViewStateTestingTile";
 const API_BASE_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:8000"
 ).replace(/\/+$/, "");
+import StudentNotes from "../components/StudentNotes";
+import { apiFetch } from "../api";
 
 function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role }) {
   const [notes, setNotes] = useState([]);
@@ -63,7 +65,7 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
         throw new Error("The signed-in user's ID is missing.");
       }
 
-      const response = await fetch(
+      const response = await apiFetch(
         `${API_BASE_URL}/students-profile/${encodeURIComponent(student.id)}`,
         {
           method: "PATCH",
@@ -124,7 +126,7 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
         if (student.id == null) {
           throw new Error("This student does not have a database ID.");
         }
-        const response = await fetch(
+        const response = await apiFetch(
           `${API_BASE_URL}/notes-fetchForStudent/${encodeURIComponent(student.id)}`,
           { signal: controller.signal }
         );

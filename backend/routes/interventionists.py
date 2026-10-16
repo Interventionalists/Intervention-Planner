@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from auth.security import get_current_user, require_self_or_admin
 from database.supabase_client import (
     fetch_interventionists,
     fetch_interventionist_students,
@@ -19,7 +20,8 @@ def get_interventionists():
     return {"interventionists": interventionists}
 
 @router.get("/interventionists-fetch/{requester_id}")
-def get_school_interventionists(requester_id: str):
+def get_school_interventionists(requester_id: str, user: dict = Depends(get_current_user)):
+    require_self_or_admin(user, requester_id)
     try:
         school_id = fetch_user_school_by_public_id(requester_id)
         if school_id is None:
@@ -35,7 +37,8 @@ def get_school_interventionists(requester_id: str):
     return {"interventionists": interventionists}
 
 @router.get("/interventionists-fetchStudents/{interventionist_id}")
-def get_interventionist_students(interventionist_id: str):
+def get_interventionist_students(interventionist_id: str, user: dict = Depends(get_current_user)):
+    require_self_or_admin(user, interventionist_id)
     try:
         school_id = fetch_user_school_by_public_id(interventionist_id)
         if school_id is None:

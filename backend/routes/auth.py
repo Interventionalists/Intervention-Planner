@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from auth.security import create_access_token
 from database.supabase_client import (
     fetch_user_by_email,
     hash_password,
@@ -41,6 +42,12 @@ class UserOut(BaseModel):
     last_name: str | None = None
     role: str | None = None
     school: int | None = None  # school_id from the schools table
+
+
+class LoginResponse(BaseModel):
+    access_token: str
+    token_type: str
+    user: UserOut
 
 
 def is_locked(locked_until) -> bool:
@@ -85,15 +92,18 @@ def authenticate(email: str, password: str):
     return user
 
 
-#verifies email/password against the users table and returns the allowlisted
-#user fields on success. Plaintext password arrives over HTTPS and is only
-#ever compared server-side, never hashed or stored client-side.
-@router.post("/login", response_model=UserOut)
+#verifies email/password against the users table and returns a session token
+#plus the allowlisted user fields on success. Plaintext password arrives over
+#HTTPS and is only ever compared server-side, never hashed or stored client-side.
+@router.post("/login", response_model=LoginResponse)
 def login(payload: LoginRequest):
-    return authenticate(payload.email, payload.password)
+    user = authenticate(payload.email, payload.password)
+    token = create_access_token(user)
+    #response_model filters user down to UserOut, so password_hash never leaves
+    return {"access_token": token, "token_type": "bearer", "user": user}
 
 
-#changes a user's password. Since there are no session tokens yet, the
+#changes a user's password. Public so it works from the login screen, so the
 #current password is re-verified (with lockout) before the new hash is written.
 @router.post("/change-password")
 def change_password(payload: ChangePasswordRequest):

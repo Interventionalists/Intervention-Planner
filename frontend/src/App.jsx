@@ -10,9 +10,15 @@ import SettingsPage from "./pages/SettingsPage";
 import StudentProfilePage from "./pages/StudentProfilePage";
 import StudentsPage from "./pages/StudentsPage";
 import LoginPage from "./LoginPage";
+import {
+  AUTH_SESSION_KEY,
+  AUTH_TOKEN_KEY,
+  AUTH_USER_KEY,
+  apiFetch,
+  clearAuthSession,
+  getAuthToken,
+} from "./api";
 
-const AUTH_SESSION_KEY = "interventioner-demo-authenticated";
-const AUTH_USER_KEY = "interventioner-auth-user";
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 function relatedUserName(user) {
@@ -43,14 +49,15 @@ function mapStudent(row) {
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(
-    () => sessionStorage.getItem(AUTH_SESSION_KEY) === "true"
+    () => sessionStorage.getItem(AUTH_SESSION_KEY) === "true" && Boolean(getAuthToken())
   );
   const [currentUser, setCurrentUser] = useState(() => {
     const savedUser = sessionStorage.getItem(AUTH_USER_KEY);
     return savedUser ? JSON.parse(savedUser) : null;
   });
 
-  const logIn = (user) => {
+  const logIn = ({ access_token, user }) => {
+    sessionStorage.setItem(AUTH_TOKEN_KEY, access_token);
     sessionStorage.setItem(AUTH_SESSION_KEY, "true");
     sessionStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
     setCurrentUser(user);
@@ -63,8 +70,7 @@ function App() {
   };
 
   const logOut = () => {
-    sessionStorage.removeItem(AUTH_SESSION_KEY);
-    sessionStorage.removeItem(AUTH_USER_KEY);
+    clearAuthSession();
     setCurrentUser(null);
     setIsAuthenticated(false);
   };
@@ -129,7 +135,7 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
   useEffect(() => {
     const controller = new AbortController();
 
-    fetch(`${API_BASE_URL}/students-fetch`, { signal: controller.signal })
+    apiFetch(`${API_BASE_URL}/students-fetch`, { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) {
           throw new Error("Unable to load students from the database.");

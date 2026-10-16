@@ -10,6 +10,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { ResetPasswordForm } from "./LoginPage";
+import { apiFetch } from "./api";
 
 const API_BASE_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:8000"
@@ -17,7 +18,7 @@ const API_BASE_URL = (
 
 async function fetchUserNotes(publicId) {
     try {
-        const response = await fetch(`${API_BASE_URL}/notes-userFetch/${publicId}`);
+        const response = await apiFetch(`${API_BASE_URL}/notes-userFetch/${publicId}`);
         if (!response.ok) {
             throw new Error(`Notes request failed (${response.status}).`);
         }
@@ -33,7 +34,7 @@ async function fetchUserNotes(publicId) {
 }
 
 async function fetchStudentNames() {
-  const response = await fetch(`${API_BASE_URL}/students-fetch`);
+  const response = await apiFetch(`${API_BASE_URL}/students-fetch`);
   if (!response.ok) {
     throw new Error(`Students request failed (${response.status}).`);
   }
@@ -57,7 +58,7 @@ async function fetchStudentNames() {
 
 async function loadSchools(currentSchool, setSchools, setSchoolId, setSchoolLoadError) {
   try {
-    const response = await fetch(`${API_BASE_URL}/schools-fetch`);
+    const response = await apiFetch(`${API_BASE_URL}/schools-fetch`);
     if (!response.ok) {
       throw new Error(`School request failed (${response.status}).`);
     }
@@ -187,7 +188,7 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
         user_id: String(user.id),
         new_school_id: selectedSchool.id,
       });
-      const response = await fetch(`${API_BASE_URL}/schools-update?${params}`, {
+      const response = await apiFetch(`${API_BASE_URL}/schools-update?${params}`, {
         method: "PUT",
       });
       if (!response.ok) {
@@ -259,7 +260,7 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
     setNoteActionError("");
     try {
       const response = isAddingNote
-        ? await fetch(`${API_BASE_URL}/notes-create`, {
+        ? await apiFetch(`${API_BASE_URL}/notes-create`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -269,7 +270,7 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
               text,
             }),
           })
-        : await fetch(
+        : await apiFetch(
             `${API_BASE_URL}/notes-editText?${new URLSearchParams({
               note_id: String(editingNoteId),
               new_text: text,
@@ -309,7 +310,7 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
         note_id: String(note.id),
         user_id: user.public_id,
       });
-      const response = await fetch(`${API_BASE_URL}/notes-delete?${params}`, {
+      const response = await apiFetch(`${API_BASE_URL}/notes-delete?${params}`, {
         method: "DELETE",
       });
       if (!response.ok) {
