@@ -1,9 +1,9 @@
 import re
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from database.supabase_client import fetch_admins, fetch_allUsers, update_user
+from database.supabase_client import fetch_admins, fetch_users_page, update_user
 
 router = APIRouter()
 
@@ -35,12 +35,17 @@ def get_admins():
     return {"admins": admins}
 
 @router.get("/admins-fetch-all-users")
-def get_all_users():
+def get_all_users(
+    page: int = Query(default=1, ge=1),
+    search: str = Query(default="", max_length=100),
+    role: Literal["teacher", "interventionist", "admin"] | None = None,
+):
     try:
-        users = fetch_allUsers()
+        result = fetch_users_page(page, search.strip(), role)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    return {"users": users}
+    total_pages = (result["total"] + result["page_size"] - 1) // result["page_size"]
+    return {**result, "page": page, "total_pages": total_pages}
 
 
 @router.patch("/admins-users/{user_id}")

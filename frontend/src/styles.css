@@ -844,6 +844,27 @@ nav { display: grid; gap: 6px; }
   gap: 10px;
 }
 .user-edit-form .assignment-error { grid-column: 1 / -1; }
+.users-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  margin: 20px 0;
+}
+.users-pagination .ghost-button {
+  min-width: 38px;
+  min-height: 38px;
+}
+.users-pagination .ghost-button.active {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: white;
+}
+.users-pagination .ghost-button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
 .unassigned-student-list { display: grid; gap: 10px; }
 .unassigned-student-row {
   display: flex;

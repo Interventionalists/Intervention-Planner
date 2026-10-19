@@ -46,9 +46,37 @@ def record_login_attempt(user_id: int, success: bool, max_attempts: int, lock_mi
     }).execute()
     return response.data[0] if response.data else None
 
-def fetch_allUsers():
-    response = supabase.table("users").select(PUBLIC_USER_COLUMNS).execute()
-    return response.data
+def fetch_users_page(page: int, search: str = "", role: str | None = None):
+    page_size = 25
+    query = (
+        supabase.table("users")
+        .select(PUBLIC_USER_COLUMNS, count="exact")
+        .order("id")
+    )
+    if role:
+        query = query.eq("role", role)
+    if search:
+        escaped_search = (
+            search.replace("\\", "\\\\")
+            .replace('"', '\\"')
+        )
+        search_filters = [
+            f'first_name.ilike."%{escaped_search}%"',
+            f'last_name.ilike."%{escaped_search}%"',
+            f'email.ilike."%{escaped_search}%"',
+            f'role.ilike."%{escaped_search}%"',
+        ]
+        if search.isdigit():
+            search_filters.append(f"school.eq.{int(search)}")
+        query = query.or_(",".join(search_filters))
+
+    offset = (page - 1) * page_size
+    response = query.range(offset, offset + page_size - 1).execute()
+    return {
+        "users": response.data,
+        "total": response.count or 0,
+        "page_size": page_size,
+    }
 
 def update_user(user_id, updates: dict):
     response = (

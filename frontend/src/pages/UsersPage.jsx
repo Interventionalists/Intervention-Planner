@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { PageHeading } from "../components/PageElements";
 import { apiFetch } from "../api";
 
 const API_BASE_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:8000"
 ).replace(/\/+$/, "");
+const PAGE_SIZE = 25;
+const USER_ROLES = ["teacher", "interventionist", "admin"];
 
 function displayName(user) {
   return (
@@ -25,6 +27,10 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
   const [reloadKey, setReloadKey] = useState(0);
   const [userFilter, setUserFilter] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
+  const [debouncedUserFilter, setDebouncedUserFilter] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
   const [editingUserId, setEditingUserId] = useState(null);
   const [editDraft, setEditDraft] = useState({
     first_name: "",
@@ -35,10 +41,28 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
   const [editError, setEditError] = useState("");
   const [editMessage, setEditMessage] = useState("");
   const [savingUserId, setSavingUserId] = useState(null);
+  const firstVisiblePage = Math.max(
+    1,
+    Math.min(currentPage - 3, totalPages - 6)
+  );
+  const visiblePageNumbers = Array.from(
+    { length: Math.min(totalPages, 7) },
+    (_, index) => firstVisiblePage + index
+  );
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedUserFilter(userFilter.trim());
+    }, 250);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [userFilter]);
 
   useEffect(() => {
     if (role !== "admin") {
       setUsers([]);
+      setTotalUsers(0);
+      setTotalPages(0);
       setError("Admin access is required to view users.");
       setIsLoading(false);
       return undefined;
@@ -51,8 +75,15 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
       setError("");
 
       try {
+        const params = new URLSearchParams({
+          page: String(currentPage),
+          search: debouncedUserFilter,
+        });
+        if (roleFilter !== "all") {
+          params.set("role", roleFilter);
+        }
         const response = await apiFetch(
-          `${API_BASE_URL}/admins-fetch-all-users`,
+          `${API_BASE_URL}/admins-fetch-all-users?${params}`,
           { signal: controller.signal }
         );
         if (!response.ok) {
@@ -60,10 +91,19 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
         }
 
         const data = await response.json();
-        if (!Array.isArray(data.users)) {
+        if (
+          !Array.isArray(data.users) ||
+          !Number.isInteger(data.total) ||
+          !Number.isInteger(data.total_pages)
+        ) {
           throw new Error("The users response has an unexpected format.");
         }
         setUsers(data.users);
+        setTotalUsers(data.total);
+        setTotalPages(data.total_pages);
+        if (data.total_pages > 0 && currentPage > data.total_pages) {
+          setCurrentPage(data.total_pages);
+        }
       } catch (loadError) {
         if (loadError.name !== "AbortError") {
           console.error("Error fetching users:", loadError);
@@ -78,7 +118,7 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
 
     loadUsers();
     return () => controller.abort();
-  }, [reloadKey, role]);
+  }, [currentPage, debouncedUserFilter, reloadKey, role, roleFilter]);
 
   useEffect(() => {
     if (role !== "admin") {
@@ -145,28 +185,6 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
     return () => controller.abort();
   }, [role]);
 
-  const roles = useMemo(
-    () => [...new Set(users.map((user) => user.role).filter(Boolean))].sort(),
-    [users]
-  );
-  const normalizedQuery = userFilter.trim().toLowerCase();
-  const filteredUsers = users.filter((user) => {
-    const searchText = [
-      displayName(user),
-      user.email,
-      user.role,
-      user.school,
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase();
-
-    return (
-      searchText.includes(normalizedQuery) &&
-      (roleFilter === "all" || user.role === roleFilter)
-    );
-  });
-
   const startEditing = (user) => {
     setEditingUserId(user.id);
     setEditDraft({
@@ -232,6 +250,7 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
       }
       setEditingUserId(null);
       setEditMessage(`${displayName(data.user)} was updated.`);
+      setReloadKey((key) => key + 1);
     } catch (saveError) {
       console.error("Error updating user:", saveError);
       setEditError(saveError.message || "Could not update this user.");
@@ -269,16 +288,22 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
               aria-label="Filter users"
               placeholder="Filter users by name, email, role, or school"
               value={userFilter}
-              onChange={(event) => setUserFilter(event.target.value)}
+              onChange={(event) => {
+                setUserFilter(event.target.value);
+                setCurrentPage(1);
+              }}
             />
             <label className="student-filter-field">
               <span>Role</span>
               <select
                 value={roleFilter}
-                onChange={(event) => setRoleFilter(event.target.value)}
+                onChange={(event) => {
+                  setRoleFilter(event.target.value);
+                  setCurrentPage(1);
+                }}
               >
                 <option value="all">All roles</option>
-                {roles.map((userRole) => (
+                {USER_ROLES.map((userRole) => (
                   <option key={userRole} value={userRole}>
                     {userRole}
                   </option>
@@ -286,7 +311,9 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
               </select>
             </label>
             <span className="student-filter-count" aria-live="polite">
-              Showing {filteredUsers.length} of {users.length} users
+              Showing {users.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0}
+              {"–"}
+              {Math.min(currentPage * PAGE_SIZE, totalUsers)} of {totalUsers} users
             </span>
             {(userFilter || roleFilter !== "all") && (
               <button
@@ -295,6 +322,7 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
                 onClick={() => {
                   setUserFilter("");
                   setRoleFilter("all");
+                  setCurrentPage(1);
                 }}
               >
                 Clear filters
@@ -304,9 +332,9 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
           <section className="student-list-section">
             <h2>Users</h2>
             {editMessage && <p className="assignment-success" role="status">{editMessage}</p>}
-            {filteredUsers.length ? (
+            {users.length ? (
               <div className="user-list">
-                {filteredUsers.map((user) => {
+                {users.map((user) => {
                   const isEditing = editingUserId === user.id;
                   const isSaving = savingUserId === user.id;
                   return (
@@ -458,13 +486,45 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
             ) : (
               <div className="card">
                 <p>
-                  {users.length
-                    ? "No users match your search and filters."
-                    : "There are no users to display."}
+                  {totalUsers
+                    ? "No users are available on this page."
+                    : "No users match your search and filters."}
                 </p>
               </div>
             )}
           </section>
+          {totalPages > 1 && (
+            <nav className="users-pagination" aria-label="Users pages">
+              <button
+                className="ghost-button"
+                type="button"
+                disabled={currentPage === 1 || isLoading}
+                onClick={() => setCurrentPage((page) => page - 1)}
+              >
+                Previous
+              </button>
+              {visiblePageNumbers.map((page) => (
+                  <button
+                    className={`ghost-button${page === currentPage ? " active" : ""}`}
+                    type="button"
+                    key={page}
+                    aria-current={page === currentPage ? "page" : undefined}
+                    disabled={isLoading}
+                    onClick={() => setCurrentPage(page)}
+                  >
+                    {page}
+                  </button>
+              ))}
+              <button
+                className="ghost-button"
+                type="button"
+                disabled={currentPage === totalPages || isLoading}
+                onClick={() => setCurrentPage((page) => page + 1)}
+              >
+                Next
+              </button>
+            </nav>
+          )}
         </>
       )}
     </>

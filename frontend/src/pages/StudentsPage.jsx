@@ -59,12 +59,52 @@ async function requestError(response, label) {
   return error;
 }
 
+function waitForRetry(delay, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException("The request was aborted.", "AbortError"));
+      return;
+    }
+
+    const onAbort = () => {
+      window.clearTimeout(timeoutId);
+      reject(new DOMException("The request was aborted.", "AbortError"));
+    };
+    const timeoutId = window.setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, delay);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+async function fetchWithRetry(url, options, onRetry) {
+  const maxRetries = 3;
+
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      const response = await apiFetch(url, options);
+      if (response.status < 500 || attempt === maxRetries) {
+        return response;
+      }
+    } catch (error) {
+      if (error.name === "AbortError" || attempt === maxRetries) {
+        throw error;
+      }
+    }
+
+    onRetry();
+    await waitForRetry(1000 * 2 ** attempt, options.signal);
+  }
+}
+
 function StudentsPage({ query = "", selectedStudent, onSelect, userId }) {
   const [students, setStudents] = useState([]);
   const [unassignedStudents, setUnassignedStudents] = useState([]);
   const [interventionists, setInterventionists] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [retryCount, setRetryCount] = useState(0);
   const [assignmentIds, setAssignmentIds] = useState({});
   const [assignmentErrors, setAssignmentErrors] = useState({});
   const [assignmentMessage, setAssignmentMessage] = useState("");
@@ -79,6 +119,7 @@ function StudentsPage({ query = "", selectedStudent, onSelect, userId }) {
     async function loadStudents() {
       setIsLoading(true);
       setError("");
+      setRetryCount(0);
 
       try {
         if (!userId) {
@@ -87,17 +128,20 @@ function StudentsPage({ query = "", selectedStudent, onSelect, userId }) {
 
         const [assignedResponse, unassignedResponse, interventionistsResponse] =
           await Promise.all([
-            apiFetch(
+            fetchWithRetry(
               `${API_BASE_URL}/students-fetch/${encodeURIComponent(userId)}`,
-              { signal: controller.signal }
+              { signal: controller.signal },
+              () => setRetryCount((count) => count + 1)
             ),
-            apiFetch(
+            fetchWithRetry(
               `${API_BASE_URL}/students-unassigned-fetch/${encodeURIComponent(userId)}`,
-              { signal: controller.signal }
+              { signal: controller.signal },
+              () => setRetryCount((count) => count + 1)
             ),
-            apiFetch(
+            fetchWithRetry(
               `${API_BASE_URL}/interventionists-fetch/${encodeURIComponent(userId)}`,
-              { signal: controller.signal }
+              { signal: controller.signal },
+              () => setRetryCount((count) => count + 1)
             ),
           ]);
         if (!assignedResponse.ok) {
@@ -230,7 +274,7 @@ function StudentsPage({ query = "", selectedStudent, onSelect, userId }) {
         subtitle="Students assigned to you and students available to assign."
       />
       {isLoading ? (
-        <div className="card" role="status">Loading students...</div>
+        <div className="card" role="status">Loading...</div>
       ) : error ? (
         <div className="card" role="alert">
           <p>{error}</p>
