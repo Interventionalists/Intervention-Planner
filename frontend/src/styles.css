@@ -49,13 +49,24 @@ button { cursor: pointer; }
 }
 
 .login-brand-mark {
-  width: 36px;
-  height: 36px;
+  width: 6rem;
+  height: auto;
   display: grid;
   place-items: center;
+  overflow: hidden;
+  padding: 2px;
   border-radius: 8px;
   background: #079bd8;
   font-weight: 700;
+}
+
+.login-brand-mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+  background: white;
+  object-fit: contain;
 }
 
 .login-brand-copy {
