@@ -810,7 +810,11 @@ nav { display: grid; gap: 6px; }
   font-size: 12px;
   text-transform: capitalize;
 }
-.user-edit-button { justify-self: end; }
+.user-row > .user-row-actions {
+  display: flex;
+  justify-self: end;
+  gap: 8px;
+}
 .user-edit-actions button:disabled { opacity: .55; cursor: not-allowed; }
 .user-edit-form {
   grid-column: 1 / -1;
