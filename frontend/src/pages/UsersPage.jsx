@@ -15,6 +15,12 @@ function displayName(user) {
   );
 }
 
+//formats a Date as the local "YYYY-MM-DDTHH:mm" string a datetime-local input expects
+function toDateTimeLocal(date) {
+  const offsetMs = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+}
+
 function UsersPage({ role, signedInUser, onUserUpdated }) {
   const [users, setUsers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -31,6 +37,9 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
   const [editError, setEditError] = useState("");
   const [editMessage, setEditMessage] = useState("");
   const [savingUserId, setSavingUserId] = useState(null);
+  const [lockingUserId, setLockingUserId] = useState(null);
+  const [lockUntil, setLockUntil] = useState("");
+  const [lockError, setLockError] = useState("");
 
   useEffect(() => {
     if (role !== "admin") {
@@ -99,6 +108,7 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
   });
 
   const startEditing = (user) => {
+    setLockingUserId(null);
     setEditingUserId(user.id);
     setEditDraft({
       first_name: user.first_name || "",
@@ -158,6 +168,79 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
       setSavingUserId(null);
     }
   };
+
+  const startLocking = (user) => {
+    setEditingUserId(null);
+    setLockingUserId(user.id);
+    setLockUntil(toDateTimeLocal(new Date(Date.now() + 60 * 60 * 1000)));
+    setLockError("");
+    setEditMessage("");
+  };
+
+  const cancelLocking = () => {
+    setLockingUserId(null);
+    setLockError("");
+  };
+
+  //sends a new locked_until timestamp; a time in the past (e.g. now) unlocks the account
+  const updateUserLock = async (user, lockedUntil, successMessage) => {
+    setSavingUserId(user.id);
+    setLockError("");
+    setEditMessage("");
+
+    try {
+      const params = new URLSearchParams({ locked_until: lockedUntil });
+      const response = await apiFetch(
+        `${API_BASE_URL}/admins-users-lock/${encodeURIComponent(user.id)}?${params}`,
+        { method: "PATCH" }
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(
+          typeof data.detail === "string"
+            ? data.detail
+            : `User lock update failed (${response.status}).`
+        );
+      }
+      if (!data.user || data.user.id !== user.id) {
+        throw new Error("The user lock response has an unexpected format.");
+      }
+
+      setUsers((currentUsers) =>
+        currentUsers.map((currentUser) =>
+          currentUser.id === user.id ? data.user : currentUser
+        )
+      );
+      setLockingUserId(null);
+      setEditMessage(successMessage);
+    } catch (lockUpdateError) {
+      console.error("Error updating user lock:", lockUpdateError);
+      setLockError(lockUpdateError.message || "Could not update this user's lock.");
+    } finally {
+      setSavingUserId(null);
+    }
+  };
+
+  const lockUser = (event, user) => {
+    event.preventDefault();
+    const until = new Date(lockUntil);
+    if (Number.isNaN(until.getTime()) || until <= new Date()) {
+      setLockError("Choose a date and time in the future.");
+      return;
+    }
+    updateUserLock(
+      user,
+      until.toISOString(),
+      `${displayName(user)} is locked until ${until.toLocaleString()}.`
+    );
+  };
+
+  const unlockUser = (user) =>
+    updateUserLock(
+      user,
+      new Date().toISOString(),
+      `${displayName(user)} was unlocked.`
+    );
 
   return (
     <>
@@ -227,7 +310,9 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
               <div className="user-list">
                 {filteredUsers.map((user) => {
                   const isEditing = editingUserId === user.id;
+                  const isLocking = lockingUserId === user.id;
                   const isSaving = savingUserId === user.id;
+                  const isSelf = user.public_id === signedInUser?.public_id;
                   return (
                     <article className="card user-row" key={user.public_id}>
                       {isEditing ? (
@@ -301,6 +386,52 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
                             </p>
                           )}
                         </form>
+                      ) : isLocking ? (
+                        <form
+                          className="user-edit-form"
+                          onSubmit={(event) => lockUser(event, user)}
+                        >
+                          <label>
+                            Lock {displayName(user)} until
+                            <input
+                              type="datetime-local"
+                              required
+                              min={toDateTimeLocal(new Date())}
+                              value={lockUntil}
+                              onChange={(event) => setLockUntil(event.target.value)}
+                            />
+                          </label>
+                          <div className="user-edit-actions">
+                            <button
+                              className="ghost-button"
+                              type="submit"
+                              disabled={isSaving}
+                            >
+                              {isSaving ? "Saving..." : "Lock account"}
+                            </button>
+                            <button
+                              className="ghost-button"
+                              type="button"
+                              onClick={() => unlockUser(user)}
+                              disabled={isSaving}
+                            >
+                              Unlock now
+                            </button>
+                            <button
+                              className="ghost-button"
+                              type="button"
+                              onClick={cancelLocking}
+                              disabled={isSaving}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                          {lockError && (
+                            <p className="assignment-error" role="alert">
+                              {lockError}
+                            </p>
+                          )}
+                        </form>
                       ) : (
                         <>
                           <div>
@@ -313,13 +444,24 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
                               ? `School ID ${user.school}`
                               : "No school assigned"}
                           </span>
-                          <button
-                            className="ghost-button user-edit-button"
-                            type="button"
-                            onClick={() => startEditing(user)}
-                          >
-                            Edit
-                          </button>
+                          <div className="user-row-actions">
+                            <button
+                              className="ghost-button"
+                              type="button"
+                              onClick={() => startEditing(user)}
+                            >
+                              Edit
+                            </button>
+                            {!isSelf && (
+                              <button
+                                className="ghost-button"
+                                type="button"
+                                onClick={() => startLocking(user)}
+                              >
+                                Lock / Unlock
+                              </button>
+                            )}
+                          </div>
                         </>
                       )}
                     </article>
