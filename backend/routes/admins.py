@@ -66,3 +66,24 @@ def update_user_info(user_id: int, payload: UserUpdateRequest):
             detail="User not found.",
         )
     return {"user": updated_user}
+
+#fuction that updates locked until date for a user
+@router.patch("/admins-users-lock/{user_id}")
+def update_user_lock(user_id: int, locked_until: str):
+    try:
+        updated_user = update_user(
+            user_id,
+            {"locked_until": locked_until},
+            {"failed_login_attempts": 0},
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to update user lock.",
+        ) from e
+    if updated_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found.",
+        )
+    return {"user": updated_user}
