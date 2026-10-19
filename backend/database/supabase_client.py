@@ -66,6 +66,18 @@ def fetch_users_page(page: int, search: str = "", role: str | None = None):
             f'email.ilike."%{escaped_search}%"',
             f'role.ilike."%{escaped_search}%"',
         ]
+        search_terms = search.split()
+        if len(search_terms) > 1:
+            first_name_term = search_terms[0].replace("\\", "\\\\").replace('"', '\\"')
+            last_name_term = " ".join(search_terms[1:]).replace("\\", "\\\\").replace('"', '\\"')
+            reverse_first_name_term = " ".join(search_terms[:-1]).replace("\\", "\\\\").replace('"', '\\"')
+            reverse_last_name_term = search_terms[-1].replace("\\", "\\\\").replace('"', '\\"')
+            search_filters.extend(
+                [
+                    f'and(first_name.ilike."%{first_name_term}%",last_name.ilike."%{last_name_term}%")',
+                    f'and(first_name.ilike."%{reverse_first_name_term}%",last_name.ilike."%{reverse_last_name_term}%")',
+                ]
+            )
         if search.isdigit():
             search_filters.append(f"school.eq.{int(search)}")
         query = query.or_(",".join(search_filters))

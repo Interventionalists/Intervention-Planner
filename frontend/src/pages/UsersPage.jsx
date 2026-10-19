@@ -34,6 +34,7 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
   const [userFilter, setUserFilter] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [debouncedUserFilter, setDebouncedUserFilter] = useState("");
+  const [clientSidePagination, setClientSidePagination] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalUsers, setTotalUsers] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
@@ -47,15 +48,6 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
   const [editError, setEditError] = useState("");
   const [editMessage, setEditMessage] = useState("");
   const [savingUserId, setSavingUserId] = useState(null);
-  const firstVisiblePage = Math.max(
-    1,
-    Math.min(currentPage - 3, totalPages - 6)
-  );
-  const visiblePageNumbers = Array.from(
-    { length: Math.min(totalPages, 7) },
-    (_, index) => firstVisiblePage + index
-  );
-
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       setDebouncedUserFilter(userFilter.trim());
@@ -84,9 +76,10 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
       setError("");
 
       try {
+        const searching = Boolean(debouncedUserFilter);
         const params = new URLSearchParams({
-          page: String(currentPage),
-          search: debouncedUserFilter,
+          page: String(searching ? 1 : currentPage),
+          search: "",
         });
         if (roleFilter !== "all") {
           params.set("role", roleFilter);
@@ -100,18 +93,62 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
         }
 
         const data = await response.json();
-        if (
-          !Array.isArray(data.users) ||
-          !Number.isInteger(data.total) ||
-          !Number.isInteger(data.total_pages)
-        ) {
+        if (!Array.isArray(data.users)) {
           throw new Error("The users response has an unexpected format.");
         }
-        setUsers(data.users);
-        setTotalUsers(data.total);
-        setTotalPages(data.total_pages);
-        if (data.total_pages > 0 && currentPage > data.total_pages) {
-          setCurrentPage(data.total_pages);
+
+        if (searching) {
+          const allUsers = [...data.users];
+          if (Number.isInteger(data.total_pages)) {
+            for (let page = 2; page <= data.total_pages; page += 1) {
+              const pageParams = new URLSearchParams(params);
+              pageParams.set("page", String(page));
+              const pageResponse = await apiFetch(
+                `${API_BASE_URL}/admins-fetch-all-users?${pageParams}`,
+                { signal: controller.signal }
+              );
+              if (!pageResponse.ok) {
+                throw new Error(`User request failed (${pageResponse.status}).`);
+              }
+
+              const pageData = await pageResponse.json();
+              if (!Array.isArray(pageData.users)) {
+                throw new Error("The users response has an unexpected format.");
+              }
+              allUsers.push(...pageData.users);
+            }
+          }
+
+          setUsers(allUsers);
+          setClientSidePagination(true);
+          setTotalUsers(allUsers.length);
+          setTotalPages(Math.ceil(allUsers.length / PAGE_SIZE));
+          setCurrentPage(1);
+        } else {
+          setUsers(data.users);
+          if (
+            Number.isInteger(data.total) &&
+            Number.isInteger(data.total_pages)
+          ) {
+            setClientSidePagination(false);
+            setTotalUsers(data.total);
+            setTotalPages(data.total_pages);
+            if (data.total_pages > 0 && currentPage > data.total_pages) {
+              setCurrentPage(data.total_pages);
+            }
+          } else {
+            setClientSidePagination(true);
+            setTotalUsers(data.users.length);
+            setTotalPages(Math.ceil(data.users.length / PAGE_SIZE));
+            if (
+              data.users.length > 0 &&
+              currentPage > Math.ceil(data.users.length / PAGE_SIZE)
+            ) {
+              setCurrentPage(
+                Math.max(1, Math.ceil(data.users.length / PAGE_SIZE))
+              );
+            }
+          }
         }
       } catch (loadError) {
         if (loadError.name !== "AbortError") {
@@ -128,6 +165,46 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
     loadUsers();
     return () => controller.abort();
   }, [currentPage, debouncedUserFilter, reloadKey, role, roleFilter]);
+
+  const filteredUsers = clientSidePagination
+    ? users.filter((user) => {
+        const schoolName =
+          schools.find((school) => String(school.id) === String(user.school))
+            ?.name || "";
+        const searchableText = [
+          displayName(user),
+          user.email,
+          user.role,
+          user.school,
+          schoolName,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
+        return (
+          searchableText.includes(userFilter.trim().toLowerCase()) &&
+          (roleFilter === "all" || user.role === roleFilter)
+        );
+      })
+    : users;
+  const displayedUsers = clientSidePagination
+    ? filteredUsers.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+    : users;
+  const displayedTotal = clientSidePagination
+    ? filteredUsers.length
+    : totalUsers;
+  const displayedTotalPages = clientSidePagination
+    ? Math.ceil(filteredUsers.length / PAGE_SIZE)
+    : totalPages;
+  const firstVisiblePage = Math.max(
+    1,
+    Math.min(currentPage - 3, displayedTotalPages - 6)
+  );
+  const visiblePageNumbers = Array.from(
+    { length: Math.min(displayedTotalPages, 7) },
+    (_, index) => firstVisiblePage + index
+  );
 
   useEffect(() => {
     if (role !== "admin") {
@@ -349,6 +426,53 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
         title="All users"
         subtitle="Review user accounts across your organization."
       />
+      <div className="account-notes-toolbar users-filter-toolbar">
+        <input
+          type="search"
+          aria-label="Filter users"
+          placeholder="Filter users by name, email, role, or school"
+          value={userFilter}
+          onChange={(event) => {
+            setUserFilter(event.target.value);
+            setCurrentPage(1);
+          }}
+        />
+        <label className="student-filter-field">
+          <span>Role</span>
+          <select
+            value={roleFilter}
+            onChange={(event) => {
+              setRoleFilter(event.target.value);
+              setCurrentPage(1);
+            }}
+          >
+            <option value="all">All roles</option>
+            {USER_ROLES.map((userRole) => (
+              <option key={userRole} value={userRole}>
+                {userRole}
+              </option>
+            ))}
+          </select>
+        </label>
+        <span className="student-filter-count" aria-live="polite">
+          Showing {displayedUsers.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0}
+          {"–"}
+          {Math.min(currentPage * PAGE_SIZE, displayedTotal)} of {displayedTotal} users
+        </span>
+        {(userFilter || roleFilter !== "all") && (
+          <button
+            className="student-filter-clear"
+            type="button"
+            onClick={() => {
+              setUserFilter("");
+              setRoleFilter("all");
+              setCurrentPage(1);
+            }}
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
       {isLoading ? (
         <div className="card" role="status">Loading users...</div>
       ) : error ? (
@@ -365,59 +489,12 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
         </div>
       ) : (
         <>
-          <div className="account-notes-toolbar users-filter-toolbar">
-            <input
-              type="search"
-              aria-label="Filter users"
-              placeholder="Filter users by name, email, role, or school"
-              value={userFilter}
-              onChange={(event) => {
-                setUserFilter(event.target.value);
-                setCurrentPage(1);
-              }}
-            />
-            <label className="student-filter-field">
-              <span>Role</span>
-              <select
-                value={roleFilter}
-                onChange={(event) => {
-                  setRoleFilter(event.target.value);
-                  setCurrentPage(1);
-                }}
-              >
-                <option value="all">All roles</option>
-                {USER_ROLES.map((userRole) => (
-                  <option key={userRole} value={userRole}>
-                    {userRole}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <span className="student-filter-count" aria-live="polite">
-              Showing {users.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0}
-              {"–"}
-              {Math.min(currentPage * PAGE_SIZE, totalUsers)} of {totalUsers} users
-            </span>
-            {(userFilter || roleFilter !== "all") && (
-              <button
-                className="student-filter-clear"
-                type="button"
-                onClick={() => {
-                  setUserFilter("");
-                  setRoleFilter("all");
-                  setCurrentPage(1);
-                }}
-              >
-                Clear filters
-              </button>
-            )}
-          </div>
           <section className="student-list-section">
             <h2>Users</h2>
             {editMessage && <p className="assignment-success" role="status">{editMessage}</p>}
-            {users.length ? (
+            {displayedUsers.length ? (
               <div className="user-list">
-                {users.map((user) => {
+                {displayedUsers.map((user) => {
                   const isEditing = editingUserId === user.id;
                   const isLocking = lockingUserId === user.id;
                   const isSaving = savingUserId === user.id;
@@ -628,14 +705,14 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
             ) : (
               <div className="card">
                 <p>
-                  {totalUsers
+                  {displayedTotal
                     ? "No users are available on this page."
                     : "No users match your search and filters."}
                 </p>
               </div>
             )}
           </section>
-          {totalPages > 1 && (
+          {displayedTotalPages > 1 && (
             <nav className="users-pagination" aria-label="Users pages">
               <button
                 className="ghost-button"
@@ -660,7 +737,7 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
               <button
                 className="ghost-button"
                 type="button"
-                disabled={currentPage === totalPages || isLoading}
+                disabled={currentPage === displayedTotalPages || isLoading}
                 onClick={() => setCurrentPage((page) => page + 1)}
               >
                 Next
