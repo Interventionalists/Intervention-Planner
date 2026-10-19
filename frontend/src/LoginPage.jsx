@@ -66,8 +66,9 @@ function LoginPage({ onSubmit }) {
     <main className="login-screen">
       <section className="login-brand-panel">
         <div className="login-brand">
-          <div className="login-brand-mark">I</div>
-          <span>Interventioner</span>
+          <div className="login-brand-mark">
+            <img src="/interventionerlogo.png" alt="Interventioner" />
+          </div>
         </div>
         <div className="login-brand-copy">
           <p className="login-eyebrow">Student support workspace</p>

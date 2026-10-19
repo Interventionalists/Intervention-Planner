@@ -41,8 +41,23 @@ npm run dev
    SUPABASE_URL=your-project-url
    SUPABASE_SERVICE_KEY=your-service-role-key
    CORS_ORIGINS=http://localhost:5173
+   JWT_SECRET=your-secret-string
    ```
    The service key is a secret — never commit `.env` or expose this key to the frontend.
+
+### JWT Secret
+
+The backend signs login session tokens (HS256, valid for 8 hours) with `JWT_SECRET`. It is **required** — the backend refuses to start without it (`KeyError: 'JWT_SECRET'`).
+
+Generate a long random value:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(64))"
+```
+
+- Use a **different** secret locally (`backend/.env`) than in production (Render).
+- Never commit it or share it — anyone with the secret can forge a login token for any user.
+- Changing the secret invalidates every existing token, so all users will need to log in again. Rotate it immediately if it ever leaks.
 
 ### Backend Hosting (Render)
 
@@ -58,7 +73,7 @@ The FastAPI backend is hosted on [Render](https://render.com) as a Web Service.
    ```
    uvicorn main:app --host 0.0.0.0 --port $PORT
    ```
-5. Add environment variables in the Render dashboard (mirroring `backend/.env`): `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `CORS_ORIGINS` (set this to the deployed Cloudflare frontend URL, not localhost).
+5. Add environment variables in the Render dashboard (mirroring `backend/.env`): `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `CORS_ORIGINS` (set this to the deployed Cloudflare frontend URL, not localhost), and `JWT_SECRET` (a freshly generated value — see [JWT Secret](#jwt-secret)). If a required variable is missing, the deploy fails and the logs show a `KeyError` naming it.
 6. Render auto-deploys on push to the branch you connect the service to — confirm which branch that is in the service's **Settings** before assuming a push will deploy.
 
 ### Frontend Hosting (Cloudflare)
@@ -68,7 +83,7 @@ The frontend is deployed via **Cloudflare Workers Builds** (git-integrated CI fo
 - Root directory: `/frontend/`
 - Build command: `npm run build`
 - Production environment: tracks the `main` branch, deploy command `npx wrangler deploy`
-- Preview environment: tracks the current working branch (e.g. `LucasBranch`), deploy command `npx wrangler versions upload`
+- Preview environment: tracks the current working branch (e.g. `Dev_Branch`), deploy command `npx wrangler versions upload`
 
 **Pushing to `main` triggers a production deploy.** Only merge into `main` when you intend to ship to production.
 

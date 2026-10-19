@@ -9,6 +9,7 @@ import ReportsPage from "./pages/ReportsPage";
 import SettingsPage from "./pages/SettingsPage";
 import StudentProfilePage from "./pages/StudentProfilePage";
 import StudentsPage from "./pages/StudentsPage";
+import UsersPage from "./pages/UsersPage";
 import LoginPage from "./LoginPage";
 import {
   AUTH_SESSION_KEY,
@@ -171,6 +172,9 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
   );
 
   const selectPage = (id) => {
+    if (id === "users" && user?.role !== "admin") {
+      return;
+    }
     setPage(id);
     setMobileOpen(false);
   };
@@ -206,6 +210,7 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
         closeMobile={() => setMobileOpen(false)}
         onLogout={onLogout}
         userName={userName}
+        role={user?.role}
       />
 
       <div className="main-shell">
@@ -216,6 +221,7 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
           userName={userName}
           userInitials={userInitials}
           onAccountClick={() => selectPage("account")}
+          showSearch={page !== "users"}
         />
 
         <main className="content">
@@ -256,6 +262,13 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
                   userId={user?.public_id}
                   role={user?.role}
                   onSelect={openStudentProfile}
+                />
+              )}
+              {page === "users" && user?.role === "admin" && (
+                <UsersPage
+                  role={user.role}
+                  signedInUser={user}
+                  onUserUpdated={onUserUpdated}
                 />
               )}
               {page === "calendar" && <CalendarPage />}
