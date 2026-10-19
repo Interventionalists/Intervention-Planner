@@ -17,6 +17,9 @@ function displayName(user) {
 
 function UsersPage({ role, signedInUser, onUserUpdated }) {
   const [users, setUsers] = useState([]);
+  const [schools, setSchools] = useState([]);
+  const [schoolsLoading, setSchoolsLoading] = useState(true);
+  const [schoolsError, setSchoolsError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
@@ -27,6 +30,7 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
     first_name: "",
     last_name: "",
     email: "",
+    role: "",
   });
   const [editError, setEditError] = useState("");
   const [editMessage, setEditMessage] = useState("");
@@ -76,6 +80,71 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
     return () => controller.abort();
   }, [reloadKey, role]);
 
+  useEffect(() => {
+    if (role !== "admin") {
+      setSchools([]);
+      setSchoolsError("Admin access is required to view schools.");
+      setSchoolsLoading(false);
+      return undefined;
+    }
+
+    const controller = new AbortController();
+
+    async function loadSchools() {
+      setSchoolsLoading(true);
+      setSchoolsError("");
+
+      try {
+        const response = await apiFetch(`${API_BASE_URL}/schools-fetch`, {
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          throw new Error(`School request failed (${response.status}).`);
+        }
+
+        const data = await response.json();
+        if (!Array.isArray(data.schools)) {
+          throw new Error("The schools response has an unexpected format.");
+        }
+
+        const schoolOptions = data.schools
+          .map((school) =>
+            school && typeof school === "object"
+              ? {
+                  id: school.school_id ?? school.id,
+                  name: school.school_name ?? school.name,
+                }
+              : null
+          )
+          .filter(
+            (school) =>
+              school &&
+              school.id != null &&
+              typeof school.name === "string" &&
+              school.name.trim()
+          )
+          .map((school) => ({
+            id: String(school.id),
+            name: school.name.trim(),
+          }));
+
+        setSchools(schoolOptions);
+      } catch (loadError) {
+        if (loadError.name !== "AbortError") {
+          console.error("Error fetching schools:", loadError);
+          setSchoolsError("Could not load schools. Please try again.");
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setSchoolsLoading(false);
+        }
+      }
+    }
+
+    loadSchools();
+    return () => controller.abort();
+  }, [role]);
+
   const roles = useMemo(
     () => [...new Set(users.map((user) => user.role).filter(Boolean))].sort(),
     [users]
@@ -104,6 +173,8 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
       first_name: user.first_name || "",
       last_name: user.last_name || "",
       email: user.email || "",
+      role: user.role || "teacher",
+      school: user.school == null ? "" : String(user.school),
     });
     setEditError("");
     setEditMessage("");
@@ -126,7 +197,10 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(editDraft),
+          body: JSON.stringify({
+            ...editDraft,
+            school: editDraft.school ? Number(editDraft.school) : null,
+          }),
         }
       );
       const data = await response.json();
@@ -147,7 +221,14 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
         )
       );
       if (data.user.public_id === signedInUser?.public_id) {
-        onUserUpdated({ ...signedInUser, ...data.user });
+        onUserUpdated({
+          ...signedInUser,
+          ...data.user,
+          school_name:
+            schools.find(
+              (school) => school.id === String(data.user.school ?? "")
+            )?.name || "",
+        });
       }
       setEditingUserId(null);
       setEditMessage(`${displayName(data.user)} was updated.`);
@@ -277,6 +358,54 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
                                 }))
                               }
                             />
+                          </label>
+                          <label className="user-edit-role">
+                            Role
+                            <select
+                              required
+                              value={editDraft.role}
+                              onChange={(event) =>
+                                setEditDraft((current) => ({
+                                  ...current,
+                                  role: event.target.value,
+                                }))
+                              }
+                            >
+                              <option value="teacher">Teacher</option>
+                              <option value="interventionist">Interventionist</option>
+                              <option value="admin">Admin</option>
+                            </select>
+                          </label>
+                          <label className="user-edit-school">
+                            School
+                            <select
+                              disabled={schoolsLoading || Boolean(schoolsError)}
+                              value={editDraft.school}
+                              onChange={(event) =>
+                                setEditDraft((current) => ({
+                                  ...current,
+                                  school: event.target.value,
+                                }))
+                              }
+                            >
+                              <option value="">
+                                {schoolsLoading
+                                  ? "Loading schools..."
+                                  : schoolsError
+                                    ? "School list unavailable"
+                                    : "No school assigned"}
+                              </option>
+                              {schools.map((school) => (
+                                <option key={school.id} value={school.id}>
+                                  {school.name}
+                                </option>
+                              ))}
+                            </select>
+                            {schoolsError && (
+                              <span className="user-school-error" role="alert">
+                                {schoolsError}
+                              </span>
+                            )}
                           </label>
                           <div className="user-edit-actions">
                             <button

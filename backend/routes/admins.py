@@ -1,4 +1,5 @@
 import re
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -13,6 +14,8 @@ class UserUpdateRequest(BaseModel):
     first_name: str = Field(min_length=1, max_length=100)
     last_name: str = Field(min_length=1, max_length=100)
     email: str = Field(min_length=3, max_length=254)
+    role: Literal["teacher", "interventionist", "admin"]
+    school: int | None = Field(default=None, ge=1)
 
     @field_validator("email")
     @classmethod

@@ -826,7 +826,8 @@ nav { display: grid; gap: 6px; }
   font-size: 12px;
   font-weight: 600;
 }
-.user-edit-form input {
+.user-edit-form input,
+.user-edit-form select {
   min-width: 0;
   min-height: 38px;
   padding: 0 10px;
