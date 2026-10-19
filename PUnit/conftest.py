@@ -23,3 +23,5 @@ def sample_user():
     return {"name": "Test User"}
 
 os.environ.setdefault("JWT_SECRET", "pytest-only-secret")
+os.environ.setdefault("SUPABASE_URL", "https://pytest-only.supabase.co")
+os.environ.setdefault("SUPABASE_SERVICE_KEY", "pytest-only-service-key")
