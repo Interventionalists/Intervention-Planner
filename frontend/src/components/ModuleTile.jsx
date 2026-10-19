@@ -85,7 +85,7 @@ export function canShowModule(moduleId, page, role) {
   return Boolean(
     permissions &&
       permissions.pages.includes(page) &&
-      permissions.roles.includes(normalizedRole)
+      (normalizedRole === "admin" || permissions.roles.includes(normalizedRole))
   );
 }
 
@@ -98,8 +98,11 @@ function normalizeRole(role) {
   if (normalized === "interventionalist" || normalized === "interventionist") {
     return "interventionist";
   }
-  if (normalized === "teacher" || normalized === "admin") {
+  if (normalized === "teacher") {
     return normalized;
+  }
+  if (normalized === "administrator" || normalized === "admin") {
+    return "admin";
   }
   return "";
 }
@@ -159,7 +162,7 @@ const modulePermissions = {
     pages: ["dashboard", "studentProfile"],
   },
   viewStateTesting: {
-    roles: ["teacher", "interventionist"],
+    roles: ["teacher", "interventionist", "admin"],
     pages: ["studentProfile"],
   },
 };
