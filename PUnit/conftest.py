@@ -15,8 +15,11 @@
 # inject the fixture into the test function.
 
 import pytest
+import os
 
 # TODO: Make this an actual user
 @pytest.fixture
 def sample_user():
     return {"name": "Test User"}
+
+os.environ.setdefault("JWT_SECRET", "pytest-only-secret")
