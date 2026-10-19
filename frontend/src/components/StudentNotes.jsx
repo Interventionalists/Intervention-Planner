@@ -14,12 +14,14 @@ function StudentNotes({ studentId, userId, variant = "profile" }) {
   const [isAdding, setIsAdding] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState(null);
   const [draftNote, setDraftNote] = useState("");
+  const [isPrivate, setIsPrivate] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [deletingNoteId, setDeletingNoteId] = useState(null);
   const [saveError, setSaveError] = useState("");
 
   const startAdding = () => {
     setDraftNote("");
+    setIsPrivate(false);
     setEditingNoteId(null);
     setIsAdding(true);
     setIsEditing(true);
@@ -36,6 +38,7 @@ function StudentNotes({ studentId, userId, variant = "profile" }) {
 
   const cancelEditing = () => {
     setDraftNote("");
+    setIsPrivate(false);
     setEditingNoteId(null);
     setIsAdding(false);
     setIsEditing(false);
@@ -60,6 +63,7 @@ function StudentNotes({ studentId, userId, variant = "profile" }) {
               student_id: studentId,
               created_by: userId,
               text: draftNote.trim(),
+              is_private: isPrivate,
             }),
           })
         : await apiFetch(`${API_BASE_URL}/notes-editText?${params}`, {
@@ -67,7 +71,8 @@ function StudentNotes({ studentId, userId, variant = "profile" }) {
           });
 
       if (!response.ok) {
-        throw new Error("Unable to save this note.");
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.detail || "Unable to save this note.");
       }
 
       await refreshNotes();
@@ -129,6 +134,16 @@ function StudentNotes({ studentId, userId, variant = "profile" }) {
             rows={4}
             placeholder={isAdding ? "Write another note..." : "Edit this note..."}
           />
+          {isAdding && (
+            <label className="note-privacy-option">
+              <input
+                type="checkbox"
+                checked={isPrivate}
+                onChange={(event) => setIsPrivate(event.target.checked)}
+              />
+              Private note
+            </label>
+          )}
           {saveError && <p className="error-state" role="alert">{saveError}</p>}
           <div className="notes-actions">
             <button
@@ -156,28 +171,31 @@ function StudentNotes({ studentId, userId, variant = "profile" }) {
                     <time>
                       {note.date ? new Date(note.date).toLocaleDateString() : ""}
                     </time>
-                    <div className="note-entry-actions">
-                      <button
-                        type="button"
-                        className="note-edit-button"
-                        title="Edit this note"
-                        aria-label={`Edit note from ${note.date ? new Date(note.date).toLocaleDateString() : "this date"}`}
-                        onClick={() => startEditing(note)}
-                        disabled={deletingNoteId !== null}
-                      >
-                        <Pencil size={14} aria-hidden="true" />
-                      </button>
-                      <button
-                        type="button"
-                        className="note-delete-button"
-                        title="Delete this note"
-                        aria-label={`Delete note from ${note.date ? new Date(note.date).toLocaleDateString() : "this date"}`}
-                        onClick={() => deleteNote(note)}
-                        disabled={!userId || deletingNoteId !== null}
-                      >
-                        <Trash2 size={14} aria-hidden="true" />
-                      </button>
-                    </div>
+                    {note.is_private && <span className="note-private-label">Private</span>}
+                    {String(note.created_by) === String(userId) && (
+                      <div className="note-entry-actions">
+                        <button
+                          type="button"
+                          className="note-edit-button"
+                          title="Edit this note"
+                          aria-label={`Edit note from ${note.date ? new Date(note.date).toLocaleDateString() : "this date"}`}
+                          onClick={() => startEditing(note)}
+                          disabled={deletingNoteId !== null}
+                        >
+                          <Pencil size={14} aria-hidden="true" />
+                        </button>
+                        <button
+                          type="button"
+                          className="note-delete-button"
+                          title="Delete this note"
+                          aria-label={`Delete note from ${note.date ? new Date(note.date).toLocaleDateString() : "this date"}`}
+                          onClick={() => deleteNote(note)}
+                          disabled={!userId || deletingNoteId !== null}
+                        >
+                          <Trash2 size={14} aria-hidden="true" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                   <p>{note.text || ""}</p>
                 </article>
