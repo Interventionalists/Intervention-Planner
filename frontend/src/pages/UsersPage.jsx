@@ -17,10 +17,161 @@ function displayName(user) {
   );
 }
 
-//formats a Date as the local "YYYY-MM-DDTHH:mm" string a datetime-local input expects
 function toDateTimeLocal(date) {
-  const offsetMs = date.getTimezoneOffset() * 60000;
-  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 16);
+}
+
+function UserRow({
+  user,
+  signedInUser,
+  mode,
+  isSaving,
+  editDraft,
+  setEditDraft,
+  schools,
+  schoolsLoading,
+  schoolsError,
+  editError,
+  lockUntil,
+  setLockUntil,
+  lockError,
+  onSave,
+  onCancelEdit,
+  onStartEdit,
+  onStartLock,
+  onLock,
+  onUnlock,
+  onCancelLock,
+}) {
+  const isSelf = user.public_id === signedInUser?.public_id;
+  const schoolPlaceholder = schoolsLoading
+    ? "Loading schools..."
+    : schoolsError
+      ? "School list unavailable"
+      : "No school assigned";
+  const fields = [
+    { name: "first_name", label: "First name", maxLength: 100 },
+    { name: "last_name", label: "Last name", maxLength: 100 },
+    { name: "email", label: "Email", type: "email", maxLength: 254 },
+    {
+      name: "role",
+      label: "Role",
+      required: true,
+      options: USER_ROLES.map((role) => ({
+        value: role,
+        label: role[0].toUpperCase() + role.slice(1),
+      })),
+    },
+    {
+      name: "school",
+      label: "School",
+      disabled: schoolsLoading || Boolean(schoolsError),
+      options: [
+        { value: "", label: schoolPlaceholder },
+        ...schools.map((school) => ({ value: school.id, label: school.name })),
+      ],
+    },
+  ];
+  const updateField = (name) => (event) =>
+    setEditDraft((current) => ({ ...current, [name]: event.target.value }));
+  const button = (label, onClick, type = "button") => (
+    <button
+      className="ghost-button"
+      type={type}
+      disabled={isSaving}
+      onClick={onClick}
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <article className="card user-row">
+      {mode === "edit" ? (
+        <form className="user-edit-form" onSubmit={onSave}>
+          {fields.map(({ name, label, options, ...props }) => (
+            <label key={name} className={`user-edit-${name}`}>
+              {label}
+              {options ? (
+                <select
+                  value={editDraft[name]}
+                  onChange={updateField(name)}
+                  {...props}
+                >
+                  {options.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  value={editDraft[name]}
+                  onChange={updateField(name)}
+                  required
+                  {...props}
+                />
+              )}
+              {name === "school" && schoolsError && (
+                <span className="user-school-error" role="alert">
+                  {schoolsError}
+                </span>
+              )}
+            </label>
+          ))}
+          <div className="user-edit-actions">
+            {button(isSaving ? "Saving..." : "Save", undefined, "submit")}
+            {button("Cancel", onCancelEdit)}
+          </div>
+          {editError && (
+            <p className="assignment-error" role="alert">
+              {editError}
+            </p>
+          )}
+        </form>
+      ) : mode === "lock" ? (
+        <form className="user-edit-form" onSubmit={onLock}>
+          <label>
+            Lock {displayName(user)} until
+            <input
+              type="datetime-local"
+              required
+              min={toDateTimeLocal(new Date())}
+              value={lockUntil}
+              onChange={(event) => setLockUntil(event.target.value)}
+            />
+          </label>
+          <div className="user-edit-actions">
+            {button(isSaving ? "Saving..." : "Lock account", undefined, "submit")}
+            {button("Unlock now", onUnlock)}
+            {button("Cancel", onCancelLock)}
+          </div>
+          {lockError && (
+            <p className="assignment-error" role="alert">
+              {lockError}
+            </p>
+          )}
+        </form>
+      ) : (
+        <>
+          <div>
+            <strong>{displayName(user)}</strong>
+            <span>{user.email || "No email address"}</span>
+          </div>
+          <span className="user-role">{user.role || "No role"}</span>
+          <span className="user-school">
+            {user.school ? `School ID ${user.school}` : "No school assigned"}
+          </span>
+          <div className="user-row-actions">
+            {button("Edit", onStartEdit)}
+            {!isSelf && button("Lock / Unlock", onStartLock)}
+          </div>
+        </>
+      )}
+    </article>
+  );
 }
 
 function UsersPage({ role, signedInUser, onUserUpdated }) {
@@ -38,7 +189,7 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalUsers, setTotalUsers] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
-  const [editingUserId, setEditingUserId] = useState(null);
+  const [activeForm, setActiveForm] = useState(null);
   const [editDraft, setEditDraft] = useState({
     first_name: "",
     last_name: "",
@@ -48,6 +199,9 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
   const [editError, setEditError] = useState("");
   const [editMessage, setEditMessage] = useState("");
   const [savingUserId, setSavingUserId] = useState(null);
+  const [lockUntil, setLockUntil] = useState("");
+  const [lockError, setLockError] = useState("");
+
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       setDebouncedUserFilter(userFilter.trim());
@@ -55,9 +209,6 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
 
     return () => window.clearTimeout(timeoutId);
   }, [userFilter]);
-  const [lockingUserId, setLockingUserId] = useState(null);
-  const [lockUntil, setLockUntil] = useState("");
-  const [lockError, setLockError] = useState("");
 
   useEffect(() => {
     if (role !== "admin") {
@@ -93,7 +244,11 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
         }
 
         const data = await response.json();
-        if (!Array.isArray(data.users)) {
+        if (
+          !Array.isArray(data.users) ||
+          !Number.isInteger(data.total) ||
+          !Number.isInteger(data.total_pages)
+        ) {
           throw new Error("The users response has an unexpected format.");
         }
 
@@ -126,28 +281,11 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
           setCurrentPage(1);
         } else {
           setUsers(data.users);
-          if (
-            Number.isInteger(data.total) &&
-            Number.isInteger(data.total_pages)
-          ) {
-            setClientSidePagination(false);
-            setTotalUsers(data.total);
-            setTotalPages(data.total_pages);
-            if (data.total_pages > 0 && currentPage > data.total_pages) {
-              setCurrentPage(data.total_pages);
-            }
-          } else {
-            setClientSidePagination(true);
-            setTotalUsers(data.users.length);
-            setTotalPages(Math.ceil(data.users.length / PAGE_SIZE));
-            if (
-              data.users.length > 0 &&
-              currentPage > Math.ceil(data.users.length / PAGE_SIZE)
-            ) {
-              setCurrentPage(
-                Math.max(1, Math.ceil(data.users.length / PAGE_SIZE))
-              );
-            }
+          setClientSidePagination(false);
+          setTotalUsers(data.total);
+          setTotalPages(data.total_pages);
+          if (data.total_pages > 0 && currentPage > data.total_pages) {
+            setCurrentPage(data.total_pages);
           }
         }
       } catch (loadError) {
@@ -272,8 +410,7 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
   }, [role]);
 
   const startEditing = (user) => {
-    setLockingUserId(null);
-    setEditingUserId(user.id);
+    setActiveForm({ type: "edit", userId: user.id });
     setEditDraft({
       first_name: user.first_name || "",
       last_name: user.last_name || "",
@@ -286,7 +423,7 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
   };
 
   const cancelEditing = () => {
-    setEditingUserId(null);
+    setActiveForm(null);
     setEditError("");
   };
 
@@ -330,12 +467,11 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
           ...signedInUser,
           ...data.user,
           school_name:
-            schools.find(
-              (school) => school.id === String(data.user.school ?? "")
-            )?.name || "",
+            schools.find((school) => school.id === String(data.user.school ?? ""))
+              ?.name || "",
         });
       }
-      setEditingUserId(null);
+      setActiveForm(null);
       setEditMessage(`${displayName(data.user)} was updated.`);
       setReloadKey((key) => key + 1);
     } catch (saveError) {
@@ -347,19 +483,18 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
   };
 
   const startLocking = (user) => {
-    setEditingUserId(null);
-    setLockingUserId(user.id);
+    setActiveForm({ type: "lock", userId: user.id });
     setLockUntil(toDateTimeLocal(new Date(Date.now() + 60 * 60 * 1000)));
     setLockError("");
     setEditMessage("");
   };
 
   const cancelLocking = () => {
-    setLockingUserId(null);
+    setActiveForm(null);
     setLockError("");
   };
 
-  //sends a new locked_until timestamp; a time in the past (e.g. now) unlocks the account
+  // A timestamp in the past unlocks the account.
   const updateUserLock = async (user, lockedUntil, successMessage) => {
     setSavingUserId(user.id);
     setLockError("");
@@ -388,7 +523,7 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
           currentUser.id === user.id ? data.user : currentUser
         )
       );
-      setLockingUserId(null);
+      setActiveForm(null);
       setEditMessage(successMessage);
     } catch (lockUpdateError) {
       console.error("Error updating user lock:", lockUpdateError);
@@ -455,9 +590,11 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
           </select>
         </label>
         <span className="student-filter-count" aria-live="polite">
-          Showing {displayedUsers.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0}
+          Showing{" "}
+          {displayedUsers.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0}
           {"–"}
-          {Math.min(currentPage * PAGE_SIZE, displayedTotal)} of {displayedTotal} users
+          {Math.min(currentPage * PAGE_SIZE, displayedTotal)} of{" "}
+          {displayedTotal} users
         </span>
         {(userFilter || roleFilter !== "all") && (
           <button
@@ -474,7 +611,9 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
         )}
       </div>
       {isLoading ? (
-        <div className="card" role="status">Loading users...</div>
+        <div className="card" role="status">
+          Loading users...
+        </div>
       ) : error ? (
         <div className="card" role="alert">
           <p>{error}</p>
@@ -491,216 +630,42 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
         <>
           <section className="student-list-section">
             <h2>Users</h2>
-            {editMessage && <p className="assignment-success" role="status">{editMessage}</p>}
+            {editMessage && (
+              <p className="assignment-success" role="status">
+                {editMessage}
+              </p>
+            )}
             {displayedUsers.length ? (
               <div className="user-list">
-                {displayedUsers.map((user) => {
-                  const isEditing = editingUserId === user.id;
-                  const isLocking = lockingUserId === user.id;
-                  const isSaving = savingUserId === user.id;
-                  const isSelf = user.public_id === signedInUser?.public_id;
-                  return (
-                    <article className="card user-row" key={user.public_id}>
-                      {isEditing ? (
-                        <form
-                          className="user-edit-form"
-                          onSubmit={(event) => saveUser(event, user)}
-                        >
-                          <label>
-                            First name
-                            <input
-                              required
-                              maxLength={100}
-                              value={editDraft.first_name}
-                              onChange={(event) =>
-                                setEditDraft((current) => ({
-                                  ...current,
-                                  first_name: event.target.value,
-                                }))
-                              }
-                            />
-                          </label>
-                          <label>
-                            Last name
-                            <input
-                              required
-                              maxLength={100}
-                              value={editDraft.last_name}
-                              onChange={(event) =>
-                                setEditDraft((current) => ({
-                                  ...current,
-                                  last_name: event.target.value,
-                                }))
-                              }
-                            />
-                          </label>
-                          <label className="user-edit-email">
-                            Email
-                            <input
-                              type="email"
-                              required
-                              maxLength={254}
-                              value={editDraft.email}
-                              onChange={(event) =>
-                                setEditDraft((current) => ({
-                                  ...current,
-                                  email: event.target.value,
-                                }))
-                              }
-                            />
-                          </label>
-                          <label className="user-edit-role">
-                            Role
-                            <select
-                              required
-                              value={editDraft.role}
-                              onChange={(event) =>
-                                setEditDraft((current) => ({
-                                  ...current,
-                                  role: event.target.value,
-                                }))
-                              }
-                            >
-                              <option value="teacher">Teacher</option>
-                              <option value="interventionist">Interventionist</option>
-                              <option value="admin">Admin</option>
-                            </select>
-                          </label>
-                          <label className="user-edit-school">
-                            School
-                            <select
-                              disabled={schoolsLoading || Boolean(schoolsError)}
-                              value={editDraft.school}
-                              onChange={(event) =>
-                                setEditDraft((current) => ({
-                                  ...current,
-                                  school: event.target.value,
-                                }))
-                              }
-                            >
-                              <option value="">
-                                {schoolsLoading
-                                  ? "Loading schools..."
-                                  : schoolsError
-                                    ? "School list unavailable"
-                                    : "No school assigned"}
-                              </option>
-                              {schools.map((school) => (
-                                <option key={school.id} value={school.id}>
-                                  {school.name}
-                                </option>
-                              ))}
-                            </select>
-                            {schoolsError && (
-                              <span className="user-school-error" role="alert">
-                                {schoolsError}
-                              </span>
-                            )}
-                          </label>
-                          <div className="user-edit-actions">
-                            <button
-                              className="ghost-button"
-                              type="submit"
-                              disabled={isSaving}
-                            >
-                              {isSaving ? "Saving..." : "Save"}
-                            </button>
-                            <button
-                              className="ghost-button"
-                              type="button"
-                              onClick={cancelEditing}
-                              disabled={isSaving}
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                          {editError && (
-                            <p className="assignment-error" role="alert">
-                              {editError}
-                            </p>
-                          )}
-                        </form>
-                      ) : isLocking ? (
-                        <form
-                          className="user-edit-form"
-                          onSubmit={(event) => lockUser(event, user)}
-                        >
-                          <label>
-                            Lock {displayName(user)} until
-                            <input
-                              type="datetime-local"
-                              required
-                              min={toDateTimeLocal(new Date())}
-                              value={lockUntil}
-                              onChange={(event) => setLockUntil(event.target.value)}
-                            />
-                          </label>
-                          <div className="user-edit-actions">
-                            <button
-                              className="ghost-button"
-                              type="submit"
-                              disabled={isSaving}
-                            >
-                              {isSaving ? "Saving..." : "Lock account"}
-                            </button>
-                            <button
-                              className="ghost-button"
-                              type="button"
-                              onClick={() => unlockUser(user)}
-                              disabled={isSaving}
-                            >
-                              Unlock now
-                            </button>
-                            <button
-                              className="ghost-button"
-                              type="button"
-                              onClick={cancelLocking}
-                              disabled={isSaving}
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                          {lockError && (
-                            <p className="assignment-error" role="alert">
-                              {lockError}
-                            </p>
-                          )}
-                        </form>
-                      ) : (
-                        <>
-                          <div>
-                            <strong>{displayName(user)}</strong>
-                            <span>{user.email || "No email address"}</span>
-                          </div>
-                          <span className="user-role">{user.role || "No role"}</span>
-                          <span className="user-school">
-                            {user.school
-                              ? `School ID ${user.school}`
-                              : "No school assigned"}
-                          </span>
-                          <div className="user-row-actions">
-                            <button
-                              className="ghost-button"
-                              type="button"
-                              onClick={() => startEditing(user)}
-                            >
-                              Edit
-                            </button>
-                            {!isSelf && (
-                              <button
-                                className="ghost-button"
-                                type="button"
-                                onClick={() => startLocking(user)}
-                              >
-                                Lock / Unlock
-                              </button>
-                            )}
-                          </div>
-                        </>
-                      )}
-                    </article>
-                  );
-                })}
+                {displayedUsers.map((user) => (
+                  <UserRow
+                    key={user.public_id}
+                    user={user}
+                    signedInUser={signedInUser}
+                    mode={
+                      activeForm?.userId === user.id
+                        ? activeForm.type
+                        : "view"
+                    }
+                    isSaving={savingUserId === user.id}
+                    editDraft={editDraft}
+                    setEditDraft={setEditDraft}
+                    schools={schools}
+                    schoolsLoading={schoolsLoading}
+                    schoolsError={schoolsError}
+                    editError={editError}
+                    lockUntil={lockUntil}
+                    setLockUntil={setLockUntil}
+                    lockError={lockError}
+                    onSave={(event) => saveUser(event, user)}
+                    onCancelEdit={cancelEditing}
+                    onStartEdit={() => startEditing(user)}
+                    onStartLock={() => startLocking(user)}
+                    onLock={(event) => lockUser(event, user)}
+                    onUnlock={() => unlockUser(user)}
+                    onCancelLock={cancelLocking}
+                  />
+                ))}
               </div>
             ) : (
               <div className="card">
@@ -723,16 +688,16 @@ function UsersPage({ role, signedInUser, onUserUpdated }) {
                 Previous
               </button>
               {visiblePageNumbers.map((page) => (
-                  <button
-                    className={`ghost-button${page === currentPage ? " active" : ""}`}
-                    type="button"
-                    key={page}
-                    aria-current={page === currentPage ? "page" : undefined}
-                    disabled={isLoading}
-                    onClick={() => setCurrentPage(page)}
-                  >
-                    {page}
-                  </button>
+                <button
+                  className={`ghost-button${page === currentPage ? " active" : ""}`}
+                  type="button"
+                  key={page}
+                  aria-current={page === currentPage ? "page" : undefined}
+                  disabled={isLoading}
+                  onClick={() => setCurrentPage(page)}
+                >
+                  {page}
+                </button>
               ))}
               <button
                 className="ghost-button"
