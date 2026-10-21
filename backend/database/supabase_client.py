@@ -291,6 +291,55 @@ def fetch_school_name(school_id):
     return response.data[0]["school_name"] if response.data else None
 
 
+def fetch_school_logo_api(school_id):
+    response = (
+        supabase.table("schools")
+        .select("school_logo_api")
+        .eq("school_id", school_id)
+        .limit(1)
+        .execute()
+    )
+    return response.data[0]["school_logo_api"] if response.data else None
+
+
+def fetch_school_theme(school_id):
+    response = (
+        supabase.table("themes")
+        .select("*")
+        .eq("school_id", school_id)
+        .limit(1)
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+
+def save_school_theme(school_id, colors):
+    theme_values = {
+        "color_primary": colors[0],
+        "color_secondary": colors[1],
+        "color_tertiary": colors[2],
+    }
+    existing_theme = fetch_school_theme(school_id)
+    if existing_theme:
+        response = (
+            supabase.table("themes")
+            .update(theme_values)
+            .eq("id", existing_theme["id"])
+            .select("*")
+            .execute()
+        )
+    else:
+        response = (
+            supabase.table("themes")
+            .insert({"school_id": school_id, **theme_values})
+            .select("*")
+            .execute()
+        )
+    if not response.data:
+        raise RuntimeError("The school theme could not be saved.")
+    return response.data[0]
+
+
 ########################### NOTES FUNCTIONS #######################################
 
 def fetch_notes_from_user(public_id):
