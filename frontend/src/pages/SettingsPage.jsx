@@ -10,6 +10,7 @@ function SettingsPage({
   hasSavedTheme,
   setTheme,
   onSaveTheme,
+  canManageTheme,
   loadError,
 }) {
   const [saving, setSaving] = useState(false);
@@ -39,68 +40,91 @@ function SettingsPage({
     }
   };
 
+  const revertTheme = () => {
+    setTheme(savedTheme);
+    setSaveError("");
+    setSavedNotice("");
+  };
+
   return (
     <>
       <PageHeading
         eyebrow="Settings"
         title="Customize Interventioner"
-        subtitle="Choose a three-color scheme to match your school."
+        subtitle={
+          canManageTheme
+            ? "Choose a three-color scheme to match your school."
+            : "Your school's color scheme is managed by an administrator."
+        }
       />
       <div className="settings-grid">
-        <div className="card">
-          <CardTitle title="Color scheme" />
-          <div className="theme-grid">
-            {themePresets.map((preset) => {
-              const selected = JSON.stringify(theme) === JSON.stringify(preset.colors);
-              return (
-                <button
-                  className={`theme-option ${selected ? "selected" : ""}`}
-                  key={preset.name}
-                  onClick={() => {
-                    setTheme(preset.colors);
-                    setSaveError("");
-                    setSavedNotice("");
-                  }}
-                >
-                  <div className="swatches">
-                    {preset.colors.map((color) => (
-                      <span key={color} style={{ background: color }} />
-                    ))}
-                  </div>
-                  <span>{preset.name}</span>
-                </button>
-              );
-            })}
-          </div>
-          <div className="custom-theme">
-            <h3>Custom colors</h3>
-            <div className="custom-color-grid">
-              {colorLabels.map((label, index) => (
-                <label className="custom-color-field" key={label}>
-                  <span>{label}</span>
-                  <input
-                    type="color"
-                    value={theme[index]}
-                    onChange={(event) => updateColor(index, event.target.value)}
-                    aria-label={`${label} color`}
-                  />
-                  <span className="color-value">{theme[index].toUpperCase()}</span>
-                </label>
-              ))}
+        {canManageTheme && (
+          <div className="card">
+            <CardTitle title="Color scheme" />
+            <div className="theme-grid">
+              {themePresets.map((preset) => {
+                const selected = JSON.stringify(theme) === JSON.stringify(preset.colors);
+                return (
+                  <button
+                    className={`theme-option ${selected ? "selected" : ""}`}
+                    key={preset.name}
+                    type="button"
+                    onClick={() => {
+                      setTheme(preset.colors);
+                      setSaveError("");
+                      setSavedNotice("");
+                    }}
+                  >
+                    <div className="swatches">
+                      {preset.colors.map((color) => (
+                        <span key={color} style={{ background: color }} />
+                      ))}
+                    </div>
+                    <span>{preset.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="custom-theme">
+              <h3>Custom colors</h3>
+              <div className="custom-color-grid">
+                {colorLabels.map((label, index) => (
+                  <label className="custom-color-field" key={label}>
+                    <span>{label}</span>
+                    <input
+                      type="color"
+                      value={theme[index]}
+                      onChange={(event) => updateColor(index, event.target.value)}
+                      aria-label={`${label} color`}
+                    />
+                    <span className="color-value">{theme[index].toUpperCase()}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            {loadError && <p className="theme-message error-state" role="alert">{loadError}</p>}
+            {saveError && <p className="theme-message error-state" role="alert">{saveError}</p>}
+            {savedNotice && <p className="theme-message" role="status">{savedNotice}</p>}
+            <div className="theme-actions">
+              <button
+                className="theme-revert-button"
+                type="button"
+                onClick={revertTheme}
+                disabled={!hasChanges || saving}
+              >
+                Revert changes
+              </button>
+              <button
+                className="theme-save-button"
+                type="button"
+                onClick={saveTheme}
+                disabled={(!hasChanges && hasSavedTheme) || saving}
+              >
+                {saving ? "Saving..." : "Save color scheme"}
+              </button>
             </div>
           </div>
-          {loadError && <p className="theme-message error-state" role="alert">{loadError}</p>}
-          {saveError && <p className="theme-message error-state" role="alert">{saveError}</p>}
-          {savedNotice && <p className="theme-message" role="status">{savedNotice}</p>}
-          <button
-            className="theme-save-button"
-            type="button"
-            onClick={saveTheme}
-            disabled={(!hasChanges && hasSavedTheme) || saving}
-          >
-            {saving ? "Saving..." : "Save color scheme"}
-          </button>
-        </div>
+        )}
 
         <div className="card style-preview">
           <CardTitle title="Preview" />

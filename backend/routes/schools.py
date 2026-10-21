@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from auth.security import get_current_user
+from auth.security import get_current_user, require_admin
 from database.supabase_client import (
     fetch_school_logo_api,
     fetch_school_name,
@@ -121,7 +121,7 @@ def get_school_theme(user: dict = Depends(get_current_user)):
 @router.put("/schools-theme")
 def update_school_theme(
     payload: ThemeUpdate,
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(require_admin),
 ):
     try:
         school_id = fetch_user_school(user["id"])
