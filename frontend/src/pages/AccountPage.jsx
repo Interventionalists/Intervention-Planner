@@ -1,14 +1,7 @@
-import React, { useEffect, useState } from "react";
-import {
-  Bell,
-  CheckCircle2,
-  Lock,
-  Mail,
-  Pencil,
-  ShieldCheck,
-  Trash2,
-  UserRound,
-} from "lucide-react";
+import { useEffect, useState } from "react";
+import { Lock, Mail, ShieldCheck } from "lucide-react";
+import AccountNotesCard from "../components/AccountNotesCard";
+import { CardTitle, PageHeading } from "../components/PageElements";
 import { ResetPasswordForm } from "../LoginPage";
 import { apiFetch } from "../api";
 
@@ -16,48 +9,15 @@ const API_BASE_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:8000"
 ).replace(/\/+$/, "");
 
-async function fetchUserNotes(publicId) {
-    try {
-        const response = await apiFetch(`${API_BASE_URL}/notes-userFetch/${publicId}`);
-        if (!response.ok) {
-            throw new Error(`Notes request failed (${response.status}).`);
-        }
-        const data = await response.json();
-        if (!Array.isArray(data.notes)) {
-            throw new Error("The notes response has an unexpected format.");
-        }
-        return data.notes;
-    } catch (error) {
-        console.error("Error fetching user notes:", error);
-        throw error;
-    }
-}
-
-async function fetchStudentNames() {
-  const response = await apiFetch(`${API_BASE_URL}/students-fetch`);
-  if (!response.ok) {
-    throw new Error(`Students request failed (${response.status}).`);
-  }
-  const data = await response.json();
-  if (!Array.isArray(data.students)) {
-    throw new Error("The students response has an unexpected format.");
-  }
-  return {
-    names: Object.fromEntries(
-      data.students.map(({ id, first_name, last_name }) => [
-        id,
-        `${first_name} ${last_name}`.trim(),
-      ])
-    ),
-    students: data.students.map(({ id, first_name, last_name }) => ({
-      id: String(id),
-      name: `${first_name} ${last_name}`.trim(),
-    })),
-  };
-}
-
-async function loadSchools(currentSchool, setSchools, setSchoolId, setSchoolLoadError) {
+async function loadSchools(
+  currentSchool,
+  currentSchoolId,
+  setSchools,
+  setSchoolId,
+  setSchoolLoadError
+) {
   try {
+    setSchoolLoadError("");
     const response = await apiFetch(`${API_BASE_URL}/schools-fetch`);
     if (!response.ok) {
       throw new Error(`School request failed (${response.status}).`);
@@ -91,11 +51,12 @@ async function loadSchools(currentSchool, setSchools, setSchoolId, setSchoolLoad
 
     setSchools(schoolOptions);
     setSchoolId((currentId) =>
-      currentId ||
-      schoolOptions.find((option) => option.name === currentSchool)?.id ||
-      ""
+      schoolOptions.some((option) => option.id === currentId)
+        ? currentId
+        : schoolOptions.find((option) => option.id === currentSchoolId)?.id ||
+          schoolOptions.find((option) => option.name === currentSchool)?.id ||
+          ""
     );
-    setSchoolLoadError("");
   } catch {
     setSchoolLoadError("Could not load the school list. Please try again.");
   }
@@ -103,25 +64,25 @@ async function loadSchools(currentSchool, setSchools, setSchoolId, setSchoolLoad
 
 // onUserUpdated(updatedUser) lets the parent refresh its user state after a save.
 const AccountPage = ({ user, name, initials, onUserUpdated }) => {
+  const userRole = user?.role?.toLowerCase();
+  const canEditProfile = userRole === "admin";
+  const canEditSchool =
+    userRole === "admin" || userRole === "interventionist";
   const [editing, setEditing] = useState(false);
-  const [notes, setNotes] = useState([]);
-  const [studentNames, setStudentNames] = useState({});
-  const [students, setStudents] = useState([]);
-  const [notesError, setNotesError] = useState("");
-  const [noteActionError, setNoteActionError] = useState("");
-  const [noteFilter, setNoteFilter] = useState("");
-  const [studentFilter, setStudentFilter] = useState("");
-  const [noteDraft, setNoteDraft] = useState("");
-  const [isNotePrivate, setIsNotePrivate] = useState(false);
-  const [noteStudentId, setNoteStudentId] = useState("");
-  const [editingNoteId, setEditingNoteId] = useState(null);
-  const [isAddingNote, setIsAddingNote] = useState(false);
-  const [isSavingNote, setIsSavingNote] = useState(false);
-  const [deletingNoteId, setDeletingNoteId] = useState(null);
   const [schoolId, setSchoolId] = useState(
-    user?.school == null ? "" : String(user.school)
+    user?.school_id != null
+      ? String(user.school_id)
+      : /^\d+$/.test(String(user?.school ?? ""))
+        ? String(user.school)
+        : ""
   );
+  const [profileDraft, setProfileDraft] = useState({
+    first_name: user?.first_name || "",
+    last_name: user?.last_name || "",
+    email: user?.email || "",
+  });
   const [schools, setSchools] = useState([]);
+  const [schoolsLoading, setSchoolsLoading] = useState(true);
   const [schoolLoadError, setSchoolLoadError] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
@@ -129,37 +90,33 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
   const [passwordNotice, setPasswordNotice] = useState("");
 
   useEffect(() => {
+    setSchoolsLoading(true);
     loadSchools(
-      user?.school_name || user?.school,
+      user?.school_name ||
+        (typeof user?.school === "string" && !/^\d+$/.test(user.school)
+          ? user.school
+          : ""),
+      user?.school_id == null
+        ? /^\d+$/.test(String(user?.school ?? ""))
+          ? String(user.school)
+          : ""
+        : String(user.school_id),
       setSchools,
       setSchoolId,
       setSchoolLoadError
-    );
-
-  }, [user?.school, user?.school_name]);
-
-  useEffect(() => {
-    if (user?.public_id) {
-      fetchUserNotes(user.public_id)
-        .then(setNotes)
-        .catch((error) => setNotesError(error.message));
-    } else {
-      setNotesError("Your account ID is missing; notes cannot be loaded.");
-    }
-    fetchStudentNames()
-      .then(({ names, students: studentOptions }) => {
-        setStudentNames(names);
-        setStudents(studentOptions);
-      })
-      .catch((error) => setNotesError(error.message));
-  }, [user?.public_id]);
+    ).finally(() => setSchoolsLoading(false));
+  }, [user?.school, user?.school_id, user?.school_name]);
 
   const selectedSchool = schools.find((option) => option.id === schoolId);
   const schoolName =
     selectedSchool?.name ||
     user?.school_name ||
-    user?.school ||
-    "No school assigned";
+    (typeof user?.school === "string" &&
+    !/^\d+$/.test(user.school)
+      ? user.school
+      : user?.school == null
+        ? "No school assigned"
+        : "School unavailable");
 
   const details = [
     { label: "Name: ", value: name },
@@ -167,43 +124,64 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
     { label: "Role: ", value: user?.role || "Not provided" },
     { label: "School: ", value: schoolName },
   ];
-
   const startEditing = () => {
-    setSchoolId(user?.school_id == null ? "" : String(user.school_id));
+    setSchoolId(
+      user?.school_id != null
+        ? String(user.school_id)
+        : /^\d+$/.test(String(user?.school ?? ""))
+          ? String(user.school)
+          : ""
+    );
+    setProfileDraft({
+      first_name:
+        user?.first_name || (name || "").trim().split(/\s+/)[0] || "",
+      last_name:
+        user?.last_name || (name || "").trim().split(/\s+/).slice(1).join(" "),
+      email: user?.email || "",
+    });
     setSaveError("");
     setEditing(true);
   };
 
-  const handleSave = async () => {
+  const handleSave = async (event) => {
+    event.preventDefault();
     setSaving(true);
     setSaveError("");
     try {
       if (!user?.id) {
         throw new Error("The logged-in user ID is missing.");
       }
-      if (!selectedSchool) {
+      if (schoolsLoading || schoolLoadError) {
+        throw new Error("Wait for the school list to load before saving.");
+      }
+      if (schoolId && !selectedSchool) {
         throw new Error("Select a school from the list.");
       }
 
-      const params = new URLSearchParams({
-        user_id: String(user.id),
-        new_school_id: selectedSchool.id,
+      const profileUpdates = canEditProfile
+        ? {
+            ...profileDraft,
+            school: selectedSchool ? Number(selectedSchool.id) : null,
+          }
+        : { school: selectedSchool ? Number(selectedSchool.id) : null };
+      const response = await apiFetch(`${API_BASE_URL}/account/profile`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(profileUpdates),
       });
-      const response = await apiFetch(`${API_BASE_URL}/schools-update?${params}`, {
-        method: "PUT",
-      });
+      const result = await response.json();
       if (!response.ok) {
-        const error = await response.json().catch(() => null);
-        throw new Error(
-          error?.detail || `School update failed (${response.status}).`
-        );
+        throw new Error(result.detail || `Profile update failed (${response.status}).`);
+      }
+      if (!result.user || result.user.id !== user.id) {
+        throw new Error("The profile update response has an unexpected format.");
       }
 
       onUserUpdated?.({
         ...user,
-        school_id: selectedSchool.id,
-        school_name: selectedSchool.name,
-        school: selectedSchool.name,
+        ...result.user,
+        school_id: selectedSchool?.id ?? null,
+        school_name: selectedSchool?.name ?? "",
       });
       setEditing(false);
     } catch (error) {
@@ -217,139 +195,13 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
     }
   };
 
-  const closeNoteForm = () => {
-    setIsAddingNote(false);
-    setEditingNoteId(null);
-    setNoteDraft("");
-    setIsNotePrivate(false);
-    setNoteStudentId("");
-    setNoteActionError("");
-  };
-
-  const startAddingNote = () => {
-    setNoteDraft("");
-    setIsNotePrivate(false);
-    setNoteStudentId("");
-    setEditingNoteId(null);
-    setIsAddingNote(true);
-    setNoteActionError("");
-  };
-
-  const startEditingNote = (note) => {
-    setNoteDraft(note.text || "");
-    setNoteStudentId(String(note.student_id));
-    setEditingNoteId(note.id);
-    setIsAddingNote(false);
-    setNoteActionError("");
-  };
-
-  const saveNote = async (event) => {
-    event.preventDefault();
-    const text = noteDraft.trim();
-    if (!text || (!isAddingNote && editingNoteId === null)) {
-      setNoteActionError("Enter note text before saving.");
-      return;
-    }
-    if (isAddingNote && !noteStudentId) {
-      setNoteActionError("Select a student or personal note.");
-      return;
-    }
-    if (!user?.public_id) {
-      setNoteActionError("Your account ID is missing; this note cannot be saved.");
-      return;
-    }
-
-    setIsSavingNote(true);
-    setNoteActionError("");
-    try {
-      const response = isAddingNote
-        ? await apiFetch(`${API_BASE_URL}/notes-create`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              student_id:
-                noteStudentId === "personal" ? null : Number(noteStudentId),
-              created_by: user.public_id,
-              text,
-              is_private: isNotePrivate,
-            }),
-          })
-        : await apiFetch(
-            `${API_BASE_URL}/notes-editText?${new URLSearchParams({
-              note_id: String(editingNoteId),
-              new_text: text,
-            })}`,
-            { method: "PUT" }
-          );
-      if (!response.ok) {
-        const result = await response.json().catch(() => ({}));
-        throw new Error(result.detail || "Unable to save this note.");
-      }
-
-      setNotes(await fetchUserNotes(user.public_id));
-      closeNoteForm();
-    } catch (error) {
-      setNoteActionError(error.message || "Unable to save this note.");
-    } finally {
-      setIsSavingNote(false);
-    }
-  };
-
-  const deleteNote = async (note) => {
-    if (
-      !window.confirm(
-        "Delete this note? This action cannot be undone."
-      )
-    ) {
-      return;
-    }
-    if (!user?.public_id) {
-      setNoteActionError("Your account ID is missing; this note cannot be deleted.");
-      return;
-    }
-
-    setDeletingNoteId(note.id);
-    setNoteActionError("");
-    try {
-      const params = new URLSearchParams({
-        note_id: String(note.id),
-        user_id: user.public_id,
-      });
-      const response = await apiFetch(`${API_BASE_URL}/notes-delete?${params}`, {
-        method: "DELETE",
-      });
-      if (!response.ok) {
-        throw new Error("Unable to delete this note.");
-      }
-      setNotes(await fetchUserNotes(user.public_id));
-    } catch (error) {
-      setNoteActionError(error.message || "Unable to delete this note.");
-    } finally {
-      setDeletingNoteId(null);
-    }
-  };
-
-  const filteredNotes = notes.filter((note) => {
-    const studentName = studentNames[note.student_id] || "";
-    const query = noteFilter.trim().toLowerCase();
-    return (
-      (!query ||
-        note.text?.toLowerCase().includes(query) ||
-        studentName.toLowerCase().includes(query)) &&
-      (!studentFilter ||
-        (studentFilter === "personal"
-          ? note.student_id == null
-          : String(note.student_id) === studentFilter))
-    );
-  });
-
   return (
     <div className="account-page">
-      <div className="page-heading">
-        <span className="eyebrow">Account</span>
-        <h1>My profile</h1>
-        <p>Manage your teacher account and intervention preferences.</p>
-      </div>
+      <PageHeading
+        eyebrow="Account"
+        title="My profile"
+        subtitle="Manage your teacher account and intervention preferences."
+      />
 
       <section className="card account-header">
         <div className="account-avatar">{initials}</div>
@@ -360,18 +212,24 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
             {` · ${schoolName}`}
           </p>
         </div>
-        
       </section>
 
       <div className="account-grid">
         <section className="card account-card">
-          <div className="card-title">
-            <h2>Account details</h2>
-
-            <span className="status-pill">
-              <CheckCircle2 size={15} /> {!editing && (<button className="text-button" onClick={startEditing}><h2>Edit profile</h2></button>)}
-            </span>
-          </div>
+          <CardTitle
+            title="Account details"
+            action={
+              !editing && canEditSchool && (
+                <button
+                  className="text-button"
+                  type="button"
+                  onClick={startEditing}
+                >
+                  Edit profile
+                </button>
+              )
+            }
+          />
 
           <div className="detail-list">
             {details.map(({ label, value }) => (
@@ -383,58 +241,129 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
           </div>
 
           {editing && (
-            <div className="edit-school">
-              <h3>Edit school</h3>
-              <label htmlFor="school-select">School</label>
-              <select
-                id="school-select"
-                value={schoolId}
-                onChange={(e) => setSchoolId(e.target.value)}
-                disabled={schools.length === 0}
-              >
-                <option value="" disabled>
-                  {schoolLoadError ? "School list unavailable" : "Select a school"}
-                </option>
-                {schools.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.name}
-                  </option>
-                ))}
-              </select>
+            <form
+              className="user-edit-form account-school-form"
+              onSubmit={handleSave}
+            >
+              <h3>Edit profile</h3>
+              <label>
+                First name
+                <input
+                  value={profileDraft.first_name}
+                  readOnly={!canEditProfile}
+                  onChange={(event) =>
+                    setProfileDraft((current) => ({
+                      ...current,
+                      first_name: event.target.value,
+                    }))
+                  }
+                  maxLength={100}
+                  required
+                />
+              </label>
+              <label>
+                Last name
+                <input
+                  value={profileDraft.last_name}
+                  readOnly={!canEditProfile}
+                  onChange={(event) =>
+                    setProfileDraft((current) => ({
+                      ...current,
+                      last_name: event.target.value,
+                    }))
+                  }
+                  maxLength={100}
+                  required
+                />
+              </label>
+              <label>
+                Email
+                <input
+                  type="email"
+                  value={profileDraft.email}
+                  readOnly={!canEditProfile}
+                  onChange={(event) =>
+                    setProfileDraft((current) => ({
+                      ...current,
+                      email: event.target.value,
+                    }))
+                  }
+                  maxLength={254}
+                  required
+                />
+              </label>
+              <label>
+                Role
+                <input value={user?.role || ""} readOnly />
+              </label>
+              <label>
+                School
+                <select
+                  value={schoolId}
+                  onChange={(event) => setSchoolId(event.target.value)}
+                  disabled={
+                    !canEditSchool ||
+                    schoolsLoading ||
+                    Boolean(schoolLoadError)
+                  }
+                >
+                  <option value="">No school assigned</option>
+                  {schools.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-              {schoolLoadError && <small>{schoolLoadError}</small>}
-              {saveError && <small>{saveError}</small>}
+              {schoolLoadError && (
+                <p className="assignment-error error-state" role="alert">
+                  {schoolLoadError}
+                </p>
+              )}
+              {saveError && (
+                <p className="assignment-error error-state" role="alert">
+                  {saveError}
+                </p>
+              )}
 
-              <div className="edit-actions">
+              <div className="user-edit-actions">
                 <button
                   className="ghost-button"
-                  onClick={handleSave}
-                  disabled={!selectedSchool || !user?.id || saving}
+                  type="submit"
+                  disabled={
+                    (!canEditProfile && !canEditSchool) ||
+                    schoolsLoading ||
+                    Boolean(schoolLoadError) ||
+                    Boolean(schoolId && !selectedSchool) ||
+                    !user?.id ||
+                    saving
+                  }
                 >
                   {saving ? "Saving…" : "Save changes"}
                 </button>
                 <button
-                  className="secondary-button"
+                  className="ghost-button"
+                  type="button"
                   onClick={() => setEditing(false)}
                   disabled={saving}
                 >
                   Cancel
                 </button>
               </div>
-            </div>
+            </form>
           )}
         </section>
 
         <section className="card account-card security-card">
-          <div className="card-title">
-            <h2>Security</h2>
-            <ShieldCheck size={18} />
-          </div>
+          <CardTitle
+            title="Security"
+            action={<ShieldCheck size={18} aria-hidden="true" />}
+          />
 
           <div className="security-item">
             <div className="security-icon">
-              <Lock size={17} />
-              {" "}
+              <Lock size={17} aria-hidden="true" />
               <strong>Password</strong>
             </div>
             <button
@@ -466,166 +395,16 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
 
           <div className="security-item">
             <div className="security-icon muted-icon">
-              <Mail size={17} />
-              {" "}
+              <Mail size={17} aria-hidden="true" />
               <strong>Email notifications (not implemented yet)</strong>
             </div>
-            <button className="ghost-button" type="button">Manage</button>
-          </div>
-        </section>
-
-        <section className="card account-card">
-          <div className="card-title">
-            <h2>Notes</h2>
-            <UserRound size={18} />
-          </div>
-
-          <p className="Note-description">
-            Filter your notes, add new notes, edit or delete existing notes. You can also view which student each note is associated with.
-          </p>
-
-          <div className="account-notes-toolbar">
-            <input
-              type="search"
-              aria-label="Filter notes"
-              placeholder="Filter notes by text or student"
-              value={noteFilter}
-              onChange={(event) => setNoteFilter(event.target.value)}
-            />
-            <select
-              aria-label="Filter notes by student"
-              value={studentFilter}
-              onChange={(event) => setStudentFilter(event.target.value)}
-            >
-              <option value="">All students</option>
-              <option value="personal">Personal notes (N/A)</option>
-              {students.map((student) => (
-                <option key={student.id} value={student.id}>
-                  {student.name || "Unnamed student"}
-                </option>
-              ))}
-            </select>
-            <button
-              className="ghost-button"
-              type="button"
-              onClick={startAddingNote}
-              disabled={!user?.public_id}
-            >
-              Add note
+            <button className="ghost-button" type="button">
+              Manage
             </button>
           </div>
-
-          {(isAddingNote || editingNoteId !== null) && (
-            <form className="account-note-form" onSubmit={saveNote}>
-              {isAddingNote && (
-                <label>
-                  Student
-                  <select
-                    value={noteStudentId}
-                    onChange={(event) => setNoteStudentId(event.target.value)}
-                    required
-                  >
-                    <option value="">Select a student</option>
-                    <option value="personal">Personal note (student: N/A)</option>
-                    {students.map((student) => (
-                      <option key={student.id} value={student.id}>
-                        {student.name || "Unnamed student"}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-              <label>
-                Note
-                <textarea
-                  value={noteDraft}
-                  onChange={(event) => setNoteDraft(event.target.value)}
-                  rows={3}
-                  required
-                  autoFocus
-                />
-              </label>
-              {isAddingNote && (
-                <label className="note-privacy-option">
-                  <input
-                    type="checkbox"
-                    checked={isNotePrivate}
-                    onChange={(event) => setIsNotePrivate(event.target.checked)}
-                  />
-                  Private note
-                </label>
-              )}
-              <div className="notes-actions">
-                <button
-                  className="primary-button"
-                  type="submit"
-                  disabled={isSavingNote}
-                >
-                  {isSavingNote ? "Saving..." : "Save note"}
-                </button>
-                <button
-                  className="ghost-button"
-                  type="button"
-                  onClick={closeNoteForm}
-                  disabled={isSavingNote}
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          )}
-
-          {noteActionError && (
-            <p className="error-state" role="alert">{noteActionError}</p>
-          )}
-
-          <div className="card student-table-card notes-table">
-            <div className="table-head">
-              <span>Text</span>
-              <span>Date</span>
-              <span>Student</span>
-              <span>Actions</span>
-            </div>
-
-            <div className="table-body">
-              {filteredNotes.map((note) => (
-                <div className="student-row note-row" key={note.id}>
-                  <span>{note.text}</span>
-                  <span>{note.date}</span>
-                  <span>{studentNames[note.student_id] || "N/A"}</span>
-                  <span className="account-note-actions">
-                    <button
-                      className="note-edit-button"
-                      type="button"
-                      aria-label="Edit note"
-                      title="Edit note"
-                      onClick={() => startEditingNote(note)}
-                      disabled={deletingNoteId !== null || isSavingNote}
-                    >
-                      <Pencil size={14} aria-hidden="true" />
-                    </button>
-                    <button
-                      className="note-delete-button"
-                      type="button"
-                      aria-label="Delete note"
-                      title="Delete note"
-                      onClick={() => deleteNote(note)}
-                      disabled={!user?.public_id || deletingNoteId !== null}
-                    >
-                      <Trash2 size={14} aria-hidden="true" />
-                    </button>
-                  </span>
-                </div>
-              ))}
-              {!notesError && filteredNotes.length === 0 && (
-                <p className="account-notes-empty">
-                  {notes.length ? "No notes match these filters." : "No notes yet."}
-                </p>
-              )}
-            </div>
-          </div>
-          {notesError && <p role="alert">{notesError}</p>}
         </section>
+
+        <AccountNotesCard userId={user?.public_id} />
       </div>
     </div>
   );

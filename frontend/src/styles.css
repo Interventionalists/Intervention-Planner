@@ -833,6 +833,18 @@ nav { display: grid; gap: 6px; }
   align-items: end;
   gap: 12px;
 }
+.account-school-form {
+  grid-template-columns: repeat(3, minmax(140px, 1fr));
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #edf0f4;
+}
+.account-school-form h3 {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #344054;
+  font-size: 14px;
+}
 .user-edit-form label {
   display: grid;
   gap: 6px;
@@ -850,6 +862,11 @@ nav { display: grid; gap: 6px; }
   background: white;
   color: #344054;
   font: inherit;
+}
+.user-edit-form input[readonly] {
+  background: #f7f9fc;
+  color: #667085;
+  cursor: default;
 }
 .user-edit-actions {
   grid-column: 1 / -1;
