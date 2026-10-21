@@ -326,3 +326,47 @@ def delete_note(note_id, user_id):
         .execute()
     )
     return bool(response.data)
+
+
+########################### HEALTH CHECK FUNCTIONS #######################################
+#these use the shared service_role client above. health_checks has RLS on with no
+#policies, so service_role is the only key that can read or write it. They only
+#ever touch health_checks, never student or user tables.
+
+HEALTH_CHECK_COLUMNS = "service, check_type, status, latency_ms, details, checked_at"
+
+#cheapest possible round trip, used by the public /health endpoint
+def ping_database():
+    supabase.table("health_checks").select("id").limit(1).execute()
+    return True
+
+def insert_health_checks(rows: list[dict]):
+    if rows:
+        supabase.table("health_checks").insert(rows).execute()
+
+def delete_health_checks_before(cutoff_iso: str):
+    supabase.table("health_checks").delete().lt("checked_at", cutoff_iso).execute()
+
+def fetch_health_history(service: str, since_iso: str, limit: int = 500):
+    response = (
+        supabase.table("health_checks")
+        .select(HEALTH_CHECK_COLUMNS)
+        .eq("service", service)
+        .gte("checked_at", since_iso)
+        .order("checked_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    return response.data
+
+def fetch_health_events(since_iso: str, limit: int = 20):
+    response = (
+        supabase.table("health_checks")
+        .select(HEALTH_CHECK_COLUMNS)
+        .neq("status", "ok")
+        .gte("checked_at", since_iso)
+        .order("checked_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    return response.data

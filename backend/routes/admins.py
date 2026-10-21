@@ -61,12 +61,12 @@ def update_user_info(user_id: int, payload: UserUpdateRequest):
 
 #fuction that updates locked until date for a user
 @router.patch("/admins-users-lock/{user_id}")
-def update_user_lock(user_id: int, locked_until: str):
+def update_user_lock(user_id: int, locked_until: str, failed_login_attempts: int = 0):
     try:
         updated_user = update_user(
             user_id,
             {"locked_until": locked_until},
-            {"failed_login_attempts": 0},
+            {"failed_login_attempts": failed_login_attempts},
         )
     except Exception as e:
         raise HTTPException(

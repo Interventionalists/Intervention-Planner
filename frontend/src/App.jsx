@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { themePresets } from "./data";
 import { Header, Sidebar } from "./components/AppNavigation";
@@ -21,6 +21,13 @@ import {
 } from "./api";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
+// lazy so the charting library only downloads for admins who open Status
+const SystemHealthPage = lazy(() => import("./pages/SystemHealthPage"));
+
+// pages only admins may open. The backend enforces this too; hiding them here
+// is just so other roles never see a page they can't use.
+const ADMIN_PAGES = new Set(["users", "status"]);
 
 function relatedUserName(user) {
   return user
@@ -172,7 +179,7 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
   );
 
   const selectPage = (id) => {
-    if (id === "users" && user?.role !== "admin") {
+    if (ADMIN_PAGES.has(id) && user?.role !== "admin") {
       return;
     }
     setPage(id);
@@ -221,11 +228,19 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
           userName={userName}
           userInitials={userInitials}
           onAccountClick={() => selectPage("account")}
-          showSearch={page !== "users"}
+          showSearch={!ADMIN_PAGES.has(page)}
         />
 
         <main className="content">
-          {studentsLoading ? (
+          {/* status doesn't depend on student data, so it renders even when
+              students fail to load -- which is exactly when it's needed */}
+          {page === "status" ? (
+            user?.role === "admin" && (
+              <Suspense fallback={<div className="data-state" role="status">Loading system status...</div>}>
+                <SystemHealthPage role={user.role} />
+              </Suspense>
+            )
+          ) : studentsLoading ? (
             <div className="data-state" role="status">Loading students...</div>
           ) : studentsError ? (
             <div className="data-state error-state" role="alert">
