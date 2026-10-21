@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 import { useStudentNotes } from "../hooks/useStudentNotes";
+import { apiFetch } from "../api";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -52,7 +53,7 @@ function StudentNotes({ studentId, userId, variant = "profile" }) {
 
     try {
       const response = addNewNote
-        ? await fetch(`${API_BASE_URL}/notes-create`, {
+        ? await apiFetch(`${API_BASE_URL}/notes-create`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -61,7 +62,7 @@ function StudentNotes({ studentId, userId, variant = "profile" }) {
               text: draftNote.trim(),
             }),
           })
-        : await fetch(`${API_BASE_URL}/notes-editText?${params}`, {
+        : await apiFetch(`${API_BASE_URL}/notes-editText?${params}`, {
             method: "PUT",
           });
 
@@ -94,7 +95,7 @@ function StudentNotes({ studentId, userId, variant = "profile" }) {
     });
 
     try {
-      const response = await fetch(`${API_BASE_URL}/notes-delete?${params}`, {
+      const response = await apiFetch(`${API_BASE_URL}/notes-delete?${params}`, {
         method: "DELETE",
       });
       if (!response.ok) {

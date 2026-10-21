@@ -49,13 +49,24 @@ button { cursor: pointer; }
 }
 
 .login-brand-mark {
-  width: 36px;
-  height: 36px;
+  width: 6rem;
+  height: auto;
   display: grid;
   place-items: center;
+  overflow: hidden;
+  padding: 2px;
   border-radius: 8px;
   background: #079bd8;
   font-weight: 700;
+}
+
+.login-brand-mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+  background: white;
+  object-fit: contain;
 }
 
 .login-brand-copy {
@@ -529,6 +540,37 @@ nav { display: grid; gap: 6px; }
 .student-card h2 { margin: 0 0 10px; font-size: 22px; }
 .student-card > p { margin: 6px 0; font-size: 13px; }
 
+.attention-student-list {
+  display: grid;
+  gap: 8px;
+}
+
+.attention-student {
+  display: grid;
+  gap: 5px;
+  padding: 10px 0;
+  border: 0;
+  border-top: 1px solid #edf0f4;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.attention-student:hover .attention-student-name {
+  color: var(--primary);
+}
+
+.attention-student-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.attention-student-scores {
+  color: #758095;
+  font-size: 11px;
+}
+
 .student-notes {
   text-align: left;
   margin-top: 20px;
@@ -749,6 +791,62 @@ nav { display: grid; gap: 6px; }
 
 .student-list-section { margin-bottom: 28px; }
 .student-list-section > h2 { margin: 0 0 12px; font-size: 18px; }
+.user-list { display: grid; gap: 10px; }
+.user-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(100px, auto) minmax(150px, auto) auto;
+  align-items: center;
+  gap: 14px;
+}
+.user-row > div { display: grid; gap: 4px; }
+.user-row > div span,
+.user-school { color: #758095; font-size: 12px; }
+.user-role {
+  width: fit-content;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #f2f4f7;
+  color: #475467;
+  font-size: 12px;
+  text-transform: capitalize;
+}
+.user-row > .user-row-actions {
+  display: flex;
+  justify-self: end;
+  gap: 8px;
+}
+.user-edit-actions button:disabled { opacity: .55; cursor: not-allowed; }
+.user-edit-form {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(140px, 1fr));
+  align-items: end;
+  gap: 12px;
+}
+.user-edit-form label {
+  display: grid;
+  gap: 6px;
+  color: #475467;
+  font-size: 12px;
+  font-weight: 600;
+}
+.user-edit-form input {
+  min-width: 0;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid #d9dee7;
+  border-radius: 6px;
+  background: white;
+  color: #344054;
+  font: inherit;
+}
+.user-edit-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.user-edit-form .assignment-error { grid-column: 1 / -1; }
 .unassigned-student-list { display: grid; gap: 10px; }
 .unassigned-student-row {
   display: flex;
@@ -891,6 +989,8 @@ nav { display: grid; gap: 6px; }
   gap: 10px;
   margin: 16px 0;
 }
+
+.users-filter-toolbar { align-items: flex-end; }
 
 .account-notes-toolbar input,
 .account-notes-toolbar select,
@@ -1124,6 +1224,11 @@ nav { display: grid; gap: 6px; }
 
 @media (max-width: 760px) {
   .unassigned-student-row { align-items: stretch; flex-direction: column; }
+  .user-row { grid-template-columns: 1fr auto; }
+  .user-school { grid-column: 1 / -1; }
+  .user-edit-form { grid-template-columns: 1fr; }
+  .user-edit-actions,
+  .user-edit-form .assignment-error { grid-column: 1; }
   .student-assignment-controls { align-items: stretch; flex-direction: column; }
   .student-assignment-controls select { width: 100%; }
   .student-filter-field { flex: 1 1 140px; }

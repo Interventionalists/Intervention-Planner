@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { themePresets } from "./data";
 import { Header, Sidebar } from "./components/AppNavigation";
@@ -9,10 +9,17 @@ import ReportsPage from "./pages/ReportsPage";
 import SettingsPage from "./pages/SettingsPage";
 import StudentProfilePage from "./pages/StudentProfilePage";
 import StudentsPage from "./pages/StudentsPage";
+import UsersPage from "./pages/UsersPage";
 import LoginPage from "./LoginPage";
+import {
+  AUTH_SESSION_KEY,
+  AUTH_TOKEN_KEY,
+  AUTH_USER_KEY,
+  apiFetch,
+  clearAuthSession,
+  getAuthToken,
+} from "./api";
 
-const AUTH_SESSION_KEY = "interventioner-demo-authenticated";
-const AUTH_USER_KEY = "interventioner-auth-user";
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 function relatedUserName(user) {
@@ -29,12 +36,10 @@ function mapStudent(row) {
       [row.first_name, row.last_name].filter(Boolean).join(" ") ||
       "Unnamed student",
     grade: row.grade_level ?? row.grade ?? "—",
-    teacher: row.teacher_name || relatedUserName(row.teacher_user) || "Not assigned",
+    teacher: relatedUserName(row.teacher_user) || "Not assigned",
     interventionTeacher:
-      row.interventionist_name ||
-      relatedUserName(row.interventionist_user) ||
-      "Not assigned",
-    group: row.group_number ?? row.group ?? "—",
+      relatedUserName(row.interventionist_user) || "Not assigned",
+    group: row.group ?? "—",
     avatar: `https://api.dicebear.com/9.x/adventurer/svg?seed=${encodeURIComponent(
       [row.first_name, row.last_name].filter(Boolean).join(" ") || row.id
     )}`,
@@ -45,14 +50,15 @@ function mapStudent(row) {
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(
-    () => sessionStorage.getItem(AUTH_SESSION_KEY) === "true"
+    () => sessionStorage.getItem(AUTH_SESSION_KEY) === "true" && Boolean(getAuthToken())
   );
   const [currentUser, setCurrentUser] = useState(() => {
     const savedUser = sessionStorage.getItem(AUTH_USER_KEY);
     return savedUser ? JSON.parse(savedUser) : null;
   });
 
-  const logIn = (user) => {
+  const logIn = ({ access_token, user }) => {
+    sessionStorage.setItem(AUTH_TOKEN_KEY, access_token);
     sessionStorage.setItem(AUTH_SESSION_KEY, "true");
     sessionStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
     setCurrentUser(user);
@@ -65,8 +71,7 @@ function App() {
   };
 
   const logOut = () => {
-    sessionStorage.removeItem(AUTH_SESSION_KEY);
-    sessionStorage.removeItem(AUTH_USER_KEY);
+    clearAuthSession();
     setCurrentUser(null);
     setIsAuthenticated(false);
   };
@@ -131,7 +136,7 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
   useEffect(() => {
     const controller = new AbortController();
 
-    fetch(`${API_BASE_URL}/students-fetch`, { signal: controller.signal })
+    apiFetch(`${API_BASE_URL}/students-fetch`, { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) {
           throw new Error("Unable to load students from the database.");
@@ -158,7 +163,18 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
     return () => controller.abort();
   }, []);
 
+  const filteredStudents = useMemo(
+    () =>
+      studentsData.filter((student) =>
+        student.name.toLowerCase().includes(query.toLowerCase())
+      ),
+    [query, studentsData]
+  );
+
   const selectPage = (id) => {
+    if (id === "users" && user?.role !== "admin") {
+      return;
+    }
     setPage(id);
     setMobileOpen(false);
   };
@@ -194,6 +210,7 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
         closeMobile={() => setMobileOpen(false)}
         onLogout={onLogout}
         userName={userName}
+        role={user?.role}
       />
 
       <div className="main-shell">
@@ -204,6 +221,7 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
           userName={userName}
           userInitials={userInitials}
           onAccountClick={() => selectPage("account")}
+          showSearch={page !== "users"}
         />
 
         <main className="content">
@@ -222,9 +240,11 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
                   student={selectedStudent}
                   students={studentsData}
                   onStudentChange={setSelectedStudent}
+                  onStudentSelect={openStudentProfile}
                   onStudents={() => selectPage("students")}
                   userName={userName}
-                  userId={user?.public_id}
+                   userId={user?.public_id}
+                  role={user?.role}
                 />
               )}
               {page === "student-profile" && (
@@ -232,20 +252,27 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
                   student={selectedStudent}
                   onBack={() => selectPage("students")}
                   userId={user?.public_id}
-                onStudentUpdated={updateSelectedStudent}
+                  role={user?.role}
                 />
               )}
               {page === "students" && (
                 <StudentsPage
-                  students={studentsData}
-                  query={query}
+                  students={filteredStudents}
                   selectedStudent={selectedStudent}
+                  userId={user?.public_id}
+                  role={user?.role}
                   onSelect={openStudentProfile}
-                  user={user}
-            />
+                />
+              )}
+              {page === "users" && user?.role === "admin" && (
+                <UsersPage
+                  role={user.role}
+                  signedInUser={user}
+                  onUserUpdated={onUserUpdated}
+                />
               )}
               {page === "calendar" && <CalendarPage />}
-              {page === "reports" && <ReportsPage />}
+              {page === "reports" && <ReportsPage students={studentsData} />}
               {page === "settings" && (
                 <SettingsPage theme={theme} setTheme={setTheme} />
               )}

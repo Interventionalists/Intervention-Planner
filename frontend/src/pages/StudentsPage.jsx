@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import StudentsList from "../components/StudentsList";
 import { PageHeading } from "../components/PageElements";
+import { apiFetch } from "../api";
 
 const API_BASE_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:8000"
@@ -41,7 +42,24 @@ function formatStudent(record) {
   };
 }
 
-function StudentsPage({ query = "", selectedStudent, onSelect, user }) {
+// Builds an error for a failed request. 4xx responses carry a readable reason
+// from the backend (e.g. no school assigned), so that one is shown to the user;
+// 5xx details are raw server errors and stay in the console only.
+async function requestError(response, label) {
+  let detail = "";
+  try {
+    detail = (await response.json()).detail;
+  } catch {
+    // body was not JSON
+  }
+  const error = new Error(`${label} request failed (${response.status}).`);
+  if (response.status < 500 && typeof detail === "string" && detail) {
+    error.userMessage = detail;
+  }
+  return error;
+}
+
+function StudentsPage({ query = "", selectedStudent, onSelect, userId }) {
   const [students, setStudents] = useState([]);
   const [unassignedStudents, setUnassignedStudents] = useState([]);
   const [interventionists, setInterventionists] = useState([]);
@@ -63,33 +81,33 @@ function StudentsPage({ query = "", selectedStudent, onSelect, user }) {
       setError("");
 
       try {
-        if (!user?.public_id) {
+        if (!userId) {
           throw new Error("The signed-in user's public ID is missing.");
         }
 
         const [assignedResponse, unassignedResponse, interventionistsResponse] =
           await Promise.all([
-            fetch(
-              `${API_BASE_URL}/students-fetch/${encodeURIComponent(user.public_id)}`,
+            apiFetch(
+              `${API_BASE_URL}/students-fetch/${encodeURIComponent(userId)}`,
               { signal: controller.signal }
             ),
-            fetch(
-              `${API_BASE_URL}/students-unassigned-fetch/${encodeURIComponent(user.public_id)}`,
+            apiFetch(
+              `${API_BASE_URL}/students-unassigned-fetch/${encodeURIComponent(userId)}`,
               { signal: controller.signal }
             ),
-            fetch(
-              `${API_BASE_URL}/interventionists-fetch/${encodeURIComponent(user.public_id)}`,
+            apiFetch(
+              `${API_BASE_URL}/interventionists-fetch/${encodeURIComponent(userId)}`,
               { signal: controller.signal }
             ),
           ]);
         if (!assignedResponse.ok) {
-          throw new Error(`Assigned student request failed (${assignedResponse.status}).`);
+          throw await requestError(assignedResponse, "Assigned student");
         }
         if (!unassignedResponse.ok) {
-          throw new Error(`Unassigned student request failed (${unassignedResponse.status}).`);
+          throw await requestError(unassignedResponse, "Unassigned student");
         }
         if (!interventionistsResponse.ok) {
-          throw new Error(`Interventionist request failed (${interventionistsResponse.status}).`);
+          throw await requestError(interventionistsResponse, "Interventionist");
         }
 
         const [assignedData, unassignedData, interventionistsData] =
@@ -113,7 +131,11 @@ function StudentsPage({ query = "", selectedStudent, onSelect, user }) {
       } catch (loadError) {
         if (loadError.name !== "AbortError") {
           console.error("Error fetching students:", loadError);
-          setError("Could not load students. Please try again.");
+          setError(
+            loadError.userMessage
+              ? `Could not load students: ${loadError.userMessage}`
+              : "Could not load students. Please try again."
+          );
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -124,7 +146,7 @@ function StudentsPage({ query = "", selectedStudent, onSelect, user }) {
 
     loadStudents();
     return () => controller.abort();
-  }, [reloadKey, user?.public_id]);
+  }, [reloadKey, userId]);
 
   const assignStudent = async (student) => {
     const interventionistId = assignmentIds[student.id];
@@ -141,14 +163,14 @@ function StudentsPage({ query = "", selectedStudent, onSelect, user }) {
     setAssignmentMessage("");
 
     try {
-      const response = await fetch(
+      const response = await apiFetch(
         `${API_BASE_URL}/students-assign/${encodeURIComponent(student.id)}`,
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             interventionist_id: interventionistId,
-            requester_id: user.public_id,
+            requester_id: userId,
           }),
         }
       );

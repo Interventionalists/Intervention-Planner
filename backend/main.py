@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routes.students import router as students_router
 from routes.teachers import router as teachers_router
@@ -9,6 +9,7 @@ from routes.admins import router as admins_router
 from routes.auth import router as auth_router
 from routes.notes import router as notes_router
 from routes.schools import router as schools_router
+from auth.security import get_current_user, require_admin
 
 load_dotenv()
 
@@ -30,10 +31,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(students_router)
-app.include_router(teachers_router)
-app.include_router(interventionists_router)
-app.include_router(admins_router)
+#auth is applied here, per router, so a new endpoint can't forget it.
+#/login and /change-password stay public; admin routes need the admin role.
+protected = [Depends(get_current_user)]
+
 app.include_router(auth_router)
-app.include_router(notes_router)
-app.include_router(schools_router)
+app.include_router(students_router, dependencies=protected)
+app.include_router(teachers_router, dependencies=protected)
+app.include_router(interventionists_router, dependencies=protected)
+app.include_router(notes_router, dependencies=protected)
+app.include_router(schools_router, dependencies=protected)
+app.include_router(admins_router, dependencies=[Depends(require_admin)])

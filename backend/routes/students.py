@@ -1,6 +1,7 @@
 from uuid import UUID
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
+from auth.security import get_current_user, require_self_or_admin
 from database.supabase_client import (
     assign_student_to_interventionist,
     create_student,
@@ -38,17 +39,23 @@ class StudentProfileUpdateRequest(BaseModel):
     group_number: int | None = Field(default=None, ge=1)
 
 
+#admins see every student; everyone else only sees students in their own school.
 @router.get("/students-fetch")
-def get_all_students():
+def get_all_students(user: dict = Depends(get_current_user)):
     try:
-        students = fetch_students()
+        if user["role"] == "admin":
+            students = fetch_students()
+        else:
+            school_id = fetch_user_school_by_public_id(user["public_id"])
+            students = [] if school_id is None else fetch_students(school_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
     return {"students": students}
 
 
 @router.get("/students-fetch/{interventionist_id}")
-def get_students(interventionist_id: UUID):
+def get_students(interventionist_id: UUID, user: dict = Depends(get_current_user)):
+    require_self_or_admin(user, interventionist_id)
     try:
         school_id = fetch_user_school_by_public_id(str(interventionist_id))
         if school_id is None:
@@ -67,7 +74,8 @@ def get_students(interventionist_id: UUID):
 
 
 @router.get("/students-unassigned-fetch/{requester_id}")
-def get_unassigned_students(requester_id: UUID):
+def get_unassigned_students(requester_id: UUID, user: dict = Depends(get_current_user)):
+    require_self_or_admin(user, requester_id)
     try:
         school_id = fetch_user_school_by_public_id(str(requester_id))
         if school_id is None:
@@ -84,7 +92,12 @@ def get_unassigned_students(requester_id: UUID):
 
 
 @router.patch("/students-assign/{student_id}")
-def assign_student(student_id: int, payload: StudentAssignmentRequest):
+def assign_student(
+    student_id: int,
+    payload: StudentAssignmentRequest,
+    user: dict = Depends(get_current_user),
+):
+    require_self_or_admin(user, payload.requester_id)
     try:
         school_id = fetch_user_school_by_public_id(str(payload.requester_id))
         if school_id is None:
@@ -111,7 +124,12 @@ def assign_student(student_id: int, payload: StudentAssignmentRequest):
 
 
 @router.patch("/students-profile/{student_id}")
-def update_student(student_id: int, payload: StudentProfileUpdateRequest):
+def update_student(
+    student_id: int,
+    payload: StudentProfileUpdateRequest,
+    user: dict = Depends(get_current_user),
+):
+    require_self_or_admin(user, payload.requester_id)
     updates = payload.model_dump(
         exclude={"requester_id"},
         exclude_unset=True,
