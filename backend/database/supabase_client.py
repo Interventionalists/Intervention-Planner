@@ -341,15 +341,16 @@ def fetch_notes_from_date(timestamp):
     response = supabase.table("notes").select("*").eq("date", timestamp).execute()
     return response.data
 
-def fetch_notes_for_student(user_id, student_id):
-    response = (supabase.table("notes").select("*").eq("created_by", user_id).eq("student_id", student_id).order("date", desc=True).execute())
+def fetch_notes_for_student(student_id):
+    response = (supabase.table("notes").select("*").eq("student_id", student_id).order("date", desc=True).execute())
     return response.data
 
-def create_note(student_id, created_by, text):
+def create_note(student_id, created_by, text, is_private=False):
     response = supabase.table("notes").insert({
         "student_id": student_id,
         "created_by": created_by,
         "text": text,
+        "privateNote": is_private,
     }).execute()
     return response.data[0] if response.data else None
 

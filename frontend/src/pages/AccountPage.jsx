@@ -112,6 +112,7 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
   const [noteFilter, setNoteFilter] = useState("");
   const [studentFilter, setStudentFilter] = useState("");
   const [noteDraft, setNoteDraft] = useState("");
+  const [isNotePrivate, setIsNotePrivate] = useState(false);
   const [noteStudentId, setNoteStudentId] = useState("");
   const [editingNoteId, setEditingNoteId] = useState(null);
   const [isAddingNote, setIsAddingNote] = useState(false);
@@ -220,12 +221,14 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
     setIsAddingNote(false);
     setEditingNoteId(null);
     setNoteDraft("");
+    setIsNotePrivate(false);
     setNoteStudentId("");
     setNoteActionError("");
   };
 
   const startAddingNote = () => {
     setNoteDraft("");
+    setIsNotePrivate(false);
     setNoteStudentId("");
     setEditingNoteId(null);
     setIsAddingNote(true);
@@ -268,6 +271,7 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
                 noteStudentId === "personal" ? null : Number(noteStudentId),
               created_by: user.public_id,
               text,
+              is_private: isNotePrivate,
             }),
           })
         : await apiFetch(
@@ -278,7 +282,8 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
             { method: "PUT" }
           );
       if (!response.ok) {
-        throw new Error("Unable to save this note.");
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.detail || "Unable to save this note.");
       }
 
       setNotes(await fetchUserNotes(user.public_id));
@@ -540,6 +545,16 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
                   autoFocus
                 />
               </label>
+              {isAddingNote && (
+                <label className="note-privacy-option">
+                  <input
+                    type="checkbox"
+                    checked={isNotePrivate}
+                    onChange={(event) => setIsNotePrivate(event.target.checked)}
+                  />
+                  Private note
+                </label>
+              )}
               <div className="notes-actions">
                 <button
                   className="primary-button"
