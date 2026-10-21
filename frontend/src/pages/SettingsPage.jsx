@@ -1,7 +1,44 @@
+import { useState } from "react";
 import { themePresets } from "../data";
 import { CardTitle, PageHeading } from "../components/PageElements";
 
-function SettingsPage({ theme, setTheme }) {
+const colorLabels = ["Primary", "Secondary", "Tertiary"];
+
+function SettingsPage({
+  theme,
+  savedTheme,
+  hasSavedTheme,
+  setTheme,
+  onSaveTheme,
+  loadError,
+}) {
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [savedNotice, setSavedNotice] = useState("");
+  const hasChanges = JSON.stringify(theme) !== JSON.stringify(savedTheme);
+
+  const updateColor = (index, color) => {
+    setTheme(theme.map((currentColor, colorIndex) =>
+      colorIndex === index ? color : currentColor
+    ));
+    setSaveError("");
+    setSavedNotice("");
+  };
+
+  const saveTheme = async () => {
+    setSaving(true);
+    setSaveError("");
+    setSavedNotice("");
+    try {
+      await onSaveTheme(theme);
+      setSavedNotice("Color scheme saved.");
+    } catch (error) {
+      setSaveError(error.message || "Unable to save your color scheme.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <>
       <PageHeading
@@ -19,7 +56,11 @@ function SettingsPage({ theme, setTheme }) {
                 <button
                   className={`theme-option ${selected ? "selected" : ""}`}
                   key={preset.name}
-                  onClick={() => setTheme(preset.colors)}
+                  onClick={() => {
+                    setTheme(preset.colors);
+                    setSaveError("");
+                    setSavedNotice("");
+                  }}
                 >
                   <div className="swatches">
                     {preset.colors.map((color) => (
@@ -31,6 +72,34 @@ function SettingsPage({ theme, setTheme }) {
               );
             })}
           </div>
+          <div className="custom-theme">
+            <h3>Custom colors</h3>
+            <div className="custom-color-grid">
+              {colorLabels.map((label, index) => (
+                <label className="custom-color-field" key={label}>
+                  <span>{label}</span>
+                  <input
+                    type="color"
+                    value={theme[index]}
+                    onChange={(event) => updateColor(index, event.target.value)}
+                    aria-label={`${label} color`}
+                  />
+                  <span className="color-value">{theme[index].toUpperCase()}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          {loadError && <p className="theme-message error-state" role="alert">{loadError}</p>}
+          {saveError && <p className="theme-message error-state" role="alert">{saveError}</p>}
+          {savedNotice && <p className="theme-message" role="status">{savedNotice}</p>}
+          <button
+            className="theme-save-button"
+            type="button"
+            onClick={saveTheme}
+            disabled={(!hasChanges && hasSavedTheme) || saving}
+          >
+            {saving ? "Saving..." : "Save color scheme"}
+          </button>
         </div>
 
         <div className="card style-preview">
