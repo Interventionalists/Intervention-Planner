@@ -281,6 +281,12 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
     );
   };
 
+  const updateTheme = (colors) => {
+    if (user?.role === "admin") {
+      setTheme(colors);
+    }
+  };
+
   return (
     <div
       className="app"
@@ -367,8 +373,9 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
                   theme={theme}
                   savedTheme={savedTheme}
                   hasSavedTheme={hasSavedTheme}
-                  setTheme={setTheme}
+                  setTheme={updateTheme}
                   onSaveTheme={saveTheme}
+                  canManageTheme={user?.role === "admin"}
                   loadError={themeLoadError}
                 />
               )}
