@@ -46,9 +46,51 @@ def record_login_attempt(user_id: int, success: bool, max_attempts: int, lock_mi
     }).execute()
     return response.data[0] if response.data else None
 
-def fetch_allUsers():
-    response = supabase.table("users").select(PUBLIC_USER_COLUMNS).execute()
-    return response.data
+
+def _escape_filter_value(value: str) -> str:
+    # Supabase's .or_ filters use a string expression, so escape its delimiters.
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def fetch_users_page(page: int, search: str = "", role: str | None = None):
+    page_size = 25
+    query = (
+        supabase.table("users")
+        .select(PUBLIC_USER_COLUMNS, count="exact")
+        .order("id")
+    )
+    if role:
+        query = query.eq("role", role)
+    if search:
+        search_filters = [
+            f'{field}.ilike."%{_escape_filter_value(search)}%"'
+            for field in ("first_name", "last_name", "email", "role")
+        ]
+        search_terms = search.split()
+        if len(search_terms) > 1:
+            # Match both "First Last" and "Last First" name orderings.
+            name_matches = (
+                (search_terms[0], " ".join(search_terms[1:])),
+                (" ".join(search_terms[:-1]), search_terms[-1]),
+            )
+            search_filters.extend(
+                "and("
+                f'first_name.ilike."%{_escape_filter_value(first)}%",'
+                f'last_name.ilike."%{_escape_filter_value(last)}%"'
+                ")"
+                for first, last in name_matches
+            )
+        if search.isdigit():
+            search_filters.append(f"school.eq.{int(search)}")
+        query = query.or_(",".join(search_filters))
+
+    offset = (page - 1) * page_size
+    response = query.range(offset, offset + page_size - 1).execute()
+    return {
+        "users": response.data,
+        "total": response.count or 0,
+        "page_size": page_size,
+    }
 
 def update_user(user_id, updates: dict):
     response = (

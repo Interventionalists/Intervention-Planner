@@ -11,9 +11,3 @@ def get_teachers():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     return {"teachers": teachers}
-
-#insert a new teacher into the database
-@router.post("/teachers-insert")
-def insert_teacher():
-    # TODO: Add logic to add teacher
-    return {0}
