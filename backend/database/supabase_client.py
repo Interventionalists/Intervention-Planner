@@ -205,6 +205,37 @@ def update_student_profile(student_id: int, school_id: int, updates: dict):
     return _add_student_grades(_add_student_user_names(response.data))[0]
 
 
+def create_state_test_score(
+    student: int,
+    test_name: str,
+    grade: int,
+    year_take: int,
+    school_id: int | None = None,
+):
+    student_query = (
+        supabase.table("students")
+        .select("id")
+        .eq("id", student)
+    )
+    if school_id is not None:
+        student_query = student_query.eq("school", school_id)
+    if not student_query.limit(1).execute().data:
+        return None
+
+    response = (
+        supabase.table("state_test_scoring")
+        .insert({
+            "student": student,
+            "test_name": test_name,
+            "grade": grade,
+            "year_taken": year_take,
+        })
+        .select("*")
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+
 def create_student(
     first_name: str,
     last_name: str,

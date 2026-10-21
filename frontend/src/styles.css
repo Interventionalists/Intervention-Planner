@@ -453,6 +453,36 @@ nav { display: grid; gap: 6px; }
 .profile-notes h3 { margin: 0 0 7px; font-size: 13px; }
 .profile-notes p { margin: 0; color: #758095; font-size: 12px; line-height: 1.6; }
 
+.state-test-scoring-form {
+  display: grid;
+  gap: 8px;
+}
+
+.state-test-scoring-form label {
+  color: #758095;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.state-test-scoring-form input,
+.state-test-scoring-form select {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: white;
+  color: #171717;
+}
+
+.state-test-scoring-form .text-button {
+  justify-self: start;
+  margin: 4px 0 0;
+}
+
+.state-test-scoring-form button:disabled { opacity: .55; cursor: not-allowed; }
+.state-test-success { margin: 0; color: #18794e; font-size: 12px; }
+
 .profile-scores-card,
 .profile-grades-card,
 .profile-parent-contact-card,

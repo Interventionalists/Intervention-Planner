@@ -211,7 +211,7 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
           <ViewStateTestingTile />
         )}
         {canShowModule("inputStateTesting", "studentProfile", role) && (
-          <InputStateTestingTile />
+          <InputStateTestingTile studentId={student.id} />
         )}
         {canShowModule("inputGrades", "studentProfile", role) && (
           <InputGradesTile />

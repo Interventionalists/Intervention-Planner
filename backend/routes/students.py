@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from auth.security import get_current_user, require_self_or_admin
 from database.supabase_client import (
     assign_student_to_interventionist,
+    create_state_test_score,
     create_student,
     fetch_interventionists,
     fetch_interventionist_students,
@@ -37,6 +38,15 @@ class StudentProfileUpdateRequest(BaseModel):
     requester_id: UUID
     interventionist: UUID | None = None
     group_number: int | None = Field(default=None, ge=1)
+
+
+class StateTestScoreCreateRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    student: int = Field(ge=1)
+    test_name: str = Field(min_length=1, max_length=100)
+    grade: int = Field(ge=0)
+    year_taken: int = Field(ge=0)
 
 
 #admins see every student; everyone else only sees students in their own school.
@@ -172,6 +182,45 @@ def update_student(
     if student is None:
         raise HTTPException(status_code=404, detail="Student not found.")
     return {"student": student}
+
+
+@router.post("/students-state-test-scoring", status_code=status.HTTP_201_CREATED)
+def add_state_test_score(
+    payload: StateTestScoreCreateRequest,
+    user: dict = Depends(get_current_user),
+):
+    if user.get("role") not in {"admin", "interventionist"}:
+        raise HTTPException(
+            status_code=403,
+            detail="Only interventionists and administrators can enter state test scores.",
+        )
+
+    try:
+        school_id = (
+            None
+            if user["role"] == "admin"
+            else fetch_user_school_by_public_id(user["public_id"])
+        )
+        if user["role"] != "admin" and school_id is None:
+            raise HTTPException(
+                status_code=403,
+                detail="The signed-in user does not have a school assigned.",
+            )
+        score = create_state_test_score(
+            payload.student,
+            payload.test_name,
+            payload.grade,
+            payload.year_take,
+            school_id,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+    if score is None:
+        raise HTTPException(status_code=404, detail="Student not found.")
+    return {"score": score}
 
 
 @router.get("/students-fetchName/{student_id}")
