@@ -9,8 +9,8 @@ import {
   Trash2,
   UserRound,
 } from "lucide-react";
-import { ResetPasswordForm } from "./LoginPage";
-import { apiFetch } from "./api";
+import { ResetPasswordForm } from "../LoginPage";
+import { apiFetch } from "../api";
 
 const API_BASE_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:8000"
