@@ -55,12 +55,14 @@ jobs:
         python -m pip install --upgrade pip
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
         pip install -r backend/requirements.txt
-        pip install pytest pytest-playwright
+        pip install pytest pytest-playwright httpx
 
     - name: Install Playwright browser
       run: python -m playwright install --with-deps chromium
 
     # Step 4: Execute the test suite
     - name: Run tests with pytest
+      env:
+        PYTHONPATH: backend
       run: |
         pytest -v

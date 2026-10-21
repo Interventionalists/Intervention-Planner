@@ -590,6 +590,7 @@ nav { display: grid; gap: 6px; }
 }
 .note-entry-actions { display: flex; align-items: center; gap: 3px; }
 .note-entry time { color: #777; font-size: 11px; }
+.note-private-label { color: #7a4b16; font-size: 11px; }
 .note-entry p { white-space: pre-wrap; overflow-wrap: anywhere; }
 .note-edit-button,
 .note-delete-button {
@@ -630,6 +631,15 @@ nav { display: grid; gap: 6px; }
   margin-top: 8px;
   font: inherit;
   color: #222;
+}
+
+.note-privacy-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 9px;
+  color: #444;
+  font-size: 12px;
 }
 
 .notes-actions {

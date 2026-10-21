@@ -13,10 +13,23 @@ from database.supabase_client import (
 router = APIRouter()
 
 
+def _visible_notes(notes: list[dict], user: dict) -> list[dict]:
+    visible_notes = []
+    for note in notes:
+        is_private = note.get("privateNote", note.get("is_private", False))
+        if isinstance(is_private, str):
+            is_private = is_private.lower() == "true"
+        note = {**note, "is_private": is_private}
+        if not is_private or str(note.get("created_by")) == str(user["public_id"]):
+            visible_notes.append(note)
+    return visible_notes
+
+
 class NoteCreate(BaseModel):
     student_id: int | None
     created_by: str
     text: str
+    is_private: bool = False
 
 ################################ FETCH ENDPOINTS ######################################
 
@@ -27,7 +40,7 @@ def get_notes_from_user(public_id: str, user: dict = Depends(get_current_user)):
         notes = fetch_notes_from_user(public_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    return {"notes": notes}
+    return {"notes": _visible_notes(notes, user)}
 
 @router.get("/notes-fetchFromDate/{timestamp}")
 def get_notes_from_date(timestamp: str, user: dict = Depends(get_current_user)):
@@ -35,19 +48,16 @@ def get_notes_from_date(timestamp: str, user: dict = Depends(get_current_user)):
         notes = fetch_notes_from_date(timestamp)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    #non-admins only see their own notes
-    if user["role"] != "admin":
-        notes = [note for note in notes if note.get("created_by") == user["public_id"]]
-    return {"notes": notes}
+    return {"notes": _visible_notes(notes, user)}
 
 @router.get("/notes-fetchForStudent")
 def get_notes_for_student(user_id: str, student_id: str, user: dict = Depends(get_current_user)):
     require_self_or_admin(user, user_id)
     try:
-        notes = fetch_notes_for_student(user_id, student_id)
+        notes = fetch_notes_for_student(student_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    return {"notes": notes}
+    return {"notes": _visible_notes(notes, user)}
 
 @router.put("/notes-editText")
 def update_note_text(note_id: str, new_text: str, user: dict = Depends(get_current_user)):
@@ -65,7 +75,12 @@ def update_note_text(note_id: str, new_text: str, user: dict = Depends(get_curre
 def add_note(payload: NoteCreate, user: dict = Depends(get_current_user)):
     require_self_or_admin(user, payload.created_by)
     try:
-        note = create_note(payload.student_id, payload.created_by, payload.text)
+        note = create_note(
+            payload.student_id,
+            payload.created_by,
+            payload.text,
+            payload.is_private,
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     if not note:

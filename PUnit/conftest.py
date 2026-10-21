@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import os
 
 # Backend modules import each other relative to backend/ (e.g. "from routes.x"),
 # so put it on the path. Fake config is set before anything imports the backend:
@@ -33,3 +34,7 @@ os.environ["SUPABASE_SERVICE_KEY"] = "test-service-key"
 @pytest.fixture
 def sample_user():
     return {"name": "Test User"}
+
+os.environ.setdefault("JWT_SECRET", "pytest-only-secret")
+os.environ.setdefault("SUPABASE_URL", "https://pytest-only.supabase.co")
+os.environ.setdefault("SUPABASE_SERVICE_KEY", "pytest-only-service-key")
