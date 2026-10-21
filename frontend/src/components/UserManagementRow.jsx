@@ -25,6 +25,7 @@ function UserManagementRow({
   onCancelLock,
 }) {
   const isSelf = user.public_id === signedInUser?.public_id;
+  // Admins can still edit themselves; other admins' Edit actions are hidden.
   const isOtherAdmin = user.role === "admin" && !isSelf;
   const schoolPlaceholder = schoolsLoading
     ? "Loading schools..."

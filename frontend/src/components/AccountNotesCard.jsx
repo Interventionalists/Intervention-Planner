@@ -127,6 +127,7 @@ function AccountNotesCard({ userId }) {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
+              // Personal notes use a null student_id; student notes use the selected ID.
               student_id:
                 noteStudentId === "personal" ? null : Number(noteStudentId),
               created_by: userId,

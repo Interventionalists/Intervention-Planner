@@ -35,6 +35,7 @@ export function useUserAdminActions({
       last_name: user.last_name || "",
       email: user.email || "",
       role: user.role || "teacher",
+      // Keep select values as strings; convert the school ID before saving.
       school: user.school == null ? "" : String(user.school),
     });
     setEditError("");
@@ -81,6 +82,8 @@ export function useUserAdminActions({
           currentUser.id === user.id ? data.user : currentUser
         )
       );
+      // The parent stores the signed-in user in session state, so refresh it
+      // separately when this edit changed the current admin's own profile.
       if (data.user.public_id === signedInUser?.public_id) {
         onUserUpdated({
           ...signedInUser,
@@ -167,6 +170,7 @@ export function useUserAdminActions({
     );
   };
 
+  // The API interprets a timestamp in the past as an immediate unlock.
   const unlockUser = (user) =>
     updateUserLock(
       user,

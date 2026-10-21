@@ -111,6 +111,7 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
   const schoolName =
     selectedSchool?.name ||
     user?.school_name ||
+    // Never show a numeric foreign key as if it were a human-readable name.
     (typeof user?.school === "string" &&
     !/^\d+$/.test(user.school)
       ? user.school

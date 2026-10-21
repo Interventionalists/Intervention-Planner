@@ -46,6 +46,12 @@ def record_login_attempt(user_id: int, success: bool, max_attempts: int, lock_mi
     }).execute()
     return response.data[0] if response.data else None
 
+
+def _escape_filter_value(value: str) -> str:
+    # Supabase's .or_ filters use a string expression, so escape its delimiters.
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
 def fetch_users_page(page: int, search: str = "", role: str | None = None):
     page_size = 25
     query = (
@@ -56,27 +62,23 @@ def fetch_users_page(page: int, search: str = "", role: str | None = None):
     if role:
         query = query.eq("role", role)
     if search:
-        escaped_search = (
-            search.replace("\\", "\\\\")
-            .replace('"', '\\"')
-        )
         search_filters = [
-            f'first_name.ilike."%{escaped_search}%"',
-            f'last_name.ilike."%{escaped_search}%"',
-            f'email.ilike."%{escaped_search}%"',
-            f'role.ilike."%{escaped_search}%"',
+            f'{field}.ilike."%{_escape_filter_value(search)}%"'
+            for field in ("first_name", "last_name", "email", "role")
         ]
         search_terms = search.split()
         if len(search_terms) > 1:
-            first_name_term = search_terms[0].replace("\\", "\\\\").replace('"', '\\"')
-            last_name_term = " ".join(search_terms[1:]).replace("\\", "\\\\").replace('"', '\\"')
-            reverse_first_name_term = " ".join(search_terms[:-1]).replace("\\", "\\\\").replace('"', '\\"')
-            reverse_last_name_term = search_terms[-1].replace("\\", "\\\\").replace('"', '\\"')
+            # Match both "First Last" and "Last First" name orderings.
+            name_matches = (
+                (search_terms[0], " ".join(search_terms[1:])),
+                (" ".join(search_terms[:-1]), search_terms[-1]),
+            )
             search_filters.extend(
-                [
-                    f'and(first_name.ilike."%{first_name_term}%",last_name.ilike."%{last_name_term}%")',
-                    f'and(first_name.ilike."%{reverse_first_name_term}%",last_name.ilike."%{reverse_last_name_term}%")',
-                ]
+                "and("
+                f'first_name.ilike."%{_escape_filter_value(first)}%",'
+                f'last_name.ilike."%{_escape_filter_value(last)}%"'
+                ")"
+                for first, last in name_matches
             )
         if search.isdigit():
             search_filters.append(f"school.eq.{int(search)}")

@@ -24,6 +24,7 @@ export function useUsersDirectory(role, roleFilter, reloadKey) {
   const [totalPages, setTotalPages] = useState(0);
 
   useEffect(() => {
+    // Wait for typing to pause so each keystroke does not reload the directory.
     const timeoutId = window.setTimeout(() => {
       setDebouncedUserFilter(userFilter.trim());
     }, 250);
@@ -49,6 +50,8 @@ export function useUsersDirectory(role, roleFilter, reloadKey) {
 
       try {
         const searching = Boolean(debouncedUserFilter);
+        // Role filtering stays server-side; text search is applied across all
+        // pages below so it can also match school names loaded separately.
         const params = new URLSearchParams({
           page: String(searching ? 1 : currentPage),
           search: "",
@@ -67,6 +70,8 @@ export function useUsersDirectory(role, roleFilter, reloadKey) {
         }
 
         if (searching) {
+          // Load every matching-role page before filtering locally so search
+          // results are not limited to the current server page.
           const allUsers = [...data.users];
           for (let page = 2; page <= data.total_pages; page += 1) {
             const pageParams = new URLSearchParams(params);
@@ -200,6 +205,7 @@ export function useUsersDirectory(role, roleFilter, reloadKey) {
       })
     : users;
   const displayedUsers = clientSidePagination
+    // Search results are local; otherwise the API already returns one page.
     ? filteredUsers.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
     : users;
   const displayedTotal = clientSidePagination
