@@ -209,7 +209,7 @@ def create_state_test_score(
     student: int,
     test_name: str,
     grade: int,
-    year_take: int,
+    year_taken: int,
     school_id: int | None = None,
 ):
     student_query = (
@@ -228,7 +228,7 @@ def create_state_test_score(
             "student": student,
             "test_name": test_name,
             "grade": grade,
-            "year_taken": year_take,
+            "year_taken": year_taken,
         })
         .select("*")
         .execute()

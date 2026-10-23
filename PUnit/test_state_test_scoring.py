@@ -21,11 +21,12 @@ def client():
 def test_create_state_test_score(client, monkeypatch):
     saved = {}
 
-    def fake_create_score(student, test_name, grade, school_id=None):
+    def fake_create_score(student, test_name, grade, year_taken, school_id=None):
         saved.update(
             student=student,
             test_name=test_name,
             grade=grade,
+            year_taken=year_taken,
             school_id=school_id,
         )
         return {"id": 11, **saved}
@@ -37,7 +38,12 @@ def test_create_state_test_score(client, monkeypatch):
 
     response = client.post(
         "/students-state-test-scoring",
-        json={"student": 42, "test_name": "Custom District Test", "grade": 512},
+        json={
+            "student": 42,
+            "test_name": "Custom District Test",
+            "grade": 512,
+            "year_taken": 2026,
+        },
     )
 
     assert response.status_code == 201
@@ -45,6 +51,7 @@ def test_create_state_test_score(client, monkeypatch):
         "student": 42,
         "test_name": "Custom District Test",
         "grade": 512,
+        "year_taken": 2026,
         "school_id": 4,
     }
     assert response.json()["score"]["id"] == 11
@@ -64,7 +71,141 @@ def test_create_state_test_score_rejects_teacher(client, monkeypatch):
 
     response = client.post(
         "/students-state-test-scoring",
-        json={"student": 42, "test_name": "SAT", "grade": 512},
+        json={
+            "student": 42,
+            "test_name": "SAT",
+            "grade": 510,
+            "year_taken": 2026,
+        },
     )
 
     assert response.status_code == 403
+
+
+@pytest.mark.parametrize("score", [390, 401, 1601])
+def test_create_sat_score_rejects_scores_outside_valid_range(client, monkeypatch, score):
+    monkeypatch.setattr(
+        students,
+        "create_state_test_score",
+        lambda *args, **kwargs: pytest.fail("Invalid SAT score reached database"),
+    )
+
+    response = client.post(
+        "/students-state-test-scoring",
+        json={
+            "student": 42,
+            "test_name": "SAT",
+            "grade": score,
+            "year_taken": 2026,
+        },
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize("score", [1, 36])
+def test_create_act_score_accepts_valid_boundaries(client, monkeypatch, score):
+    monkeypatch.setattr(
+        students, "fetch_user_school_by_public_id", lambda public_id: 4
+    )
+    monkeypatch.setattr(
+        students,
+        "create_state_test_score",
+        lambda student, test_name, grade, year_taken, school_id=None: {
+            "student": student,
+            "test_name": test_name,
+            "grade": grade,
+            "year_taken": year_taken,
+        },
+    )
+
+    response = client.post(
+        "/students-state-test-scoring",
+        json={
+            "student": 42,
+            "test_name": "ACT",
+            "grade": score,
+            "year_taken": 2026,
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["score"]["grade"] == score
+
+
+@pytest.mark.parametrize("score", [0, 37])
+def test_create_act_score_rejects_scores_outside_range(client, monkeypatch, score):
+    monkeypatch.setattr(
+        students,
+        "create_state_test_score",
+        lambda *args, **kwargs: pytest.fail("Invalid ACT score reached database"),
+    )
+
+    response = client.post(
+        "/students-state-test-scoring",
+        json={
+            "student": 42,
+            "test_name": "ACT",
+            "grade": score,
+            "year_taken": 2026,
+        },
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize("test_name", ["MCA-Reading", "MCA-Math", "MCA-Science"])
+@pytest.mark.parametrize("score", [200, 1300])
+def test_create_mca_score_accepts_range_boundaries(
+    client, monkeypatch, test_name, score
+):
+    monkeypatch.setattr(
+        students, "fetch_user_school_by_public_id", lambda public_id: 4
+    )
+    monkeypatch.setattr(
+        students,
+        "create_state_test_score",
+        lambda student, test_name, grade, year_taken, school_id=None: {
+            "student": student,
+            "test_name": test_name,
+            "grade": grade,
+            "year_taken": year_taken,
+        },
+    )
+
+    response = client.post(
+        "/students-state-test-scoring",
+        json={
+            "student": 42,
+            "test_name": test_name,
+            "grade": score,
+            "year_taken": 2026,
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["score"]["grade"] == score
+
+
+@pytest.mark.parametrize("test_name", ["MCA-Reading", "MCA-Math", "MCA-Science"])
+@pytest.mark.parametrize("score", [199, 1301])
+def test_create_mca_score_rejects_values_outside_range(
+    client, monkeypatch, test_name, score
+):
+    monkeypatch.setattr(
+        students,
+        "create_state_test_score",
+        lambda *args, **kwargs: pytest.fail("Invalid MCA score reached database"),
+    )
+
+    response = client.post(
+        "/students-state-test-scoring",
+        json={
+            "student": 42,
+            "test_name": test_name,
+            "grade": score,
+            "year_taken": 2026,
+        },
+    )
+
+    assert response.status_code == 422

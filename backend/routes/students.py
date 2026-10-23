@@ -45,8 +45,8 @@ class StateTestScoreCreateRequest(BaseModel):
 
     student: int = Field(ge=1)
     test_name: str = Field(min_length=1, max_length=100)
-    grade: int = Field(ge=0)
-    year_taken: int = Field(ge=0)
+    grade: int = Field(ge=0, le=2147483647)
+    year_taken: int = Field(ge=1900, le=9999)
 
 
 #admins see every student; everyone else only sees students in their own school.
@@ -195,6 +195,36 @@ def add_state_test_score(
             detail="Only interventionists and administrators can enter state test scores.",
         )
 
+    if payload.test_name.strip().upper() == "SAT" and (
+        payload.grade < 400
+        or payload.grade > 1600
+        or payload.grade % 10 != 0
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="SAT scores must be from 400 to 1600 in increments of 10.",
+        )
+    
+    if payload.test_name.strip().upper() == "ACT" and (
+            payload.grade < 1
+            or payload.grade > 36
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="ACT scores must be from 1 to 36.",
+            )
+    if payload.test_name.strip().upper() in {
+        "MCA-READING",
+        "MCA-MATH",
+        "MCA-SCIENCE",
+    } and (
+            payload.grade < 200
+            or payload.grade > 1300
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="MCA scores must be from 200 to 1300.",
+            )
     try:
         school_id = (
             None
@@ -210,7 +240,7 @@ def add_state_test_score(
             payload.student,
             payload.test_name,
             payload.grade,
-            payload.year_take,
+            payload.year_taken,
             school_id,
         )
     except HTTPException:
