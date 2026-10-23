@@ -278,8 +278,11 @@ def create_student(
 ################################# TEACHER FUNCTIONS ########################################
 #columns safe to return for other users; never includes password_hash or
 #lockout state.
-def fetch_teachers():
-    response = supabase.table("users").select(PUBLIC_USER_COLUMNS).eq("role", "teacher").execute()
+def fetch_teachers(school_id: int | None = None):
+    query = supabase.table("users").select(PUBLIC_USER_COLUMNS).eq("role", "teacher")
+    if school_id is not None:
+        query = query.eq("school", school_id)
+    response = query.execute()
     return response.data
 
 
