@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from auth.security import get_current_user, require_self_or_admin
+from auth.security import get_current_user, require_self_or_admin, require_student_access
 from database.supabase_client import (
     create_note,
     delete_note,
@@ -53,6 +53,7 @@ def get_notes_from_date(timestamp: str, user: dict = Depends(get_current_user)):
 @router.get("/notes-fetchForStudent")
 def get_notes_for_student(user_id: str, student_id: str, user: dict = Depends(get_current_user)):
     require_self_or_admin(user, user_id)
+    require_student_access(user, student_id)
     try:
         notes = fetch_notes_for_student(student_id)
     except Exception as e:
@@ -74,6 +75,8 @@ def update_note_text(note_id: str, new_text: str, user: dict = Depends(get_curre
 @router.post("/notes-create")
 def add_note(payload: NoteCreate, user: dict = Depends(get_current_user)):
     require_self_or_admin(user, payload.created_by)
+    if payload.student_id is not None:
+        require_student_access(user, payload.student_id)
     try:
         note = create_note(
             payload.student_id,

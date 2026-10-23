@@ -371,3 +371,82 @@ def fetch_health_events(since_iso: str, limit: int = 20):
         .execute()
     )
     return response.data
+
+
+############################# ASSIGNMENT FUNCTIONS #######################################
+
+#fetches all assignments for a given student, ordered by created_at descending.
+def fetch_assignments_for_student(student_id: int):
+    response = (
+        supabase.table("assignments")
+        .select("*")
+        .eq("student_id", student_id)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return response.data
+
+#fetches all assignments for a given student, in a given subject, ordered by created_at descending.
+def fetch_assignments_for_student_subject(student_id: int, subject: str):
+    response = (
+        supabase.table("assignments")
+        .select("*")
+        .eq("student_id", student_id)
+        .eq("subject", subject)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return response.data
+
+#fetches a student's assignments created on/after start_iso and before end_iso,
+#optionally limited to one subject, ordered by created_at descending.
+#either bound may be None to leave that side of the range open.
+def fetch_assignments_for_student_in_range(student_id: int, start_iso: str | None = None, end_iso: str | None = None, subject: str | None = None):
+    query = supabase.table("assignments").select("*").eq("student_id", student_id)
+    if start_iso:
+        query = query.gte("created_at", start_iso)
+    if end_iso:
+        query = query.lt("created_at", end_iso)
+    if subject:
+        query = query.eq("subject", subject)
+    response = query.order("created_at", desc=True).execute()
+    return response.data
+
+#Inserts a new assignment for a student. Expects a dictionary with keys: 
+#student_id, class, assignment (name), and grade. Returns the inserted row.
+def create_assignment(assignment_data: dict):
+    response = supabase.table("assignments").insert(assignment_data).select("*").execute()
+    return response.data[0] if response.data else None
+
+#Updates an existing assignment. Expects the assignment ID and a dictionary of fields to update. Returns the updated row.
+def update_assignment(assignment_id: int, updates: dict):
+    response = (
+        supabase.table("assignments")
+        .update(updates)
+        .eq("id", assignment_id)
+        .select("*")
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+#fetches a single assignment by ID, or None if it doesn't exist.
+def fetch_assignment(assignment_id: int):
+    response = supabase.table("assignments").select("*").eq("id", assignment_id).limit(1).execute()
+    return response.data[0] if response.data else None
+
+#deletes an assignment by ID. Returns True if a row was removed.
+def delete_assignment(assignment_id: int):
+    response = supabase.table("assignments").delete().eq("id", assignment_id).execute()
+    return bool(response.data)
+
+#returns who a student is assigned to ({"school", "teacher", "interventionist"}),
+#or None if the student doesn't exist. Used to scope access to a student's records.
+def fetch_student_ownership(student_id: int):
+    response = (
+        supabase.table("students")
+        .select("school, teacher, interventionist")
+        .eq("id", student_id)
+        .limit(1)
+        .execute()
+    )
+    return response.data[0] if response.data else None
