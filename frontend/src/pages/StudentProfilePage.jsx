@@ -33,6 +33,7 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
   const [profileUpdateError, setProfileUpdateError] = useState("");
   const [profileUpdateMessage, setProfileUpdateMessage] = useState("");
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+  const [stateTestScoresVersion, setStateTestScoresVersion] = useState(0);
   const scores = Object.entries(student.scores ?? {}).filter(([, score]) =>
     Number.isFinite(Number(score))
   );
@@ -208,10 +209,16 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
           <ViewSessionTile />
         )}
         {canShowModule("viewStateTesting", "studentProfile", role) && (
-          <ViewStateTestingTile />
+          <ViewStateTestingTile
+            studentId={student.id}
+            refreshToken={stateTestScoresVersion}
+          />
         )}
         {canShowModule("inputStateTesting", "studentProfile", role) && (
-          <InputStateTestingTile studentId={student.id} />
+          <InputStateTestingTile
+            studentId={student.id}
+            onScoreSaved={() => setStateTestScoresVersion((version) => version + 1)}
+          />
         )}
         {canShowModule("inputGrades", "studentProfile", role) && (
           <InputGradesTile />

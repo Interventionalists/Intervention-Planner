@@ -57,6 +57,48 @@ def test_create_state_test_score(client, monkeypatch):
     assert response.json()["score"]["id"] == 11
 
 
+def test_fetch_state_test_scores(client, monkeypatch):
+    saved_scores = [
+        {"id": 11, "student": 42, "test_name": "SAT", "grade": 1200, "year_taken": 2026}
+    ]
+    requested = {}
+
+    def fake_fetch_scores(student, school_id=None):
+        requested.update(student=student, school_id=school_id)
+        return saved_scores
+
+    monkeypatch.setattr(
+        students, "fetch_user_school_by_public_id", lambda public_id: 4
+    )
+    monkeypatch.setattr(students, "fetch_state_test_scores", fake_fetch_scores)
+
+    response = client.get("/students-state-test-scoring/42")
+
+    assert response.status_code == 200
+    assert response.json()["scores"] == saved_scores
+    assert requested == {"student": 42, "school_id": 4}
+
+
+def test_fetch_state_test_scores_rejects_teacher_without_school(client, monkeypatch):
+    client.app.dependency_overrides[students.get_current_user] = lambda: {
+        "id": 2,
+        "public_id": "teacher-123",
+        "role": "teacher",
+    }
+    monkeypatch.setattr(
+        students, "fetch_user_school_by_public_id", lambda public_id: None
+    )
+    monkeypatch.setattr(
+        students,
+        "fetch_state_test_scores",
+        lambda *args, **kwargs: pytest.fail("Unauthorized request reached database"),
+    )
+
+    response = client.get("/students-state-test-scoring/42")
+
+    assert response.status_code == 403
+
+
 def test_create_state_test_score_rejects_teacher(client, monkeypatch):
     client.app.dependency_overrides[students.get_current_user] = lambda: {
         "id": 2,

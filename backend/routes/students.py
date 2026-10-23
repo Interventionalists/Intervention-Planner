@@ -8,6 +8,7 @@ from database.supabase_client import (
     create_student,
     fetch_interventionists,
     fetch_interventionist_students,
+    fetch_state_test_scores,
     fetch_students,
     fetch_unassigned_students,
     fetch_user_school_by_public_id,
@@ -182,6 +183,36 @@ def update_student(
     if student is None:
         raise HTTPException(status_code=404, detail="Student not found.")
     return {"student": student}
+
+
+@router.get("/students-state-test-scoring/{student_id}")
+def get_state_test_scores(
+    student_id: int,
+    user: dict = Depends(get_current_user),
+):
+    if user.get("role") not in {"admin", "interventionist", "teacher"}:
+        raise HTTPException(status_code=403, detail="Not authorized to view state test scores.")
+
+    try:
+        school_id = (
+            None
+            if user["role"] == "admin"
+            else fetch_user_school_by_public_id(user["public_id"])
+        )
+        if user["role"] != "admin" and school_id is None:
+            raise HTTPException(
+                status_code=403,
+                detail="The signed-in user does not have a school assigned.",
+            )
+        scores = fetch_state_test_scores(student_id, school_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+    if scores is None:
+        raise HTTPException(status_code=404, detail="Student not found.")
+    return {"scores": scores}
 
 
 @router.post("/students-state-test-scoring", status_code=status.HTTP_201_CREATED)

@@ -483,6 +483,17 @@ nav { display: grid; gap: 6px; }
 .state-test-scoring-form button:disabled { opacity: .55; cursor: not-allowed; }
 .state-test-success { margin: 0; color: #18794e; font-size: 12px; }
 
+.state-test-results-table-wrap { overflow-x: auto; }
+.state-test-results-table { width: 100%; border-collapse: collapse; text-align: left; }
+.state-test-results-table th,
+.state-test-results-table td { padding: 9px 8px; border-bottom: 1px solid #edf0f4; }
+.state-test-results-table th { color: #758095; font-size: 12px; font-weight: 600; }
+.state-test-results-table td { font-size: 13px; }
+.state-test-results-table th:nth-child(2),
+.state-test-results-table td:nth-child(2),
+.state-test-results-table th:nth-child(3),
+.state-test-results-table td:nth-child(3) { text-align: right; }
+
 .profile-scores-card,
 .profile-grades-card,
 .profile-parent-contact-card,

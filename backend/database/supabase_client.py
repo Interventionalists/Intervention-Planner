@@ -236,6 +236,28 @@ def create_state_test_score(
     return response.data[0] if response.data else None
 
 
+def fetch_state_test_scores(student: int, school_id: int | None = None):
+    student_query = (
+        supabase.table("students")
+        .select("id")
+        .eq("id", student)
+    )
+    if school_id is not None:
+        student_query = student_query.eq("school", school_id)
+    if not student_query.limit(1).execute().data:
+        return None
+
+    response = (
+        supabase.table("state_test_scoring")
+        .select("*")
+        .eq("student", student)
+        .order("year_taken", desc=True)
+        .order("test_name")
+        .execute()
+    )
+    return response.data
+
+
 def create_student(
     first_name: str,
     last_name: str,

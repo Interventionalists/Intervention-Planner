@@ -6,7 +6,7 @@ const API_BASE_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000")
   .replace(/\/+$/, "");
 const CUSTOM_TEST = "__custom__";
 
-export default function InputStateTestingTile({ studentId }) {
+export default function InputStateTestingTile({ studentId, onScoreSaved }) {
   const [selectedTest, setSelectedTest] = useState("");
   const [customTest, setCustomTest] = useState("");
   const [grade, setGrade] = useState("");
@@ -82,6 +82,7 @@ export default function InputStateTestingTile({ studentId }) {
       setGrade("");
       setMessage(`${testName} score saved.`);
       setYear("");
+      onScoreSaved?.();
     } catch (saveError) {
       setError(saveError.message || "Unable to save this state test score.");
     } finally {
