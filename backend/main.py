@@ -8,6 +8,7 @@ from routes.interventionists import router as interventionists_router
 from routes.admins import router as admins_router
 from routes.auth import router as auth_router
 from routes.notes import router as notes_router
+from routes.assignments import router as assignments_router
 from routes.schools import router as schools_router
 from routes.health import router as health_router
 from routes.system_health import router as system_health_router
@@ -43,6 +44,7 @@ app.include_router(students_router, dependencies=protected)
 app.include_router(teachers_router, dependencies=protected)
 app.include_router(interventionists_router, dependencies=protected)
 app.include_router(notes_router, dependencies=protected)
+app.include_router(assignments_router, dependencies=protected)
 app.include_router(schools_router, dependencies=protected)
 app.include_router(admins_router, dependencies=[Depends(require_admin)])
 app.include_router(system_health_router, dependencies=[Depends(require_admin)])
