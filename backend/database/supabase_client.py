@@ -1,3 +1,4 @@
+import math
 import os
 import bcrypt
 from supabase import create_client, Client
@@ -138,28 +139,47 @@ def _add_student_user_names(students):
     ]
 
 
-def _add_student_grades(students):
+def _add_assignment_grades(students):
     if not students:
         return students
 
-    grade_response = supabase.table("student_grades").select(
-        "id,math,english,social_studies,science,art,p_e"
-    ).execute()
-    grade_columns = {
-        "Math": "math",
-        "English": "english",
-        "Social Studies": "social_studies",
-        "Science": "science",
-        "Art": "art",
-        "P.E.": "p_e",
-    }
+    student_ids = [student["id"] for student in students]
+    assignment_response = (
+        supabase.table("student_assignments")
+        .select("*")
+        .in_("student_id", student_ids)
+        .execute()
+    )
+    grade_totals = {}
+    for assignment in assignment_response.data:
+        class_name = assignment.get("class") or assignment.get("subject")
+        grade_value = assignment.get("grade")
+        if not isinstance(class_name, str) or grade_value is None:
+            continue
+
+        class_name = class_name.strip()
+        if not class_name:
+            continue
+        try:
+            grade = float(grade_value)
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(grade):
+            continue
+
+        student_grades = grade_totals.setdefault(
+            str(assignment["student_id"]), {}
+        )
+        totals = student_grades.setdefault(class_name, {"total": 0.0, "count": 0})
+        totals["total"] += grade
+        totals["count"] += 1
+
     grades_by_student = {
-        str(grade["id"]): {
-            subject: grade[column]
-            for subject, column in grade_columns.items()
-            if grade.get(column) is not None
+        student_id: {
+            class_name: totals["total"] / totals["count"]
+            for class_name, totals in classes.items()
         }
-        for grade in grade_response.data
+        for student_id, classes in grade_totals.items()
     }
 
     return [
@@ -176,7 +196,7 @@ def fetch_students(school_id: int | None = None):
     if school_id is not None:
         query = query.eq("school", school_id)
     response = query.execute()
-    return _add_student_grades(_add_student_user_names(response.data))
+    return _add_assignment_grades(_add_student_user_names(response.data))
 
 def fetch_student_name(student_id):
     response = supabase.table("students").select("first_name", "last_name").eq("id", student_id).execute()
@@ -200,7 +220,7 @@ def fetch_unassigned_students(school_id: int):
         .is_("interventionist", "null")
         .execute()
     )
-    return _add_student_grades(_add_student_user_names(response.data))
+    return _add_assignment_grades(_add_student_user_names(response.data))
 
 def assign_student_to_interventionist(
     student_id: int,
@@ -230,7 +250,7 @@ def assign_student_to_interventionist(
     )
     if not response.data:
         return None
-    return _add_student_grades(_add_student_user_names(response.data))[0]
+    return _add_assignment_grades(_add_student_user_names(response.data))[0]
 
 
 def update_student_profile(student_id: int, school_id: int, updates: dict):
@@ -244,7 +264,7 @@ def update_student_profile(student_id: int, school_id: int, updates: dict):
     )
     if not response.data:
         return None
-    return _add_student_grades(_add_student_user_names(response.data))[0]
+    return _add_assignment_grades(_add_student_user_names(response.data))[0]
 
 
 def create_student(
@@ -305,7 +325,7 @@ def fetch_interventionist_students(interventionist_id: str, school_id: int | Non
     if school_id is not None:
         query = query.eq("school", school_id)
     response = query.execute()
-    return _add_student_grades(_add_student_user_names(response.data))
+    return _add_assignment_grades(_add_student_user_names(response.data))
 
 
 ################################ ADMIN FUNCTIONS ########################################
@@ -469,7 +489,7 @@ def fetch_health_events(since_iso: str, limit: int = 20):
 #fetches all assignments for a given student, ordered by created_at descending.
 def fetch_assignments_for_student(student_id: int):
     response = (
-        supabase.table("assignments")
+        supabase.table("student_assignments")
         .select("*")
         .eq("student_id", student_id)
         .order("created_at", desc=True)
@@ -480,7 +500,7 @@ def fetch_assignments_for_student(student_id: int):
 #fetches all assignments for a given student, in a given subject, ordered by created_at descending.
 def fetch_assignments_for_student_subject(student_id: int, subject: str):
     response = (
-        supabase.table("assignments")
+        supabase.table("student_assignments")
         .select("*")
         .eq("student_id", student_id)
         .eq("subject", subject)
@@ -493,7 +513,7 @@ def fetch_assignments_for_student_subject(student_id: int, subject: str):
 #optionally limited to one subject, ordered by created_at descending.
 #either bound may be None to leave that side of the range open.
 def fetch_assignments_for_student_in_range(student_id: int, start_iso: str | None = None, end_iso: str | None = None, subject: str | None = None):
-    query = supabase.table("assignments").select("*").eq("student_id", student_id)
+    query = supabase.table("student_assignments").select("*").eq("student_id", student_id)
     if start_iso:
         query = query.gte("created_at", start_iso)
     if end_iso:
@@ -506,13 +526,13 @@ def fetch_assignments_for_student_in_range(student_id: int, start_iso: str | Non
 #Inserts a new assignment for a student. Expects a dictionary with keys: 
 #student_id, class, assignment (name), and grade. Returns the inserted row.
 def create_assignment(assignment_data: dict):
-    response = supabase.table("assignments").insert(assignment_data).select("*").execute()
+    response = supabase.table("student_assignments").insert(assignment_data).select("*").execute()
     return response.data[0] if response.data else None
 
 #Updates an existing assignment. Expects the assignment ID and a dictionary of fields to update. Returns the updated row.
 def update_assignment(assignment_id: int, updates: dict):
     response = (
-        supabase.table("assignments")
+        supabase.table("student_assignments")
         .update(updates)
         .eq("id", assignment_id)
         .select("*")
@@ -522,12 +542,12 @@ def update_assignment(assignment_id: int, updates: dict):
 
 #fetches a single assignment by ID, or None if it doesn't exist.
 def fetch_assignment(assignment_id: int):
-    response = supabase.table("assignments").select("*").eq("id", assignment_id).limit(1).execute()
+    response = supabase.table("student_assignments").select("*").eq("id", assignment_id).limit(1).execute()
     return response.data[0] if response.data else None
 
 #deletes an assignment by ID. Returns True if a row was removed.
 def delete_assignment(assignment_id: int):
-    response = supabase.table("assignments").delete().eq("id", assignment_id).execute()
+    response = supabase.table("student_assignments").delete().eq("id", assignment_id).execute()
     return bool(response.data)
 
 #returns who a student is assigned to ({"school", "teacher", "interventionist"}),

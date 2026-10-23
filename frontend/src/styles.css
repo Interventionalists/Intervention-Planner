@@ -755,6 +755,63 @@ nav { display: grid; gap: 6px; }
 
 .chart-card { min-height: 310px; }
 
+.grade-chart-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.grade-chart-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #687386;
+  font-size: 12px;
+}
+
+.grade-chart-filter select {
+  max-width: 180px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: white;
+  color: #171717;
+}
+
+.grade-chart-types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.grade-chart-types button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: #687386;
+  font-size: 12px;
+}
+
+.grade-chart-types button[aria-pressed="true"] {
+  border-color: var(--secondary);
+  background: color-mix(in srgb, var(--secondary) 16%, white);
+  color: var(--primary);
+}
+
+.grade-chart {
+  width: 100%;
+  height: 245px;
+}
+
+.grade-chart-error { color: #b42318; font-size: 13px; }
+
 .chart-actions {
   display: flex;
   gap: 5px;
