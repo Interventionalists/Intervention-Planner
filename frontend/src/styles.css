@@ -820,12 +820,39 @@ nav { display: grid; gap: 6px; }
 }
 
 .grade-chart {
+  position: relative;
   width: 100%;
   height: 245px;
 }
 
 .grade-chart-point { cursor: pointer; }
 .grade-chart-point:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
+
+.assignment-grade-tooltip {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  gap: 8px;
+  min-width: 145px;
+  padding: 10px 12px;
+  border: 1px solid var(--secondary);
+  border-radius: 7px;
+  background: white;
+  color: var(--primary);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .12);
+  font-size: 12px;
+  pointer-events: none;
+  transform: translate(-50%, calc(-100% - 10px));
+}
+
+.assignment-grade-tooltip > div {
+  display: grid;
+  gap: 3px;
+}
+
+.assignment-grade-tooltip strong { font-weight: 600; }
+.assignment-grade-tooltip span { color: var(--secondary); font-weight: 600; }
+.assignment-grade-tooltip small { color: #687386; }
 
 .grade-chart-data-toggle,
 .grade-points-add,

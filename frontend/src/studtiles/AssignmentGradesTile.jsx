@@ -5,12 +5,11 @@ import {
   ComposedChart,
   Line,
   ResponsiveContainer,
-  Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
 import { AreaChart, BarChart3, LineChart, Plus, Trash2, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch } from "../api";
 import { CardTitle } from "../components/PageElements";
 import {
@@ -89,6 +88,8 @@ function AssignmentGradesTile({
   const [newPoints, setNewPoints] = useState([]);
   const [sheetError, setSheetError] = useState("");
   const [savingPointId, setSavingPointId] = useState(null);
+  const [hoveredPoint, setHoveredPoint] = useState(null);
+  const chartElement = useRef(null);
   const normalizedRole = String(role || "")
     .trim()
     .toLowerCase()
@@ -405,6 +406,11 @@ function AssignmentGradesTile({
       tabIndex={0}
       aria-label={`${canEditPoints ? "Edit" : "View"} ${payload.chartLabel}, grade ${payload.grade}`}
       onClick={() => openSheet(payload)}
+      onMouseEnter={() => setHoveredPoint({ point: payload, x: cx, y: cy })}
+      onMouseMove={() => setHoveredPoint({ point: payload, x: cx, y: cy })}
+      onMouseLeave={() => setHoveredPoint(null)}
+      onFocus={() => setHoveredPoint({ point: payload, x: cx, y: cy })}
+      onBlur={() => setHoveredPoint(null)}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
@@ -483,7 +489,13 @@ function AssignmentGradesTile({
           {selectedClass !== "all" ? ` for ${selectedClass}` : ""}.
         </p>
       ) : (
-        <div className="grade-chart" role="group" aria-label="Student assignment grades over time">
+        <div
+          className="grade-chart"
+          role="group"
+          aria-label="Student assignment grades over time"
+          ref={chartElement}
+          onMouseLeave={() => setHoveredPoint(null)}
+        >
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart
               data={chartData}
@@ -505,21 +517,6 @@ function AssignmentGradesTile({
                 domain={[0, "auto"]}
                 allowDecimals
               />
-              <Tooltip
-                contentStyle={{ borderColor: "var(--secondary)" }}
-                labelStyle={{ color: "var(--primary)" }}
-                itemStyle={{ color: "var(--secondary)" }}
-                cursor={{ fill: "var(--accent)", fillOpacity: 0.12 }}
-                labelFormatter={(_, payload) =>
-                  payload?.[0]?.payload?.chartLabel
-                    ? `${payload[0].payload.chartLabel} · ${payload[0].payload.dateLabel}`
-                    : "Assignment"
-                }
-                formatter={(value, _, item) => [
-                  value,
-                  `${item.payload.className || "Grade"} grade`,
-                ]}
-              />
               {chartType === "line" && (
                 <Line
                   type="monotone"
@@ -538,6 +535,29 @@ function AssignmentGradesTile({
                   fill="var(--secondary)"
                   radius={[4, 4, 0, 0]}
                   onClick={(point) => openSheet(point.payload || point)}
+                  onMouseEnter={(point, _, event) => {
+                    const rect = chartElement.current?.getBoundingClientRect();
+                    const dataPoint = point.payload || point;
+                    if (rect && dataPoint) {
+                      setHoveredPoint({
+                        point: dataPoint,
+                        x: event.clientX - rect.left,
+                        y: event.clientY - rect.top,
+                      });
+                    }
+                  }}
+                  onMouseMove={(point, _, event) => {
+                    const rect = chartElement.current?.getBoundingClientRect();
+                    const dataPoint = point.payload || point;
+                    if (rect && dataPoint) {
+                      setHoveredPoint({
+                        point: dataPoint,
+                        x: event.clientX - rect.left,
+                        y: event.clientY - rect.top,
+                      });
+                    }
+                  }}
+                  onMouseLeave={() => setHoveredPoint(null)}
                   cursor="pointer"
                 />
               )}
@@ -554,6 +574,20 @@ function AssignmentGradesTile({
               )}
             </ComposedChart>
           </ResponsiveContainer>
+          {hoveredPoint && (
+            <div
+              className="assignment-grade-tooltip"
+              style={{ left: hoveredPoint.x, top: hoveredPoint.y }}
+              role="status"
+            >
+              <strong>{hoveredPoint.point.chartLabel}</strong>
+              <span>
+                {hoveredPoint.point.grade}{" "}
+                {hoveredPoint.point.className || "Grade"}
+              </span>
+              <small>{hoveredPoint.point.dateLabel}</small>
+            </div>
+          )}
         </div>
       )}
       {isSheetOpen && (
