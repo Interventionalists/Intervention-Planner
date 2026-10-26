@@ -412,6 +412,76 @@ def create_student(
         raise RuntimeError("Student insert returned no row.")
     return response.data[0]
 
+STUDENT_GOAL_SUBJECTS = (
+    "math",
+    "english",
+    "social_studies",
+    "science",
+    "art",
+    "p_e",
+)
+
+
+def create_student_goals(student_id: int, goals: dict):
+    subject_goals = {
+        subject: goals.get(subject)
+        for subject in STUDENT_GOAL_SUBJECTS
+    }
+    response = (
+        supabase.table("student-subject-goals")
+        .insert({"id": student_id, **subject_goals})
+        .select("*")
+        .execute()
+    )
+    if not response.data:
+        raise RuntimeError("Student goals insert returned no row.")
+    return {
+        "goals": {
+            subject: response.data[0].get(subject)
+            for subject in STUDENT_GOAL_SUBJECTS
+        }
+    }
+
+
+def update_student_goals(student_id: int, goals: dict):
+    subject_goals = {
+        subject: goals.get(subject)
+        for subject in STUDENT_GOAL_SUBJECTS
+    }
+    response = (
+        supabase.table("student-subject-goals")
+        .update(subject_goals)
+        .eq("id", student_id)
+        .select("*")
+        .execute()
+    )
+    if not response.data:
+        return None
+    return {
+        "goals": {
+            subject: response.data[0].get(subject)
+            for subject in STUDENT_GOAL_SUBJECTS
+        }
+    }
+
+
+def fetch_student_goals(student_id: int):
+    response = (
+        supabase.table("student-subject-goals")
+        .select("*")
+        .eq("id", student_id)
+        .limit(1)
+        .execute()
+    )
+    if not response.data:
+        return None
+    return {
+        "goals": {
+            subject: response.data[0].get(subject)
+            for subject in STUDENT_GOAL_SUBJECTS
+        }
+    }
+
 ################################# TEACHER FUNCTIONS ########################################
 #columns safe to return for other users; never includes password_hash or
 #lockout state.

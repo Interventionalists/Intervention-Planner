@@ -11,6 +11,7 @@ import EditSessionTile from "../studtiles/EditSessionTile";
 import InputGradesTile from "../studtiles/InputGradesTile";
 import InputStateTestingTile from "../studtiles/InputStateTestingTile";
 import NotesTile from "../studtiles/NotesTile";
+import StudentGoalsTile from "../studtiles/StudentGoalsTile";
 import ViewGradesTile from "../studtiles/ViewGradesTile";
 import ViewSessionPlanTile from "../studtiles/ViewSessionPlanTile";
 import ViewSessionTile from "../studtiles/ViewSessionTile";
@@ -224,6 +225,12 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
             </dl>
           </section>
         </div>
+
+        <StudentGoalsTile
+          studentId={student.id}
+          currentGrades={assignmentGrades}
+          gradesLoading={assignmentsLoading}
+        />
 
         {canShowModule("changeParentName", "studentProfile", role) && (
           <ChangeParentNameTile />
