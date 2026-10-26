@@ -10,6 +10,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from routes import notes
+from auth import security
 
 # gets the client up and running with fake user data
 @pytest.fixture
@@ -33,6 +34,15 @@ def client():
 def test_create_note(client, monkeypatch):
     saved = {}
 
+    def fake_fetch_student_ownership(student_id):
+        if student_id != 42:
+            return None
+        return {
+            "school": 1,
+            "teacher": None,
+            "interventionist": "user-123",
+        }
+
     # Sets up a fake note creation call, without using the actual database
     def fake_create_note(student_id, created_by, text, is_private=False):
         saved.update(
@@ -51,6 +61,7 @@ def test_create_note(client, monkeypatch):
 
     # Built in pytest feature, replaces enviornment values. 
     monkeypatch.setattr(notes, "create_note", fake_create_note)
+    monkeypatch.setattr(security, "fetch_student_ownership", fake_fetch_student_ownership)
 
     # Now tests using the mock database
     response = client.post(
