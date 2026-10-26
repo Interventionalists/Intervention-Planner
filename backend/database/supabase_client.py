@@ -530,7 +530,7 @@ def create_assignment(assignment_data: dict):
     return response.data[0] if response.data else None
 
 #Updates an existing assignment. Expects the assignment ID and a dictionary of fields to update. Returns the updated row.
-def update_assignment(assignment_id: int, updates: dict):
+def update_assignment(assignment_id: str, updates: dict):
     response = (
         supabase.table("student_assignments")
         .update(updates)
@@ -541,13 +541,19 @@ def update_assignment(assignment_id: int, updates: dict):
     return response.data[0] if response.data else None
 
 #fetches a single assignment by ID, or None if it doesn't exist.
-def fetch_assignment(assignment_id: int):
+def fetch_assignment(assignment_id: str):
     response = supabase.table("student_assignments").select("*").eq("id", assignment_id).limit(1).execute()
     return response.data[0] if response.data else None
 
 #deletes an assignment by ID. Returns True if a row was removed.
-def delete_assignment(assignment_id: int):
-    response = supabase.table("student_assignments").delete().eq("id", assignment_id).execute()
+def delete_assignment(assignment_id: str):
+    response = (
+        supabase.table("student_assignments")
+        .delete()
+        .eq("id", assignment_id)
+        .select("id")
+        .execute()
+    )
     return bool(response.data)
 
 #returns who a student is assigned to ({"school", "teacher", "interventionist"}),

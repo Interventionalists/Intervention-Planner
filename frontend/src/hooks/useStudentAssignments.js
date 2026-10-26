@@ -64,5 +64,5 @@ export function useStudentAssignments(studentId) {
     return () => controller.abort();
   }, [studentId]);
 
-  return { assignments, isLoading, error };
+  return { assignments, setAssignments, isLoading, error };
 }
