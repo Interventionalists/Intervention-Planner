@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
-import { Pencil } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { apiFetch } from "../api";
 import { CardTitle } from "../components/PageElements";
 
@@ -14,6 +14,8 @@ export default function ViewStateTestingTile({ studentId, refreshToken = 0 }) {
   const [draftScore, setDraftScore] = useState(null);
   const [saveError, setSaveError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [deletingScoreId, setDeletingScoreId] = useState(null);
+  const [deleteError, setDeleteError] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -123,6 +125,33 @@ export default function ViewStateTestingTile({ studentId, refreshToken = 0 }) {
     }
   };
 
+  const deleteScore = async (score) => {
+    if (!window.confirm(`Delete the ${score.test_name} score from ${score.year_taken}? This cannot be undone.`)) {
+      return;
+    }
+
+    setDeletingScoreId(score.id);
+    setDeleteError("");
+    try {
+      const response = await apiFetch(
+        `${API_BASE_URL}/students-state-test-scoring/${encodeURIComponent(score.id)}`,
+        { method: "DELETE" }
+      );
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result.detail || "Unable to delete this state test score.");
+      }
+      setScores((currentScores) => currentScores.filter((item) => item.id !== score.id));
+      if (editingScoreId === score.id) {
+        cancelEditing();
+      }
+    } catch (error) {
+      setDeleteError(error.message || "Unable to delete this state test score.");
+    } finally {
+      setDeletingScoreId(null);
+    }
+  };
+
   return (
     <section className="card state-test-results-card">
       <CardTitle title="State testing" />
@@ -159,6 +188,9 @@ export default function ViewStateTestingTile({ studentId, refreshToken = 0 }) {
                           <button type="button" className="note-edit-button" title="Edit this score" aria-label={`Edit ${score.test_name} score from ${score.year_taken}`} onClick={() => startEditing(score)}>
                             <Pencil size={14} aria-hidden="true" />
                           </button>
+                          <button type="button" className="note-delete-button state-test-delete-button" title="Delete this score" aria-label={`Delete ${score.test_name} score from ${score.year_taken}`} onClick={() => deleteScore(score)} disabled={deletingScoreId !== null}>
+                            <Trash2 size={14} aria-hidden="true" />
+                          </button>
                         </td>
                       </>
                     )}
@@ -170,6 +202,7 @@ export default function ViewStateTestingTile({ studentId, refreshToken = 0 }) {
               ))}
             </tbody>
           </table>
+          {deleteError && <p className="error-state" role="alert">{deleteError}</p>}
         </div>
       ) : (
         <p className="muted">No state test scores have been recorded.</p>

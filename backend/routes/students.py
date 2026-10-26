@@ -6,6 +6,7 @@ from database.supabase_client import (
     assign_student_to_interventionist,
     create_state_test_score,
     create_student,
+    delete_state_test_score,
     fetch_interventionists,
     fetch_interventionist_students,
     fetch_state_test_scores,
@@ -355,6 +356,39 @@ def edit_state_test_score(
     if score is None:
         raise HTTPException(status_code=404, detail="State test score not found.")
     return {"score": score}
+
+
+@router.delete("/students-state-test-scoring/{score_id}")
+def remove_state_test_score(
+    score_id: int,
+    user: dict = Depends(get_current_user),
+):
+    if user.get("role") not in {"admin", "interventionist"}:
+        raise HTTPException(
+            status_code=403,
+            detail="Only interventionists and administrators can delete state test scores.",
+        )
+
+    try:
+        school_id = (
+            None
+            if user["role"] == "admin"
+            else fetch_user_school_by_public_id(user["public_id"])
+        )
+        if user["role"] != "admin" and school_id is None:
+            raise HTTPException(
+                status_code=403,
+                detail="The signed-in user does not have a school assigned.",
+            )
+        deleted_score = delete_state_test_score(score_id, school_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+    if deleted_score is None:
+        raise HTTPException(status_code=404, detail="State test score not found.")
+    return {"deleted": True, "score_id": deleted_score["id"]}
 
 
 @router.get("/students-fetchName/{student_id}")

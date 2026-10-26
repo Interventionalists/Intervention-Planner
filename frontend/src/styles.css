@@ -504,6 +504,7 @@ nav { display: grid; gap: 6px; }
 .state-test-results-table td:nth-child(3) { text-align: right; }
 .state-test-edit-actions { white-space: nowrap; text-align: right; }
 .state-test-edit-actions .note-edit-button { opacity: 1; }
+.state-test-edit-actions .state-test-delete-button { opacity: 1; }
 .state-test-score-input-cell input {
   width: 100%;
   min-width: 64px;
