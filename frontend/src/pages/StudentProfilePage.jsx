@@ -1,8 +1,8 @@
-import { ArrowLeft, BarChart3, ClipboardList } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ArrowLeft } from "lucide-react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { events } from "../data";
 import { canShowModule } from "../components/ModuleTile";
-import { CardTitle, PageHeading, ProgressChart } from "../components/PageElements";
+import { CardTitle, PageHeading } from "../components/PageElements";
 import AddGradesTile from "../studtiles/AddGradesTile";
 import ChangeParentNameTile from "../studtiles/ChangeParentNameTile";
 import ChangeStudentGradeTile from "../studtiles/ChangeStudentGradeTile";
@@ -12,7 +12,6 @@ import InputGradesTile from "../studtiles/InputGradesTile";
 import InputStateTestingTile from "../studtiles/InputStateTestingTile";
 import NotesTile from "../studtiles/NotesTile";
 import ViewGradesTile from "../studtiles/ViewGradesTile";
-import ViewProgressTile from "../studtiles/ViewProgressTile";
 import ViewSessionPlanTile from "../studtiles/ViewSessionPlanTile";
 import ViewSessionTile from "../studtiles/ViewSessionTile";
 import ViewStateTestingTile from "../studtiles/ViewStateTestingTile";
@@ -22,8 +21,19 @@ const API_BASE_URL = (
 ).replace(/\/+$/, "");
 import StudentNotes from "../components/StudentNotes";
 import { apiFetch } from "../api";
+import { useStudentAssignments } from "../hooks/useStudentAssignments";
+import { calculateAssignmentGrades } from "../utils/assignmentGrades";
+
+const AssignmentGradesTile = lazy(
+  () => import("../studtiles/AssignmentGradesTile")
+);
 
 function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role }) {
+  const {
+    assignments,
+    isLoading: assignmentsLoading,
+    error: assignmentsError,
+  } = useStudentAssignments(student.id);
   const [notes, setNotes] = useState([]);
   const [notesError, setNotesError] = useState("");
   const [notesLoading, setNotesLoading] = useState(true);
@@ -33,8 +43,12 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
   const [profileUpdateError, setProfileUpdateError] = useState("");
   const [profileUpdateMessage, setProfileUpdateMessage] = useState("");
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
-  const scores = Object.entries(student.scores ?? {}).filter(([, score]) =>
-    Number.isFinite(Number(score))
+  const assignmentGrades = useMemo(
+    () => calculateAssignmentGrades(assignments),
+    [assignments]
+  );
+  const scores = Object.entries(assignmentGrades).filter(([, score]) =>
+    Number.isFinite(score)
   );
   const studentName =
     student.name ||
@@ -198,7 +212,11 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
           <NotesTile studentId={student.id} userId={userId} />
         )}
         {canShowModule("viewGrades", "studentProfile", role) && (
-          <ViewGradesTile scores={student.scores} />
+          <ViewGradesTile
+            scores={assignmentGrades}
+            isLoading={assignmentsLoading}
+            error={assignmentsError}
+          />
         )}
         {canShowModule("addGrades", "studentProfile", role) && <AddGradesTile />}
         {canShowModule("editSession", "studentProfile", role) && (
@@ -217,7 +235,20 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
           <InputGradesTile />
         )}
         {canShowModule("viewProgress", "studentProfile", role) && (
-          <ViewProgressTile values={student.recentScores} />
+          <Suspense
+            fallback={
+              <div className="card chart-card profile-progress-card">
+                <CardTitle title="Assignment grades" />
+                <p className="muted" role="status">Loading grade graph...</p>
+              </div>
+            }
+          >
+            <AssignmentGradesTile
+              assignments={assignments}
+              isLoading={assignmentsLoading}
+              error={assignmentsError}
+            />
+          </Suspense>
         )}
         {canShowModule("viewSessionPlan", "studentProfile", role) && (
           <ViewSessionPlanTile />
@@ -231,34 +262,23 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
                 <div className="score-row" key={subject}>
                   <span>{subject}</span>
                   <div className="score-bar">
-                    <span style={{ width: `${score}%` }} />
+                    <span style={{ width: `${Math.min(Math.max(score, 0), 100)}%` }} />
                   </div>
                   <strong>{score.toFixed(2)}%</strong>
                 </div>
               ))}
-              {!scores.length && (
-                <p className="muted">No score data is available yet.</p>
+              {assignmentsLoading && (
+                <p className="muted" role="status">Loading assignment grades...</p>
+              )}
+              {!assignmentsLoading && assignmentsError && (
+                <p className="grade-chart-error" role="alert">{assignmentsError}</p>
+              )}
+              {!assignmentsLoading && !assignmentsError && !scores.length && (
+                <p className="muted">No graded assignments are available yet.</p>
               )}
             </div>
           </div>
         )}
-
-        <div className="card profile-upcoming-card">
-          <CardTitle
-            title="Upcoming"
-            action={
-              <div className="chart-actions">
-                <button aria-label="Bar chart"><BarChart3 size={19} /></button>
-                <button aria-label="Line chart"><ClipboardList size={18} /></button>
-              </div>
-            }
-          />
-          {student.recentScores?.length ? (
-            <ProgressChart values={student.recentScores} />
-          ) : (
-            <p>No progress data available.</p>
-          )}
-        </div>
 
         <div className="card profile-upcoming-card">
           <CardTitle title="Upcoming" />

@@ -1,3 +1,4 @@
+import math
 import os
 import bcrypt
 from supabase import create_client, Client
@@ -183,7 +184,7 @@ def fetch_students(school_id: int | None = None):
     if school_id is not None:
         query = query.eq("school", school_id)
     response = query.execute()
-    return _add_student_grades(_add_student_user_names(response.data))
+    return _add_assignment_grades(_add_student_user_names(response.data))
 
 def fetch_student_name(student_id):
     response = supabase.table("students").select("first_name", "last_name").eq("id", student_id).execute()
@@ -207,7 +208,7 @@ def fetch_unassigned_students(school_id: int):
         .is_("interventionist", "null")
         .execute()
     )
-    return _add_student_grades(_add_student_user_names(response.data))
+    return _add_assignment_grades(_add_student_user_names(response.data))
 
 def assign_student_to_interventionist(
     student_id: int,
@@ -237,7 +238,7 @@ def assign_student_to_interventionist(
     )
     if not response.data:
         return None
-    return _add_student_grades(_add_student_user_names(response.data))[0]
+    return _add_assignment_grades(_add_student_user_names(response.data))[0]
 
 
 def update_student_profile(student_id: int, school_id: int, updates: dict):
@@ -251,7 +252,7 @@ def update_student_profile(student_id: int, school_id: int, updates: dict):
     )
     if not response.data:
         return None
-    return _add_student_grades(_add_student_user_names(response.data))[0]
+    return _add_assignment_grades(_add_student_user_names(response.data))[0]
 
 
 def create_student(
@@ -315,7 +316,7 @@ def fetch_interventionist_students(interventionist_id: str, school_id: int | Non
     if school_id is not None:
         query = query.eq("school", school_id)
     response = query.execute()
-    return _add_student_grades(_add_student_user_names(response.data))
+    return _add_assignment_grades(_add_student_user_names(response.data))
 
 
 ################################ ADMIN FUNCTIONS ########################################
