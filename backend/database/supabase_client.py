@@ -151,7 +151,7 @@ SUBJECT_NAMES = {
 
 #builds each student's "scores" ({subject: average grade}) from the
 #student_subject_averages view. subjects with no average (null) are left out.
-def _add_student_grades(students):
+def _add_assignment_grades(students):
     if not students:
         return students
 
