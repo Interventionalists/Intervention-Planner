@@ -32,6 +32,7 @@ const AssignmentGradesTile = lazy(
 function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role }) {
   const {
     assignments,
+    setAssignments,
     isLoading: assignmentsLoading,
     error: assignmentsError,
   } = useStudentAssignments(student.id);
@@ -44,6 +45,7 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
   const [profileUpdateError, setProfileUpdateError] = useState("");
   const [profileUpdateMessage, setProfileUpdateMessage] = useState("");
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+  const [stateTestScoresVersion, setStateTestScoresVersion] = useState(0);
   const assignmentGrades = useMemo(
     () => calculateAssignmentGrades(assignments),
     [assignments]
@@ -61,6 +63,20 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
     student.intervention_teacher_name ??
     student.interventionist_name ??
     student.interventionist;
+  const parentInfo =
+    student.parent_name ??
+    student.parent ??
+    student.guardian_name ??
+    student.guardian ??
+    "Not provided";
+  const parentPhone =
+    student.parent_phone ??
+    student.parent_phone_number ??
+    student.guardian_phone ??
+    student.guardian_phone_number ??
+    student.parentPhone ??
+    student.guardianPhone ??
+    "Not provided";
 
   useEffect(() => {
     setGroupNumber(
@@ -196,8 +212,18 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
           <dl className="profile-details">
             <div><dt>Teacher</dt><dd>{student.teacher}</dd></div>
             <div><dt>Group</dt><dd>{student.group}</dd></div>
-            <div><dt>Intervention teacher</dt><dd>{student.interventionTeacher}</dd></div>
+            <div>
+              <dt>Intervention teacher</dt>
+              <dd>{interventionTeacher || student.interventionTeacher || "Not assigned"}</dd>
+            </div>
           </dl>
+          <section className="profile-parent-info" aria-labelledby="profile-parent-info-title">
+            <h3 id="profile-parent-info-title">Parent info</h3>
+            <dl className="profile-details">
+              <div><dt>Parent name</dt><dd>{parentInfo}</dd></div>
+              <div><dt>Phone number</dt><dd>{parentPhone}</dd></div>
+            </dl>
+          </section>
         </div>
 
         <StudentGoalsTile
@@ -233,10 +259,16 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
           <ViewSessionTile />
         )}
         {canShowModule("viewStateTesting", "studentProfile", role) && (
-          <ViewStateTestingTile />
+          <ViewStateTestingTile
+            studentId={student.id}
+            refreshToken={stateTestScoresVersion}
+          />
         )}
         {canShowModule("inputStateTesting", "studentProfile", role) && (
-          <InputStateTestingTile />
+          <InputStateTestingTile
+            studentId={student.id}
+            onScoreSaved={() => setStateTestScoresVersion((version) => version + 1)}
+          />
         )}
         {canShowModule("inputGrades", "studentProfile", role) && (
           <InputGradesTile />
@@ -252,6 +284,9 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
           >
             <AssignmentGradesTile
               assignments={assignments}
+              studentId={student.id}
+              onAssignmentsChange={setAssignments}
+              role={role}
               isLoading={assignmentsLoading}
               error={assignmentsError}
             />
