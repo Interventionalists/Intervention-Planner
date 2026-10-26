@@ -10,6 +10,7 @@ from database.supabase_client import (
     fetch_interventionists,
     fetch_interventionist_students,
     fetch_state_test_scores,
+    fetch_student_name,
     fetch_students,
     fetch_unassigned_students,
     fetch_user_school_by_public_id,
@@ -60,15 +61,12 @@ class StateTestScoreUpdateRequest(BaseModel):
     year_taken: int = Field(ge=1900, le=9999)
 
 
-#admins see every student; everyone else only sees students in their own school.
+#every role, admins included, only sees students in their own school.
 @router.get("/students-fetch")
 def get_all_students(user: dict = Depends(get_current_user)):
     try:
-        if user["role"] == "admin":
-            students = fetch_students()
-        else:
-            school_id = fetch_user_school_by_public_id(user["public_id"])
-            students = [] if school_id is None else fetch_students(school_id)
+        school_id = fetch_user_school_by_public_id(user["public_id"])
+        students = [] if school_id is None else fetch_students(school_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
     return {"students": students}

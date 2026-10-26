@@ -16,7 +16,15 @@ from auth.security import get_current_user, require_admin
 
 load_dotenv()
 
-app = FastAPI()
+#swagger/redoc/openapi.json are off unless ENABLE_API_DOCS=true (set it in your local .env).
+#defaulting to off means a deployed environment never exposes the schema by accident.
+docs_enabled = os.environ.get("ENABLE_API_DOCS", "false").strip().lower() in ("1", "true", "yes")
+
+app = FastAPI(
+    docs_url="/docs" if docs_enabled else None,
+    redoc_url="/redoc" if docs_enabled else None,
+    openapi_url="/openapi.json" if docs_enabled else None,
+)
 
 #comma-separated list of allowed frontend origins, e.g.
 #"http://localhost:5173,https://lucasbranch.pages.dev"
