@@ -12,6 +12,7 @@ from database.supabase_client import (
     fetch_students,
     fetch_unassigned_students,
     fetch_user_school_by_public_id,
+    update_state_test_score,
     update_student_profile,
 )
 
@@ -45,6 +46,14 @@ class StateTestScoreCreateRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     student: int = Field(ge=1)
+    test_name: str = Field(min_length=1, max_length=100)
+    grade: int = Field(ge=0, le=2147483647)
+    year_taken: int = Field(ge=1900, le=9999)
+
+
+class StateTestScoreUpdateRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     test_name: str = Field(min_length=1, max_length=100)
     grade: int = Field(ge=0, le=2147483647)
     year_taken: int = Field(ge=1900, le=9999)
@@ -281,6 +290,70 @@ def add_state_test_score(
 
     if score is None:
         raise HTTPException(status_code=404, detail="Student not found.")
+    return {"score": score}
+
+
+@router.patch("/students-state-test-scoring/{score_id}")
+def edit_state_test_score(
+    score_id: int,
+    payload: StateTestScoreUpdateRequest,
+    user: dict = Depends(get_current_user),
+):
+    if user.get("role") not in {"admin", "interventionist"}:
+        raise HTTPException(
+            status_code=403,
+            detail="Only interventionists and administrators can edit state test scores.",
+        )
+
+    test_name = payload.test_name.strip()
+    normalized_test_name = test_name.upper()
+    if normalized_test_name == "SAT" and (
+        payload.grade < 400
+        or payload.grade > 1600
+        or payload.grade % 10 != 0
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="SAT scores must be from 400 to 1600 in increments of 10.",
+        )
+    if normalized_test_name == "ACT" and not 1 <= payload.grade <= 36:
+        raise HTTPException(
+            status_code=422,
+            detail="ACT scores must be from 1 to 36.",
+        )
+    if normalized_test_name in {"MCA-READING", "MCA-MATH", "MCA-SCIENCE"} and not (
+        200 <= payload.grade <= 1300
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="MCA scores must be from 200 to 1300.",
+        )
+
+    try:
+        school_id = (
+            None
+            if user["role"] == "admin"
+            else fetch_user_school_by_public_id(user["public_id"])
+        )
+        if user["role"] != "admin" and school_id is None:
+            raise HTTPException(
+                status_code=403,
+                detail="The signed-in user does not have a school assigned.",
+            )
+        score = update_state_test_score(
+            score_id,
+            test_name,
+            payload.grade,
+            payload.year_taken,
+            school_id,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+    if score is None:
+        raise HTTPException(status_code=404, detail="State test score not found.")
     return {"score": score}
 
 

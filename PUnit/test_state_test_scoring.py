@@ -79,6 +79,75 @@ def test_fetch_state_test_scores(client, monkeypatch):
     assert requested == {"student": 42, "school_id": 4}
 
 
+def test_edit_state_test_score(client, monkeypatch):
+    updated = {}
+
+    def fake_update_score(score_id, test_name, grade, year_taken, school_id=None):
+        updated.update(
+            score_id=score_id,
+            test_name=test_name,
+            grade=grade,
+            year_taken=year_taken,
+            school_id=school_id,
+        )
+        return {"id": score_id, "student": 42, **updated}
+
+    monkeypatch.setattr(
+        students, "fetch_user_school_by_public_id", lambda public_id: 4
+    )
+    monkeypatch.setattr(students, "update_state_test_score", fake_update_score)
+
+    response = client.patch(
+        "/students-state-test-scoring/11",
+        json={"test_name": "Custom Assessment", "grade": 512, "year_taken": 2026},
+    )
+
+    assert response.status_code == 200
+    assert updated == {
+        "score_id": 11,
+        "test_name": "Custom Assessment",
+        "grade": 512,
+        "year_taken": 2026,
+        "school_id": 4,
+    }
+    assert response.json()["score"]["id"] == 11
+
+
+def test_edit_state_test_score_rejects_teacher(client, monkeypatch):
+    client.app.dependency_overrides[students.get_current_user] = lambda: {
+        "id": 2,
+        "public_id": "teacher-123",
+        "role": "teacher",
+    }
+    monkeypatch.setattr(
+        students,
+        "update_state_test_score",
+        lambda *args, **kwargs: pytest.fail("Unauthorized request reached database"),
+    )
+
+    response = client.patch(
+        "/students-state-test-scoring/11",
+        json={"test_name": "SAT", "grade": 1200, "year_taken": 2026},
+    )
+
+    assert response.status_code == 403
+
+
+def test_edit_state_test_score_rejects_invalid_sat_grade(client, monkeypatch):
+    monkeypatch.setattr(
+        students,
+        "update_state_test_score",
+        lambda *args, **kwargs: pytest.fail("Invalid SAT score reached database"),
+    )
+
+    response = client.patch(
+        "/students-state-test-scoring/11",
+        json={"test_name": "SAT", "grade": 1201, "year_taken": 2026},
+    )
+
+    assert response.status_code == 422
+
+
 def test_fetch_state_test_scores_rejects_teacher_without_school(client, monkeypatch):
     client.app.dependency_overrides[students.get_current_user] = lambda: {
         "id": 2,

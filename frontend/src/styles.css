@@ -502,6 +502,20 @@ nav { display: grid; gap: 6px; }
 .state-test-results-table td:nth-child(2),
 .state-test-results-table th:nth-child(3),
 .state-test-results-table td:nth-child(3) { text-align: right; }
+.state-test-edit-actions { white-space: nowrap; text-align: right; }
+.state-test-edit-actions .note-edit-button { opacity: 1; }
+.state-test-score-input-cell input {
+  width: 100%;
+  min-width: 64px;
+  box-sizing: border-box;
+  padding: 6px 7px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font: inherit;
+}
+.state-test-edit-actions .text-button,
+.state-test-edit-actions .ghost-button { margin: 0 0 0 4px; padding: 5px 7px; }
+.state-test-score-input-cell { text-align: left !important; }
 
 .profile-scores-card,
 .profile-grades-card,

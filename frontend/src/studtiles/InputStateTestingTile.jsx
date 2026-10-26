@@ -80,6 +80,7 @@ export default function InputStateTestingTile({ studentId, onScoreSaved }) {
       }
 
       setGrade("");
+      setCustomTest("");
       setMessage(`${testName} score saved.`);
       setYear("");
       onScoreSaved?.();

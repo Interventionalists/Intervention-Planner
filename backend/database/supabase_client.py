@@ -298,6 +298,49 @@ def create_state_test_score(
     return response.data[0] if response.data else None
 
 
+def update_state_test_score(
+    score_id: int,
+    test_name: str,
+    grade: int,
+    year_taken: int,
+    school_id: int | None = None,
+):
+    score_response = (
+        supabase.table("state_test_scoring")
+        .select("student")
+        .eq("id", score_id)
+        .limit(1)
+        .execute()
+    )
+    if not score_response.data:
+        return None
+
+    student_id = score_response.data[0]["student"]
+    student_query = (
+        supabase.table("students")
+        .select("id")
+        .eq("id", student_id)
+    )
+    if school_id is not None:
+        student_query = student_query.eq("school", school_id)
+    if not student_query.limit(1).execute().data:
+        return None
+
+    response = (
+        supabase.table("state_test_scoring")
+        .update({
+            "test_name": test_name,
+            "grade": grade,
+            "year_taken": year_taken,
+        })
+        .eq("id", score_id)
+        .eq("student", student_id)
+        .select("*")
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+
 def fetch_state_test_scores(student: int, school_id: int | None = None):
     student_query = (
         supabase.table("students")
