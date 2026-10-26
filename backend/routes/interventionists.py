@@ -10,11 +10,12 @@ router = APIRouter()
 
 ################################## FETCH ENDPOINTS ######################################
 
-#fetch all interventionists from the database
+#fetch the interventionists in the caller's school (admins included)
 @router.get("/interventionists-fetch")
-def get_interventionists():
+def get_interventionists(user: dict = Depends(get_current_user)):
     try:
-        interventionists = fetch_interventionists()
+        school_id = fetch_user_school_by_public_id(user["public_id"])
+        interventionists = [] if school_id is None else fetch_interventionists(school_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
     return {"interventionists": interventionists}
