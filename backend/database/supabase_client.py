@@ -138,28 +138,35 @@ def _add_student_user_names(students):
     ]
 
 
+#student_subject_averages column -> subject name shown in the UI
+SUBJECT_NAMES = {
+    "math": "Math",
+    "english": "English",
+    "social_studies": "Social Studies",
+    "science": "Science",
+    "art": "Art",
+    "p_e": "P.E.",
+}
+
+#builds each student's "scores" ({subject: average grade}) from the
+#student_subject_averages view. subjects with no average (null) are left out.
 def _add_student_grades(students):
     if not students:
         return students
 
-    grade_response = supabase.table("student_grades").select(
-        "id,math,english,social_studies,science,art,p_e"
-    ).execute()
-    grade_columns = {
-        "Math": "math",
-        "English": "english",
-        "Social Studies": "social_studies",
-        "Science": "science",
-        "Art": "art",
-        "P.E.": "p_e",
-    }
+    average_response = (
+        supabase.table("student_subject_averages")
+        .select("student_id, " + ", ".join(SUBJECT_NAMES))
+        .in_("student_id", [student["id"] for student in students])
+        .execute()
+    )
     grades_by_student = {
-        str(grade["id"]): {
-            subject: grade[column]
-            for subject, column in grade_columns.items()
-            if grade.get(column) is not None
+        str(average["student_id"]): {
+            subject: average[column]
+            for column, subject in SUBJECT_NAMES.items()
+            if average.get(column) is not None
         }
-        for grade in grade_response.data
+        for average in average_response.data
     }
 
     return [
@@ -469,68 +476,85 @@ def fetch_health_events(since_iso: str, limit: int = 20):
 
 ############################# ASSIGNMENT FUNCTIONS #######################################
 
+#student_assignments stores the subject in "class" and the name in "Assignment".
+#the API uses subject/assignment, so these map between the two shapes.
+#subject values are the class codes (math, english, social_studies, science, art, p_e).
+ASSIGNMENT_COLUMNS = {"subject": "class", "assignment": "Assignment"}
+
+def _to_assignment_row(data: dict):
+    return {ASSIGNMENT_COLUMNS.get(key, key): value for key, value in data.items()}
+
+def _from_assignment_row(row: dict):
+    api_names = {column: key for key, column in ASSIGNMENT_COLUMNS.items()}
+    return {api_names.get(key, key): value for key, value in row.items()}
+
 #fetches all assignments for a given student, ordered by created_at descending.
 def fetch_assignments_for_student(student_id: int):
     response = (
-        supabase.table("assignments")
+        supabase.table("student_assignments")
         .select("*")
         .eq("student_id", student_id)
         .order("created_at", desc=True)
         .execute()
     )
-    return response.data
+    return [_from_assignment_row(row) for row in response.data]
 
 #fetches all assignments for a given student, in a given subject, ordered by created_at descending.
 def fetch_assignments_for_student_subject(student_id: int, subject: str):
     response = (
-        supabase.table("assignments")
+        supabase.table("student_assignments")
         .select("*")
         .eq("student_id", student_id)
-        .eq("subject", subject)
+        .eq("class", subject)
         .order("created_at", desc=True)
         .execute()
     )
-    return response.data
+    return [_from_assignment_row(row) for row in response.data]
 
 #fetches a student's assignments created on/after start_iso and before end_iso,
 #optionally limited to one subject, ordered by created_at descending.
 #either bound may be None to leave that side of the range open.
 def fetch_assignments_for_student_in_range(student_id: int, start_iso: str | None = None, end_iso: str | None = None, subject: str | None = None):
-    query = supabase.table("assignments").select("*").eq("student_id", student_id)
+    query = supabase.table("student_assignments").select("*").eq("student_id", student_id)
     if start_iso:
         query = query.gte("created_at", start_iso)
     if end_iso:
         query = query.lt("created_at", end_iso)
     if subject:
-        query = query.eq("subject", subject)
+        query = query.eq("class", subject)
     response = query.order("created_at", desc=True).execute()
-    return response.data
+    return [_from_assignment_row(row) for row in response.data]
 
-#Inserts a new assignment for a student. Expects a dictionary with keys: 
-#student_id, class, assignment (name), and grade. Returns the inserted row.
+#Inserts a new assignment for a student. Expects a dictionary with keys:
+#student_id, subject, assignment (name), and grade. Returns the inserted row.
 def create_assignment(assignment_data: dict):
-    response = supabase.table("assignments").insert(assignment_data).select("*").execute()
-    return response.data[0] if response.data else None
+    response = (
+        supabase.table("student_assignments")
+        .insert(_to_assignment_row(assignment_data))
+        .select("*")
+        .execute()
+    )
+    return _from_assignment_row(response.data[0]) if response.data else None
 
 #Updates an existing assignment. Expects the assignment ID and a dictionary of fields to update. Returns the updated row.
-def update_assignment(assignment_id: int, updates: dict):
+def update_assignment(assignment_id: str, updates: dict):
     response = (
-        supabase.table("assignments")
-        .update(updates)
+        supabase.table("student_assignments")
+        .update(_to_assignment_row(updates))
         .eq("id", assignment_id)
         .select("*")
         .execute()
     )
-    return response.data[0] if response.data else None
+    return _from_assignment_row(response.data[0]) if response.data else None
 
 #fetches a single assignment by ID, or None if it doesn't exist.
-def fetch_assignment(assignment_id: int):
-    response = supabase.table("assignments").select("*").eq("id", assignment_id).limit(1).execute()
-    return response.data[0] if response.data else None
+def fetch_assignment(assignment_id: str):
+    response = supabase.table("student_assignments").select("*").eq("id", assignment_id).limit(1).execute()
+    return _from_assignment_row(response.data[0]) if response.data else None
 
 #deletes an assignment by ID. Returns True if a row was removed.
-def delete_assignment(assignment_id: int):
-    response = supabase.table("assignments").delete().eq("id", assignment_id).execute()
+def delete_assignment(assignment_id: str):
+    response = supabase.table("student_assignments").delete().eq("id", assignment_id).execute()
     return bool(response.data)
 
 #returns who a student is assigned to ({"school", "teacher", "interventionist"}),
