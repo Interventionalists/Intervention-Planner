@@ -295,6 +295,43 @@ def create_student(
         raise RuntimeError("Student insert returned no row.")
     return response.data[0]
 
+def create_student_goals(student_id: int, school_id: int, goals: dict):
+    response = (
+        supabase.table("student_subject_goals")
+        .insert({"id": student_id, "school": school_id, "goals": goals})
+        .select("*")
+        .execute()
+    )
+    if not response.data:
+        raise RuntimeError("Student goals insert returned no row.")
+    return _add_assignment_grades(_add_student_user_names(response.data))[0]
+
+def update_student_goals(student_id: int, school_id: int, goals: dict):
+    response = (
+        supabase.table("student_subject_goals")
+        .update({"goals": goals})
+        .eq("id", student_id)
+        .eq("school", school_id)
+        .select("*")
+        .execute()
+    )
+    if not response.data:
+        return None
+    return _add_assignment_grades(_add_student_user_names(response.data))[0]
+
+def fetch_student_goals(student_id: int, school_id: int):
+    response = (
+        supabase.table("student_subject_goals")
+        .select("*")
+        .eq("id", student_id)
+        .eq("school", school_id)
+        .limit(1)
+        .execute()
+    )
+    if not response.data:
+        return None
+    return _add_assignment_grades(_add_student_user_names(response.data))[0]
+
 ################################# TEACHER FUNCTIONS ########################################
 #columns safe to return for other users; never includes password_hash or
 #lockout state.

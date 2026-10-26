@@ -5,12 +5,15 @@ from auth.security import get_current_user, require_self_or_admin
 from database.supabase_client import (
     assign_student_to_interventionist,
     create_student,
+    create_student_goals,
     fetch_interventionists,
     fetch_interventionist_students,
     fetch_students,
     fetch_unassigned_students,
     fetch_user_school_by_public_id,
     update_student_profile,
+    update_student_goals,
+    fetch_student_goals,
 )
 
 router = APIRouter()
@@ -193,3 +196,39 @@ def insert_student(payload: StudentCreateRequest):
             detail=f"Unable to create student: {e}",
         ) from e
     return {"student": student}
+
+@router.post("/students-setGoals/{student_id}")
+def set_student_goals(student_id: int, goals: dict):
+    try:
+        school_id = fetch_user_school_by_public_id(str(payload.requester_id))
+        if school_id is None:
+            raise HTTPException(
+                status_code=403,
+                detail="The signed-in user does not have a school assigned.",
+            )
+        student = create_student_goals(student_id, school_id, goals)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"student": student}
+
+@router.post("/students-updateGoals/{student_id}")
+def update_student_goals(student_id: int, goals: dict):
+    try:
+        school_id = fetch_user_school_by_public_id(str(payload.requester_id))
+        if school_id is None:
+            raise HTTPException(
+                status_code=403,
+                detail="The signed-in user does not have a school assigned.",
+            )
+        student = update_student_goals(student_id, school_id, goals)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"student": student}
+
+@router.get("/students-fetchGoals/{student_id}")
+def fetch_student_goals(student_id: int):
+    try:
+        student_goals = fetch_student_goals(student_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"student_goals": student_goals}
