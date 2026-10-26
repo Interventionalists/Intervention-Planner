@@ -1,3 +1,4 @@
+import math
 import os
 import bcrypt
 from supabase import create_client, Client
@@ -46,9 +47,51 @@ def record_login_attempt(user_id: int, success: bool, max_attempts: int, lock_mi
     }).execute()
     return response.data[0] if response.data else None
 
-def fetch_allUsers():
-    response = supabase.table("users").select(PUBLIC_USER_COLUMNS).execute()
-    return response.data
+
+def _escape_filter_value(value: str) -> str:
+    # Supabase's .or_ filters use a string expression, so escape its delimiters.
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def fetch_users_page(page: int, search: str = "", role: str | None = None):
+    page_size = 25
+    query = (
+        supabase.table("users")
+        .select(PUBLIC_USER_COLUMNS, count="exact")
+        .order("id")
+    )
+    if role:
+        query = query.eq("role", role)
+    if search:
+        search_filters = [
+            f'{field}.ilike."%{_escape_filter_value(search)}%"'
+            for field in ("first_name", "last_name", "email", "role")
+        ]
+        search_terms = search.split()
+        if len(search_terms) > 1:
+            # Match both "First Last" and "Last First" name orderings.
+            name_matches = (
+                (search_terms[0], " ".join(search_terms[1:])),
+                (" ".join(search_terms[:-1]), search_terms[-1]),
+            )
+            search_filters.extend(
+                "and("
+                f'first_name.ilike."%{_escape_filter_value(first)}%",'
+                f'last_name.ilike."%{_escape_filter_value(last)}%"'
+                ")"
+                for first, last in name_matches
+            )
+        if search.isdigit():
+            search_filters.append(f"school.eq.{int(search)}")
+        query = query.or_(",".join(search_filters))
+
+    offset = (page - 1) * page_size
+    response = query.range(offset, offset + page_size - 1).execute()
+    return {
+        "users": response.data,
+        "total": response.count or 0,
+        "page_size": page_size,
+    }
 
 def update_user(user_id, updates: dict):
     response = (
@@ -96,28 +139,47 @@ def _add_student_user_names(students):
     ]
 
 
-def _add_student_grades(students):
+def _add_assignment_grades(students):
     if not students:
         return students
 
-    grade_response = supabase.table("student_grades").select(
-        "id,math,english,social_studies,science,art,p_e"
-    ).execute()
-    grade_columns = {
-        "Math": "math",
-        "English": "english",
-        "Social Studies": "social_studies",
-        "Science": "science",
-        "Art": "art",
-        "P.E.": "p_e",
-    }
+    student_ids = [student["id"] for student in students]
+    assignment_response = (
+        supabase.table("student_assignments")
+        .select("*")
+        .in_("student_id", student_ids)
+        .execute()
+    )
+    grade_totals = {}
+    for assignment in assignment_response.data:
+        class_name = assignment.get("class") or assignment.get("subject")
+        grade_value = assignment.get("grade")
+        if not isinstance(class_name, str) or grade_value is None:
+            continue
+
+        class_name = class_name.strip()
+        if not class_name:
+            continue
+        try:
+            grade = float(grade_value)
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(grade):
+            continue
+
+        student_grades = grade_totals.setdefault(
+            str(assignment["student_id"]), {}
+        )
+        totals = student_grades.setdefault(class_name, {"total": 0.0, "count": 0})
+        totals["total"] += grade
+        totals["count"] += 1
+
     grades_by_student = {
-        str(grade["id"]): {
-            subject: grade[column]
-            for subject, column in grade_columns.items()
-            if grade.get(column) is not None
+        student_id: {
+            class_name: totals["total"] / totals["count"]
+            for class_name, totals in classes.items()
         }
-        for grade in grade_response.data
+        for student_id, classes in grade_totals.items()
     }
 
     return [
@@ -134,7 +196,7 @@ def fetch_students(school_id: int | None = None):
     if school_id is not None:
         query = query.eq("school", school_id)
     response = query.execute()
-    return _add_student_grades(_add_student_user_names(response.data))
+    return _add_assignment_grades(_add_student_user_names(response.data))
 
 def fetch_student_name(student_id):
     response = supabase.table("students").select("first_name", "last_name").eq("id", student_id).execute()
@@ -158,7 +220,7 @@ def fetch_unassigned_students(school_id: int):
         .is_("interventionist", "null")
         .execute()
     )
-    return _add_student_grades(_add_student_user_names(response.data))
+    return _add_assignment_grades(_add_student_user_names(response.data))
 
 def assign_student_to_interventionist(
     student_id: int,
@@ -188,7 +250,7 @@ def assign_student_to_interventionist(
     )
     if not response.data:
         return None
-    return _add_student_grades(_add_student_user_names(response.data))[0]
+    return _add_assignment_grades(_add_student_user_names(response.data))[0]
 
 
 def update_student_profile(student_id: int, school_id: int, updates: dict):
@@ -202,7 +264,7 @@ def update_student_profile(student_id: int, school_id: int, updates: dict):
     )
     if not response.data:
         return None
-    return _add_student_grades(_add_student_user_names(response.data))[0]
+    return _add_assignment_grades(_add_student_user_names(response.data))[0]
 
 
 def create_state_test_score(
@@ -316,7 +378,7 @@ def fetch_interventionist_students(interventionist_id: str, school_id: int | Non
     if school_id is not None:
         query = query.eq("school", school_id)
     response = query.execute()
-    return _add_student_grades(_add_student_user_names(response.data))
+    return _add_assignment_grades(_add_student_user_names(response.data))
 
 
 ################################ ADMIN FUNCTIONS ########################################
@@ -342,6 +404,55 @@ def fetch_user_school(user_id):
 def fetch_school_name(school_id):
     response = supabase.table("schools").select("school_name").eq("school_id", school_id).execute()
     return response.data[0]["school_name"] if response.data else None
+
+
+def fetch_school_logo_api(school_id):
+    response = (
+        supabase.table("schools")
+        .select("school_logo_api")
+        .eq("school_id", school_id)
+        .limit(1)
+        .execute()
+    )
+    return response.data[0]["school_logo_api"] if response.data else None
+
+
+def fetch_school_theme(school_id):
+    response = (
+        supabase.table("themes")
+        .select("*")
+        .eq("school_id", school_id)
+        .limit(1)
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+
+def save_school_theme(school_id, colors):
+    theme_values = {
+        "color_primary": colors[0],
+        "color_secondary": colors[1],
+        "color_tertiary": colors[2],
+    }
+    existing_theme = fetch_school_theme(school_id)
+    if existing_theme:
+        response = (
+            supabase.table("themes")
+            .update(theme_values)
+            .eq("id", existing_theme["id"])
+            .select("*")
+            .execute()
+        )
+    else:
+        response = (
+            supabase.table("themes")
+            .insert({"school_id": school_id, **theme_values})
+            .select("*")
+            .execute()
+        )
+    if not response.data:
+        raise RuntimeError("The school theme could not be saved.")
+    return response.data[0]
 
 
 ########################### NOTES FUNCTIONS #######################################
@@ -380,3 +491,126 @@ def delete_note(note_id, user_id):
         .execute()
     )
     return bool(response.data)
+
+
+########################### HEALTH CHECK FUNCTIONS #######################################
+#these use the shared service_role client above. health_checks has RLS on with no
+#policies, so service_role is the only key that can read or write it. They only
+#ever touch health_checks, never student or user tables.
+
+HEALTH_CHECK_COLUMNS = "service, check_type, status, latency_ms, details, checked_at"
+
+#cheapest possible round trip, used by the public /health endpoint
+def ping_database():
+    supabase.table("health_checks").select("id").limit(1).execute()
+    return True
+
+def insert_health_checks(rows: list[dict]):
+    if rows:
+        supabase.table("health_checks").insert(rows).execute()
+
+def delete_health_checks_before(cutoff_iso: str):
+    supabase.table("health_checks").delete().lt("checked_at", cutoff_iso).execute()
+
+def fetch_health_history(service: str, since_iso: str, limit: int = 500):
+    response = (
+        supabase.table("health_checks")
+        .select(HEALTH_CHECK_COLUMNS)
+        .eq("service", service)
+        .gte("checked_at", since_iso)
+        .order("checked_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    return response.data
+
+def fetch_health_events(since_iso: str, limit: int = 20):
+    response = (
+        supabase.table("health_checks")
+        .select(HEALTH_CHECK_COLUMNS)
+        .neq("status", "ok")
+        .gte("checked_at", since_iso)
+        .order("checked_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    return response.data
+
+
+############################# ASSIGNMENT FUNCTIONS #######################################
+
+#fetches all assignments for a given student, ordered by created_at descending.
+def fetch_assignments_for_student(student_id: int):
+    response = (
+        supabase.table("student_assignments")
+        .select("*")
+        .eq("student_id", student_id)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return response.data
+
+#fetches all assignments for a given student, in a given subject, ordered by created_at descending.
+def fetch_assignments_for_student_subject(student_id: int, subject: str):
+    response = (
+        supabase.table("student_assignments")
+        .select("*")
+        .eq("student_id", student_id)
+        .eq("subject", subject)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return response.data
+
+#fetches a student's assignments created on/after start_iso and before end_iso,
+#optionally limited to one subject, ordered by created_at descending.
+#either bound may be None to leave that side of the range open.
+def fetch_assignments_for_student_in_range(student_id: int, start_iso: str | None = None, end_iso: str | None = None, subject: str | None = None):
+    query = supabase.table("student_assignments").select("*").eq("student_id", student_id)
+    if start_iso:
+        query = query.gte("created_at", start_iso)
+    if end_iso:
+        query = query.lt("created_at", end_iso)
+    if subject:
+        query = query.eq("subject", subject)
+    response = query.order("created_at", desc=True).execute()
+    return response.data
+
+#Inserts a new assignment for a student. Expects a dictionary with keys: 
+#student_id, class, assignment (name), and grade. Returns the inserted row.
+def create_assignment(assignment_data: dict):
+    response = supabase.table("student_assignments").insert(assignment_data).select("*").execute()
+    return response.data[0] if response.data else None
+
+#Updates an existing assignment. Expects the assignment ID and a dictionary of fields to update. Returns the updated row.
+def update_assignment(assignment_id: int, updates: dict):
+    response = (
+        supabase.table("student_assignments")
+        .update(updates)
+        .eq("id", assignment_id)
+        .select("*")
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+#fetches a single assignment by ID, or None if it doesn't exist.
+def fetch_assignment(assignment_id: int):
+    response = supabase.table("student_assignments").select("*").eq("id", assignment_id).limit(1).execute()
+    return response.data[0] if response.data else None
+
+#deletes an assignment by ID. Returns True if a row was removed.
+def delete_assignment(assignment_id: int):
+    response = supabase.table("student_assignments").delete().eq("id", assignment_id).execute()
+    return bool(response.data)
+
+#returns who a student is assigned to ({"school", "teacher", "interventionist"}),
+#or None if the student doesn't exist. Used to scope access to a student's records.
+def fetch_student_ownership(student_id: int):
+    response = (
+        supabase.table("students")
+        .select("school, teacher, interventionist")
+        .eq("id", student_id)
+        .limit(1)
+        .execute()
+    )
+    return response.data[0] if response.data else None

@@ -45,6 +45,17 @@ npm run dev
    ```
    The service key is a secret — never commit `.env` or expose this key to the frontend.
 
+### System Status page (admin only)
+
+Admins get a **Status** tab that checks, live, whether the database answers and what the Supabase, Cloudflare, and Render status pages say about the parts we use. Results are saved to a `health_checks` table (kept 5 days) to draw a response-time chart and list recent issues. There is also a public `GET /health` endpoint that returns only `{"status": "ok"}` or `{"status": "degraded"}`.
+
+Setup:
+
+1. In Supabase, open **SQL Editor**, paste [`supabase/migrations/20261019120000_create_health_checks.sql`](supabase/migrations/20261019120000_create_health_checks.sql), and run it. Until this table exists, `/health` reports `degraded` and the Status page shows no history.
+2. Optionally set `HEALTH_RENDER_REGION` on Render to the backend's region as named on status.render.com (default `Oregon`).
+
+Checks only run when an admin opens the page and every 10 minutes while it stays open, and results are saved to the table at most once every 10 minutes, because a free Render instance sleeps when idle and can't run a background job.
+
 ### JWT Secret
 
 The backend signs login session tokens (HS256, valid for 8 hours) with `JWT_SECRET`. It is **required** — the backend refuses to start without it (`KeyError: 'JWT_SECRET'`).
