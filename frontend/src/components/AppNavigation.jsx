@@ -1,4 +1,5 @@
 import {
+  Activity,
   BarChart3,
   CalendarDays,
   CircleUserRound,
@@ -16,6 +17,7 @@ const navItems = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "students", label: "Students", icon: Users },
   { id: "users", label: "Users", icon: UserRoundCog, adminOnly: true },
+  { id: "status", label: "Status", icon: Activity, adminOnly: true },
   { id: "calendar", label: "Calendar", icon: CalendarDays },
   { id: "reports", label: "Reports", icon: BarChart3 },
   { id: "settings", label: "Settings", icon: Settings },
@@ -29,13 +31,25 @@ export function Sidebar({
   onLogout,
   userName = "User",
   role,
+  schoolLogo,
+  onSchoolLogoError,
 }) {
   return (
     <>
       {mobileOpen && <div className="mobile-overlay" onClick={closeMobile} />}
       <aside className={`sidebar ${mobileOpen ? "open" : ""}`}>
         <div className="brand-row">
-          <div className="brand-mark">I</div>
+          <div className="brand-mark">
+            {schoolLogo ? (
+              <img
+                src={schoolLogo}
+                alt=""
+                onError={onSchoolLogoError}
+              />
+            ) : (
+              "I"
+            )}
+          </div>
           <span>Interventioner</span>
           <button className="close-mobile" onClick={closeMobile}>
             <X size={20} />

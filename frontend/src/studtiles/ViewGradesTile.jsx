@@ -1,6 +1,6 @@
 import { CardTitle } from "../components/PageElements";
 
-function ViewGradesTile({ scores }) {
+function ViewGradesTile({ scores, isLoading, error }) {
   const entries = Object.entries(scores);
 
   return (
@@ -13,7 +13,15 @@ function ViewGradesTile({ scores }) {
             <strong>{score.toFixed(2)}%</strong>
           </div>
         ))}
-        {!entries.length && <p className="muted">No grade data is available yet.</p>}
+        {isLoading && (
+          <p className="muted" role="status">Calculating grades from assignments...</p>
+        )}
+        {!isLoading && error && (
+          <p className="grade-chart-error" role="alert">{error}</p>
+        )}
+        {!isLoading && !error && !entries.length && (
+          <p className="muted">No graded assignments are available yet.</p>
+        )}
       </div>
     </div>
   );

@@ -1,8 +1,9 @@
 import re
+from typing import Literal
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from database.supabase_client import fetch_admins, fetch_allUsers, update_user
+from database.supabase_client import fetch_admins, fetch_users_page, update_user
 
 router = APIRouter()
 
@@ -13,6 +14,8 @@ class UserUpdateRequest(BaseModel):
     first_name: str = Field(min_length=1, max_length=100)
     last_name: str = Field(min_length=1, max_length=100)
     email: str = Field(min_length=3, max_length=254)
+    role: Literal["teacher", "interventionist", "admin"]
+    school: int | None = Field(default=None, ge=1)
 
     @field_validator("email")
     @classmethod
@@ -32,12 +35,17 @@ def get_admins():
     return {"admins": admins}
 
 @router.get("/admins-fetch-all-users")
-def get_all_users():
+def get_all_users(
+    page: int = Query(default=1, ge=1),
+    search: str = Query(default="", max_length=100),
+    role: Literal["teacher", "interventionist", "admin"] | None = None,
+):
     try:
-        users = fetch_allUsers()
+        result = fetch_users_page(page, search.strip(), role)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    return {"users": users}
+    total_pages = (result["total"] + result["page_size"] - 1) // result["page_size"]
+    return {**result, "page": page, "total_pages": total_pages}
 
 
 @router.patch("/admins-users/{user_id}")
@@ -61,12 +69,12 @@ def update_user_info(user_id: int, payload: UserUpdateRequest):
 
 #fuction that updates locked until date for a user
 @router.patch("/admins-users-lock/{user_id}")
-def update_user_lock(user_id: int, locked_until: str):
+def update_user_lock(user_id: int, locked_until: str, failed_login_attempts: int = 0):
     try:
         updated_user = update_user(
             user_id,
             {"locked_until": locked_until},
-            {"failed_login_attempts": 0},
+            {"failed_login_attempts": failed_login_attempts},
         )
     except Exception as e:
         raise HTTPException(

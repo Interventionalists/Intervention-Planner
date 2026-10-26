@@ -6,6 +6,8 @@ from dotenv import load_dotenv
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from database.supabase_client import fetch_student_ownership
+
 load_dotenv()
 
 #signing key for session tokens. Required: the app refuses to start without it
@@ -67,3 +69,21 @@ def require_admin(user: dict = Depends(get_current_user)) -> dict:
 def require_self_or_admin(user: dict, public_id) -> None:
     if user["role"] != "admin" and user["public_id"] != str(public_id):
         raise HTTPException(status_code=403, detail="Not allowed")
+
+
+#which students column marks each role as responsible for a student
+OWNER_COLUMN_BY_ROLE = {"teacher": "teacher", "interventionist": "interventionist"}
+
+
+#admins can view any student. Teachers and interventionists can only reach
+#students assigned to them. Raises 404 rather than 403 for someone else's
+#student so student ids can't be probed.
+def require_student_access(user: dict, student_id) -> None:
+    ownership = fetch_student_ownership(student_id)
+    if ownership is None:
+        raise HTTPException(status_code=404, detail="Student not found")
+    if user["role"] == "admin":
+        return
+    owner_column = OWNER_COLUMN_BY_ROLE.get(user["role"])
+    if owner_column is None or str(ownership.get(owner_column)) != str(user["public_id"]):
+        raise HTTPException(status_code=404, detail="Student not found")

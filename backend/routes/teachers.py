@@ -1,19 +1,15 @@
-from fastapi import APIRouter, HTTPException
-from database.supabase_client import fetch_teachers
+from fastapi import APIRouter, Depends, HTTPException
+from auth.security import get_current_user
+from database.supabase_client import fetch_teachers, fetch_user_school_by_public_id
 
 router = APIRouter()
 
-#fetch all teachers from the database
+#fetch the teachers in the caller's school (admins included)
 @router.get("/teachers-fetch")
-def get_teachers():
+def get_teachers(user: dict = Depends(get_current_user)):
     try:
-        teachers = fetch_teachers()
+        school_id = fetch_user_school_by_public_id(user["public_id"])
+        teachers = [] if school_id is None else fetch_teachers(school_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     return {"teachers": teachers}
-
-#insert a new teacher into the database
-@router.post("/teachers-insert")
-def insert_teacher():
-    # TODO: Add logic to add teacher
-    return {0}
