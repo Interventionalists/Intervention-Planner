@@ -684,7 +684,13 @@ def fetch_assignment(assignment_id: str):
 
 #deletes an assignment by ID. Returns True if a row was removed.
 def delete_assignment(assignment_id: str):
-    response = supabase.table("student_assignments").delete().eq("id", assignment_id).execute()
+    response = (
+        supabase.table("student_assignments")
+        .delete()
+        .eq("id", assignment_id)
+        .select("id")
+        .execute()
+    )
     return bool(response.data)
 
 #returns who a student is assigned to ({"school", "teacher", "interventionist"}),
