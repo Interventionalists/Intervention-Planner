@@ -44,6 +44,7 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
   const [profileUpdateError, setProfileUpdateError] = useState("");
   const [profileUpdateMessage, setProfileUpdateMessage] = useState("");
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+  const [stateTestScoresVersion, setStateTestScoresVersion] = useState(0);
   const assignmentGrades = useMemo(
     () => calculateAssignmentGrades(assignments),
     [assignments]
@@ -251,10 +252,16 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
           <ViewSessionTile />
         )}
         {canShowModule("viewStateTesting", "studentProfile", role) && (
-          <ViewStateTestingTile />
+          <ViewStateTestingTile
+            studentId={student.id}
+            refreshToken={stateTestScoresVersion}
+          />
         )}
         {canShowModule("inputStateTesting", "studentProfile", role) && (
-          <InputStateTestingTile />
+          <InputStateTestingTile
+            studentId={student.id}
+            onScoreSaved={() => setStateTestScoresVersion((version) => version + 1)}
+          />
         )}
         {canShowModule("inputGrades", "studentProfile", role) && (
           <InputGradesTile />
