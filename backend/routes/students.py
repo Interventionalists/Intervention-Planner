@@ -7,6 +7,7 @@ from database.supabase_client import (
     create_student,
     fetch_interventionists,
     fetch_interventionist_students,
+    fetch_student_name,
     fetch_students,
     fetch_unassigned_students,
     fetch_user_school_by_public_id,
