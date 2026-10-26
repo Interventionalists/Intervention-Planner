@@ -295,42 +295,75 @@ def create_student(
         raise RuntimeError("Student insert returned no row.")
     return response.data[0]
 
-def create_student_goals(student_id: int, school_id: int, goals: dict):
+STUDENT_GOAL_SUBJECTS = (
+    "math",
+    "english",
+    "social_studies",
+    "science",
+    "art",
+    "p_e",
+)
+
+
+def create_student_goals(student_id: int, goals: dict):
+    subject_goals = {
+        subject: goals.get(subject)
+        for subject in STUDENT_GOAL_SUBJECTS
+    }
     response = (
-        supabase.table("student_subject_goals")
-        .insert({"id": student_id, "school": school_id, "goals": goals})
+        supabase.table("student-subject-goals")
+        .insert({"id": student_id, **subject_goals})
         .select("*")
         .execute()
     )
     if not response.data:
         raise RuntimeError("Student goals insert returned no row.")
-    return _add_assignment_grades(_add_student_user_names(response.data))[0]
+    return {
+        "goals": {
+            subject: response.data[0].get(subject)
+            for subject in STUDENT_GOAL_SUBJECTS
+        }
+    }
 
-def update_student_goals(student_id: int, school_id: int, goals: dict):
+
+def update_student_goals(student_id: int, goals: dict):
+    subject_goals = {
+        subject: goals.get(subject)
+        for subject in STUDENT_GOAL_SUBJECTS
+    }
     response = (
-        supabase.table("student_subject_goals")
-        .update({"goals": goals})
+        supabase.table("student-subject-goals")
+        .update(subject_goals)
         .eq("id", student_id)
-        .eq("school", school_id)
         .select("*")
         .execute()
     )
     if not response.data:
         return None
-    return _add_assignment_grades(_add_student_user_names(response.data))[0]
+    return {
+        "goals": {
+            subject: response.data[0].get(subject)
+            for subject in STUDENT_GOAL_SUBJECTS
+        }
+    }
 
-def fetch_student_goals(student_id: int, school_id: int):
+
+def fetch_student_goals(student_id: int):
     response = (
-        supabase.table("student_subject_goals")
+        supabase.table("student-subject-goals")
         .select("*")
         .eq("id", student_id)
-        .eq("school", school_id)
         .limit(1)
         .execute()
     )
     if not response.data:
         return None
-    return _add_assignment_grades(_add_student_user_names(response.data))[0]
+    return {
+        "goals": {
+            subject: response.data[0].get(subject)
+            for subject in STUDENT_GOAL_SUBJECTS
+        }
+    }
 
 ################################# TEACHER FUNCTIONS ########################################
 #columns safe to return for other users; never includes password_hash or

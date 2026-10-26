@@ -1,19 +1,26 @@
+from math import isfinite
 from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict, Field
-from auth.security import get_current_user, require_self_or_admin
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from auth.security import (
+    get_current_user,
+    require_self_or_admin,
+    require_student_access,
+)
 from database.supabase_client import (
     assign_student_to_interventionist,
     create_student,
-    create_student_goals,
+    create_student_goals as insert_student_goals,
     fetch_interventionists,
     fetch_interventionist_students,
+    fetch_student_goals as get_student_goals_record,
     fetch_students,
     fetch_unassigned_students,
     fetch_user_school_by_public_id,
     update_student_profile,
-    update_student_goals,
-    fetch_student_goals,
+    update_student_goals as save_student_goals,
 )
 
 router = APIRouter()
@@ -40,6 +47,23 @@ class StudentProfileUpdateRequest(BaseModel):
     requester_id: UUID
     interventionist: UUID | None = None
     group_number: int | None = Field(default=None, ge=1)
+
+
+class StudentGoalsRequest(BaseModel):
+    goals: dict[str, float]
+
+    @field_validator("goals")
+    @classmethod
+    def validate_goals(cls, goals):
+        subjects = {"math", "english", "social_studies", "science", "art", "p_e"}
+        if not goals.keys() <= subjects:
+            raise ValueError("Goals must use the supported student subjects.")
+        if any(
+            not isfinite(grade) or not 0 <= grade <= 100
+            for grade in goals.values()
+        ):
+            raise ValueError("Each goal must be a grade between 0 and 100.")
+        return goals
 
 
 #admins see every student; everyone else only sees students in their own school.
@@ -197,38 +221,37 @@ def insert_student(payload: StudentCreateRequest):
         ) from e
     return {"student": student}
 
-@router.post("/students-setGoals/{student_id}")
-def set_student_goals(student_id: int, goals: dict):
+def _save_student_goals(student_id: int, goals: dict, user: dict):
+    require_student_access(user, student_id)
     try:
-        school_id = fetch_user_school_by_public_id(str(payload.requester_id))
-        if school_id is None:
-            raise HTTPException(
-                status_code=403,
-                detail="The signed-in user does not have a school assigned.",
-            )
-        student = create_student_goals(student_id, school_id, goals)
+        existing = get_student_goals_record(student_id)
+        student_goals = (
+            save_student_goals(student_id, goals)
+            if existing is not None
+            else insert_student_goals(student_id, goals)
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    return {"student": student}
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    return {"student_goals": student_goals}
 
-@router.post("/students-updateGoals/{student_id}")
-def update_student_goals(student_id: int, goals: dict):
-    try:
-        school_id = fetch_user_school_by_public_id(str(payload.requester_id))
-        if school_id is None:
-            raise HTTPException(
-                status_code=403,
-                detail="The signed-in user does not have a school assigned.",
-            )
-        student = update_student_goals(student_id, school_id, goals)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    return {"student": student}
+
+@router.post("/students-setGoals/{student_id}")
+def set_student_goals(
+    student_id: int,
+    payload: StudentGoalsRequest,
+    user: dict = Depends(get_current_user),
+):
+    return _save_student_goals(student_id, payload.goals, user)
+
 
 @router.get("/students-fetchGoals/{student_id}")
-def fetch_student_goals(student_id: int):
+def fetch_student_goals(
+    student_id: int,
+    user: dict = Depends(get_current_user),
+):
+    require_student_access(user, student_id)
     try:
-        student_goals = fetch_student_goals(student_id)
+        student_goals = get_student_goals_record(student_id)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
     return {"student_goals": student_goals}

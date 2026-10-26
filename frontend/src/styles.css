@@ -462,6 +462,82 @@ nav { display: grid; gap: 6px; }
 .profile-notes h3 { margin: 0 0 7px; font-size: 13px; }
 .profile-notes p { margin: 0; color: #758095; font-size: 12px; line-height: 1.6; }
 
+.profile-student-goals-card { align-self: start; }
+.student-goals-help { margin: -8px 0 16px; color: #758095; font-size: 12px; }
+.student-goals-edit {
+  padding: 6px 11px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: white;
+  color: var(--primary);
+  font-size: 12px;
+}
+.student-goals-edit:hover { background: #f7f9fc; }
+.student-goals-list { display: grid; gap: 0; margin: 0; }
+.student-goals-list div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 70px 72px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid #edf0f4;
+  font-size: 13px;
+}
+.student-goals-list-heading {
+  color: #758095;
+  font-size: 11px;
+  font-weight: 600;
+}
+.student-goals-fields > .student-goals-list-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 90px 72px;
+  gap: 12px;
+  padding: 0 0 9px;
+}
+.student-goals-list strong { color: #344054; font-weight: 600; }
+.student-goals-fields { display: grid; gap: 0; }
+.student-goals-edit-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 90px 72px;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid #edf0f4;
+  color: #475467;
+  font-size: 12px;
+}
+.student-goals-edit-row .student-goals-input { min-width: 0; }
+.student-goals-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: #758095;
+}
+.student-goal-current { font-weight: 600; text-align: right; }
+.student-goal-met { color: #18794e; }
+.student-goal-below { color: #b42318; }
+.student-goals-input input {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  outline-color: var(--primary);
+}
+.student-goals-save {
+  padding: 9px 13px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--primary);
+  color: white;
+  font-size: 12px;
+}
+.student-goals-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.student-goals-save:disabled { opacity: .55; cursor: not-allowed; }
+
 .profile-scores-card,
 .profile-grades-card,
 .profile-parent-contact-card,
