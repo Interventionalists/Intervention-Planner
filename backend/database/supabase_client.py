@@ -422,14 +422,29 @@ STUDENT_GOAL_SUBJECTS = (
 )
 
 
+def _fetch_student_public_id(student_id: int):
+    response = (
+        supabase.table("students")
+        .select("public_id")
+        .eq("id", student_id)
+        .limit(1)
+        .execute()
+    )
+    return response.data[0]["public_id"] if response.data else None
+
+
 def create_student_goals(student_id: int, goals: dict):
+    student_public_id = _fetch_student_public_id(student_id)
+    if student_public_id is None:
+        raise ValueError("Student not found.")
+
     subject_goals = {
         subject: goals.get(subject)
         for subject in STUDENT_GOAL_SUBJECTS
     }
     response = (
         supabase.table("student-subject-goals")
-        .insert({"id": student_id, **subject_goals})
+        .insert({"student_id": student_public_id, **subject_goals})
         .select("*")
         .execute()
     )
@@ -444,6 +459,10 @@ def create_student_goals(student_id: int, goals: dict):
 
 
 def update_student_goals(student_id: int, goals: dict):
+    student_public_id = _fetch_student_public_id(student_id)
+    if student_public_id is None:
+        return None
+
     subject_goals = {
         subject: goals.get(subject)
         for subject in STUDENT_GOAL_SUBJECTS
@@ -451,7 +470,7 @@ def update_student_goals(student_id: int, goals: dict):
     response = (
         supabase.table("student-subject-goals")
         .update(subject_goals)
-        .eq("id", student_id)
+        .eq("student_id", student_public_id)
         .select("*")
         .execute()
     )
@@ -466,10 +485,14 @@ def update_student_goals(student_id: int, goals: dict):
 
 
 def fetch_student_goals(student_id: int):
+    student_public_id = _fetch_student_public_id(student_id)
+    if student_public_id is None:
+        return None
+
     response = (
         supabase.table("student-subject-goals")
         .select("*")
-        .eq("id", student_id)
+        .eq("student_id", student_public_id)
         .limit(1)
         .execute()
     )

@@ -162,7 +162,7 @@ function StudentGoalsTile({
   return (
     <section className="card profile-student-goals-card">
       <CardTitle
-        title="Subject goals"
+        title="Goals"
         action={
           hasSavedGoals && !isEditing ? (
             <button
