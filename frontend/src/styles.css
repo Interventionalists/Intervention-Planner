@@ -546,15 +546,14 @@ nav { display: grid; gap: 6px; }
 }
 
 .tile-control-row {
-  position: absolute;
-  top: 8px;
-  right: 8px;
+  position: relative;
   z-index: 2;
   display: flex;
+  width: 100%;
   min-height: 30px;
   flex: 0 0 30px;
   justify-content: flex-end;
-  align-items: flex-start;
+  align-items: center;
 }
 
 .tile-menu-toggle,
@@ -592,7 +591,7 @@ nav { display: grid; gap: 6px; }
 }
 
 .tile-menu {
-  top: 26px;
+  top: 100%;
   right: 0;
 }
 
