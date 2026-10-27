@@ -39,7 +39,7 @@ export default function DailyCalendarTile({
   onRemoveMeeting,
 }) {
   return (
-    <section className="card" style={{ alignSelf: "start" }}>
+    <section className="card daily-calendar-tile">
       <CardTitle
         title="Daily Calendar"
         action={

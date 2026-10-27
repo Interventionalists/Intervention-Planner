@@ -516,6 +516,7 @@ nav { display: grid; gap: 6px; }
 .managed-tile {
   box-sizing: border-box;
   display: flex;
+  position: relative;
   min-width: 220px;
   min-height: 180px;
   max-width: 100%;
@@ -524,15 +525,30 @@ nav { display: grid; gap: 6px; }
   align-self: start;
   overflow: auto;
   resize: both;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 20px 20px;
+  background: white;
 }
+
 
 .managed-tile > .card {
   box-sizing: border-box;
-  flex: 1 0 auto;
+  flex: 0 0 auto;
+  min-width: 0;
+  min-height: 0;
+  max-height: none;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
 }
 
 .tile-control-row {
-  position: relative;
+  position: absolute;
+  top: 8px;
+  right: 8px;
   z-index: 2;
   display: flex;
   min-height: 30px;
@@ -1604,7 +1620,8 @@ nav { display: grid; gap: 6px; }
   .dashboard-grid, .reports-grid { grid-template-columns: 1fr; }
   .student-profile-layout { grid-template-columns: 1fr; }
   .profile-identity-card { grid-row: auto; }
-  .managed-tile { width: 100% !important; min-width: 0; }
+  .managed-tile { width: 100%; min-width: 0; }
+  .managed-tile > .card { min-width: 0; }
   .tile-add-control { right: 18px; bottom: 18px; }
   .student-card { grid-row: auto; }
   .student-card select { display: block; }

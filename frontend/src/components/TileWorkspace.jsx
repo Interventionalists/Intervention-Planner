@@ -112,13 +112,14 @@ function TileWorkspace({ className, storageKey, tiles }) {
   };
 
   const saveTileSize = (event, tileId) => {
-    if (event.target !== event.currentTarget) {
-      return;
-    }
     const { offsetWidth: width, offsetHeight: height } = event.currentTarget;
     setLayout((currentLayout) => ({
       ...currentLayout,
-      sizes: { ...currentLayout.sizes, [tileId]: { width, height } },
+      sizes:
+        currentLayout.sizes[tileId]?.width === width &&
+        currentLayout.sizes[tileId]?.height === height
+          ? currentLayout.sizes
+          : { ...currentLayout.sizes, [tileId]: { width, height } },
     }));
   };
 
