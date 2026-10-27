@@ -1,17 +1,31 @@
+from math import isfinite
 from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict, Field
-from auth.security import get_current_user, require_self_or_admin
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from auth.security import (
+    get_current_user,
+    require_self_or_admin,
+    require_student_access,
+)
 from database.supabase_client import (
     assign_student_to_interventionist,
+    create_state_test_score,
     create_student,
+    delete_state_test_score,
+    create_student_goals as insert_student_goals,
     fetch_interventionists,
     fetch_interventionist_students,
+    fetch_state_test_scores,
     fetch_student_name,
+    fetch_student_goals as get_student_goals_record,
     fetch_students,
     fetch_unassigned_students,
     fetch_user_school_by_public_id,
+    update_state_test_score,
     update_student_profile,
+    update_student_goals as save_student_goals,
 )
 
 router = APIRouter()
@@ -38,6 +52,40 @@ class StudentProfileUpdateRequest(BaseModel):
     requester_id: UUID
     interventionist: UUID | None = None
     group_number: int | None = Field(default=None, ge=1)
+
+
+class StudentGoalsRequest(BaseModel):
+    goals: dict[str, float]
+
+    @field_validator("goals")
+    @classmethod
+    def validate_goals(cls, goals):
+        subjects = {"math", "english", "social_studies", "science", "art", "p_e"}
+        if not goals.keys() <= subjects:
+            raise ValueError("Goals must use the supported student subjects.")
+        if any(
+            not isfinite(grade) or not 0 <= grade <= 100
+            for grade in goals.values()
+        ):
+            raise ValueError("Each goal must be a grade between 0 and 100.")
+        return goals
+
+
+class StateTestScoreCreateRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    student: int = Field(ge=1)
+    test_name: str = Field(min_length=1, max_length=100)
+    grade: int = Field(ge=0, le=2147483647)
+    year_taken: int = Field(ge=1900, le=9999)
+
+
+class StateTestScoreUpdateRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    test_name: str = Field(min_length=1, max_length=100)
+    grade: int = Field(ge=0, le=2147483647)
+    year_taken: int = Field(ge=1900, le=9999)
 
 
 #every role, admins included, only sees students in their own school.
@@ -172,6 +220,202 @@ def update_student(
     return {"student": student}
 
 
+@router.get("/students-state-test-scoring/{student_id}")
+def get_state_test_scores(
+    student_id: int,
+    user: dict = Depends(get_current_user),
+):
+    if user.get("role") not in {"admin", "interventionist", "teacher"}:
+        raise HTTPException(status_code=403, detail="Not authorized to view state test scores.")
+
+    try:
+        school_id = (
+            None
+            if user["role"] == "admin"
+            else fetch_user_school_by_public_id(user["public_id"])
+        )
+        if user["role"] != "admin" and school_id is None:
+            raise HTTPException(
+                status_code=403,
+                detail="The signed-in user does not have a school assigned.",
+            )
+        scores = fetch_state_test_scores(student_id, school_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+    if scores is None:
+        raise HTTPException(status_code=404, detail="Student not found.")
+    return {"scores": scores}
+
+
+@router.post("/students-state-test-scoring", status_code=status.HTTP_201_CREATED)
+def add_state_test_score(
+    payload: StateTestScoreCreateRequest,
+    user: dict = Depends(get_current_user),
+):
+    if user.get("role") not in {"admin", "interventionist"}:
+        raise HTTPException(
+            status_code=403,
+            detail="Only interventionists and administrators can enter state test scores.",
+        )
+
+    if payload.test_name.strip().upper() == "SAT" and (
+        payload.grade < 400
+        or payload.grade > 1600
+        or payload.grade % 10 != 0
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="SAT scores must be from 400 to 1600 in increments of 10.",
+        )
+    
+    if payload.test_name.strip().upper() == "ACT" and (
+            payload.grade < 1
+            or payload.grade > 36
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="ACT scores must be from 1 to 36.",
+            )
+    if payload.test_name.strip().upper() in {
+        "MCA-READING",
+        "MCA-MATH",
+        "MCA-SCIENCE",
+    } and (
+            payload.grade < 200
+            or payload.grade > 1300
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="MCA scores must be from 200 to 1300.",
+            )
+    try:
+        school_id = (
+            None
+            if user["role"] == "admin"
+            else fetch_user_school_by_public_id(user["public_id"])
+        )
+        if user["role"] != "admin" and school_id is None:
+            raise HTTPException(
+                status_code=403,
+                detail="The signed-in user does not have a school assigned.",
+            )
+        score = create_state_test_score(
+            payload.student,
+            payload.test_name,
+            payload.grade,
+            payload.year_taken,
+            school_id,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+    if score is None:
+        raise HTTPException(status_code=404, detail="Student not found.")
+    return {"score": score}
+
+
+@router.patch("/students-state-test-scoring/{score_id}")
+def edit_state_test_score(
+    score_id: int,
+    payload: StateTestScoreUpdateRequest,
+    user: dict = Depends(get_current_user),
+):
+    if user.get("role") not in {"admin", "interventionist"}:
+        raise HTTPException(
+            status_code=403,
+            detail="Only interventionists and administrators can edit state test scores.",
+        )
+
+    test_name = payload.test_name.strip()
+    normalized_test_name = test_name.upper()
+    if normalized_test_name == "SAT" and (
+        payload.grade < 400
+        or payload.grade > 1600
+        or payload.grade % 10 != 0
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="SAT scores must be from 400 to 1600 in increments of 10.",
+        )
+    if normalized_test_name == "ACT" and not 1 <= payload.grade <= 36:
+        raise HTTPException(
+            status_code=422,
+            detail="ACT scores must be from 1 to 36.",
+        )
+    if normalized_test_name in {"MCA-READING", "MCA-MATH", "MCA-SCIENCE"} and not (
+        200 <= payload.grade <= 1300
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="MCA scores must be from 200 to 1300.",
+        )
+
+    try:
+        school_id = (
+            None
+            if user["role"] == "admin"
+            else fetch_user_school_by_public_id(user["public_id"])
+        )
+        if user["role"] != "admin" and school_id is None:
+            raise HTTPException(
+                status_code=403,
+                detail="The signed-in user does not have a school assigned.",
+            )
+        score = update_state_test_score(
+            score_id,
+            test_name,
+            payload.grade,
+            payload.year_taken,
+            school_id,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+    if score is None:
+        raise HTTPException(status_code=404, detail="State test score not found.")
+    return {"score": score}
+
+
+@router.delete("/students-state-test-scoring/{score_id}")
+def remove_state_test_score(
+    score_id: int,
+    user: dict = Depends(get_current_user),
+):
+    if user.get("role") not in {"admin", "interventionist"}:
+        raise HTTPException(
+            status_code=403,
+            detail="Only interventionists and administrators can delete state test scores.",
+        )
+
+    try:
+        school_id = (
+            None
+            if user["role"] == "admin"
+            else fetch_user_school_by_public_id(user["public_id"])
+        )
+        if user["role"] != "admin" and school_id is None:
+            raise HTTPException(
+                status_code=403,
+                detail="The signed-in user does not have a school assigned.",
+            )
+        deleted_score = delete_state_test_score(score_id, school_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+    if deleted_score is None:
+        raise HTTPException(status_code=404, detail="State test score not found.")
+    return {"deleted": True, "score_id": deleted_score["id"]}
+
+
 @router.get("/students-fetchName/{student_id}")
 def get_student_name(student_id: str):
     try:
@@ -191,3 +435,38 @@ def insert_student(payload: StudentCreateRequest):
             detail=f"Unable to create student: {e}",
         ) from e
     return {"student": student}
+
+def _save_student_goals(student_id: int, goals: dict, user: dict):
+    require_student_access(user, student_id)
+    try:
+        existing = get_student_goals_record(student_id)
+        student_goals = (
+            save_student_goals(student_id, goals)
+            if existing is not None
+            else insert_student_goals(student_id, goals)
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    return {"student_goals": student_goals}
+
+
+@router.post("/students-setGoals/{student_id}")
+def set_student_goals(
+    student_id: int,
+    payload: StudentGoalsRequest,
+    user: dict = Depends(get_current_user),
+):
+    return _save_student_goals(student_id, payload.goals, user)
+
+
+@router.get("/students-fetchGoals/{student_id}")
+def fetch_student_goals(
+    student_id: int,
+    user: dict = Depends(get_current_user),
+):
+    require_student_access(user, student_id)
+    try:
+        student_goals = get_student_goals_record(student_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    return {"student_goals": student_goals}

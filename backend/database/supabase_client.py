@@ -255,6 +255,135 @@ def update_student_profile(student_id: int, school_id: int, updates: dict):
     return _add_assignment_grades(_add_student_user_names(response.data))[0]
 
 
+def create_state_test_score(
+    student: int,
+    test_name: str,
+    grade: int,
+    year_taken: int,
+    school_id: int | None = None,
+):
+    student_query = (
+        supabase.table("students")
+        .select("id")
+        .eq("id", student)
+    )
+    if school_id is not None:
+        student_query = student_query.eq("school", school_id)
+    if not student_query.limit(1).execute().data:
+        return None
+
+    response = (
+        supabase.table("state_test_scoring")
+        .insert({
+            "student": student,
+            "test_name": test_name,
+            "grade": grade,
+            "year_taken": year_taken,
+        })
+        .select("*")
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+
+def update_state_test_score(
+    score_id: int,
+    test_name: str,
+    grade: int,
+    year_taken: int,
+    school_id: int | None = None,
+):
+    score_response = (
+        supabase.table("state_test_scoring")
+        .select("student")
+        .eq("id", score_id)
+        .limit(1)
+        .execute()
+    )
+    if not score_response.data:
+        return None
+
+    student_id = score_response.data[0]["student"]
+    student_query = (
+        supabase.table("students")
+        .select("id")
+        .eq("id", student_id)
+    )
+    if school_id is not None:
+        student_query = student_query.eq("school", school_id)
+    if not student_query.limit(1).execute().data:
+        return None
+
+    response = (
+        supabase.table("state_test_scoring")
+        .update({
+            "test_name": test_name,
+            "grade": grade,
+            "year_taken": year_taken,
+        })
+        .eq("id", score_id)
+        .eq("student", student_id)
+        .select("*")
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+
+def delete_state_test_score(score_id: int, school_id: int | None = None):
+    score_response = (
+        supabase.table("state_test_scoring")
+        .select("student")
+        .eq("id", score_id)
+        .limit(1)
+        .execute()
+    )
+    if not score_response.data:
+        return None
+
+    student_id = score_response.data[0]["student"]
+    student_query = (
+        supabase.table("students")
+        .select("id")
+        .eq("id", student_id)
+    )
+    if school_id is not None:
+        student_query = student_query.eq("school", school_id)
+    if not student_query.limit(1).execute().data:
+        return None
+
+    response = (
+        supabase.table("state_test_scoring")
+        .delete()
+        .eq("id", score_id)
+        .eq("student", student_id)
+        .select("id")
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+
+def fetch_state_test_scores(student: int, school_id: int | None = None):
+    student_query = (
+        supabase.table("students")
+        .select("id")
+        .eq("id", student)
+    )
+    if school_id is not None:
+        student_query = student_query.eq("school", school_id)
+    if not student_query.limit(1).execute().data:
+        return None
+
+    response = (
+        supabase.table("state_test_scoring")
+        .select("*")
+        .eq("student", student)
+        .order("year_taken", desc=True)
+        .order("test_name")
+        .execute()
+    )
+    return response.data
+
+
 def create_student(
     first_name: str,
     last_name: str,
@@ -282,6 +411,76 @@ def create_student(
     if not response.data:
         raise RuntimeError("Student insert returned no row.")
     return response.data[0]
+
+STUDENT_GOAL_SUBJECTS = (
+    "math",
+    "english",
+    "social_studies",
+    "science",
+    "art",
+    "p_e",
+)
+
+
+def create_student_goals(student_id: int, goals: dict):
+    subject_goals = {
+        subject: goals.get(subject)
+        for subject in STUDENT_GOAL_SUBJECTS
+    }
+    response = (
+        supabase.table("student-subject-goals")
+        .insert({"id": student_id, **subject_goals})
+        .select("*")
+        .execute()
+    )
+    if not response.data:
+        raise RuntimeError("Student goals insert returned no row.")
+    return {
+        "goals": {
+            subject: response.data[0].get(subject)
+            for subject in STUDENT_GOAL_SUBJECTS
+        }
+    }
+
+
+def update_student_goals(student_id: int, goals: dict):
+    subject_goals = {
+        subject: goals.get(subject)
+        for subject in STUDENT_GOAL_SUBJECTS
+    }
+    response = (
+        supabase.table("student-subject-goals")
+        .update(subject_goals)
+        .eq("id", student_id)
+        .select("*")
+        .execute()
+    )
+    if not response.data:
+        return None
+    return {
+        "goals": {
+            subject: response.data[0].get(subject)
+            for subject in STUDENT_GOAL_SUBJECTS
+        }
+    }
+
+
+def fetch_student_goals(student_id: int):
+    response = (
+        supabase.table("student-subject-goals")
+        .select("*")
+        .eq("id", student_id)
+        .limit(1)
+        .execute()
+    )
+    if not response.data:
+        return None
+    return {
+        "goals": {
+            subject: response.data[0].get(subject)
+            for subject in STUDENT_GOAL_SUBJECTS
+        }
+    }
 
 ################################# TEACHER FUNCTIONS ########################################
 #columns safe to return for other users; never includes password_hash or
@@ -555,7 +754,13 @@ def fetch_assignment(assignment_id: str):
 
 #deletes an assignment by ID. Returns True if a row was removed.
 def delete_assignment(assignment_id: str):
-    response = supabase.table("student_assignments").delete().eq("id", assignment_id).execute()
+    response = (
+        supabase.table("student_assignments")
+        .delete()
+        .eq("id", assignment_id)
+        .select("id")
+        .execute()
+    )
     return bool(response.data)
 
 #returns who a student is assigned to ({"school", "teacher", "interventionist"}),
