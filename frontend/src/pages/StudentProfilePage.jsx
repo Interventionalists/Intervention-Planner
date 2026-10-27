@@ -3,6 +3,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { events } from "../data";
 import { canShowModule } from "../components/ModuleTile";
 import { CardTitle, PageHeading } from "../components/PageElements";
+import TileWorkspace from "../components/TileWorkspace";
 import AddGradesTile from "../studtiles/AddGradesTile";
 import ChangeParentNameTile from "../studtiles/ChangeParentNameTile";
 import ChangeStudentGradeTile from "../studtiles/ChangeStudentGradeTile";
@@ -186,21 +187,11 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
     return () => controller.abort();
   }, [student.id]);
 
-  return (
-    <>
-      <div className="profile-page-heading">
-        <button className="back-button" onClick={onBack}>
-          <ArrowLeft size={17} />
-          Back to students
-        </button>
-        <PageHeading
-          eyebrow="Student profile"
-          title={studentName}
-          subtitle="Student details, grades, and intervention progress."
-        />
-      </div>
-
-      <section className="student-profile-layout">
+  const studentTiles = [
+    {
+      id: "profileIdentity",
+      title: "Student details",
+      content: (
         <div className="card profile-identity-card">
           <div className="profile-identity">
             <img src={student.avatar} alt="" />
@@ -225,103 +216,115 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
             </dl>
           </section>
         </div>
-
-        <StudentGoalsTile
-          studentId={student.id}
-          currentGrades={assignmentGrades}
-          gradesLoading={assignmentsLoading}
-        />
-
-        {canShowModule("changeParentName", "studentProfile", role) && (
-          <ChangeParentNameTile />
-        )}
-        {canShowModule("changeStudentName", "studentProfile", role) && (
-          <ChangeStudentNameTile />
-        )}
-        {canShowModule("changeStudentGrade", "studentProfile", role) && (
-          <ChangeStudentGradeTile />
-        )}
-        {canShowModule("notes", "studentProfile", role) && (
-          <NotesTile studentId={student.id} userId={userId} />
-        )}
-        {canShowModule("viewGrades", "studentProfile", role) && (
-          <ViewGradesTile
-            scores={assignmentGrades}
+      ),
+    },
+    canShowModule("changeParentName", "studentProfile", role) && {
+      id: "changeParentName",
+      title: "Change parent name",
+      content: <ChangeParentNameTile />,
+    },
+    canShowModule("changeStudentName", "studentProfile", role) && {
+      id: "changeStudentName",
+      title: "Change student name",
+      content: <ChangeStudentNameTile />,
+    },
+    canShowModule("changeStudentGrade", "studentProfile", role) && {
+      id: "changeStudentGrade",
+      title: "Change student grade",
+      content: <ChangeStudentGradeTile />,
+    },
+    canShowModule("notes", "studentProfile", role) && {
+      id: "notes",
+      title: "Notes",
+      content: <NotesTile studentId={student.id} userId={userId} />,
+    },
+    canShowModule("viewGrades", "studentProfile", role) && {
+      id: "viewGrades",
+      title: "View grades",
+      content: <ViewGradesTile scores={student.scores} />,
+    },
+    canShowModule("addGrades", "studentProfile", role) && {
+      id: "addGrades",
+      title: "Add grades",
+      content: <AddGradesTile />,
+    },
+    canShowModule("editSession", "studentProfile", role) && {
+      id: "editSession",
+      title: "Edit session",
+      content: <EditSessionTile />,
+    },
+    canShowModule("viewSession", "studentProfile", role) && {
+      id: "viewSession",
+      title: "View session",
+      content: <ViewSessionTile />,
+    },
+    canShowModule("viewStateTesting", "studentProfile", role) && {
+      id: "viewStateTesting",
+      title: "View state testing",
+      content: <ViewStateTestingTile />,
+    },
+    canShowModule("inputStateTesting", "studentProfile", role) && {
+      id: "inputStateTesting",
+      title: "Input state testing",
+      content: <InputStateTestingTile />,
+    },
+    canShowModule("inputGrades", "studentProfile", role) && {
+      id: "inputGrades",
+      title: "Input grades",
+      content: <InputGradesTile />,
+    },
+    canShowModule("viewProgress", "studentProfile", role) && {
+      id: "assignmentGrades",
+      title: "Assignment grades",
+      content: (
+        <Suspense
+          fallback={
+            <div className="card chart-card profile-progress-card">
+              <CardTitle title="Assignment grades" />
+              <p className="muted" role="status">Loading grade graph...</p>
+            </div>
+          }
+        >
+          <AssignmentGradesTile
+            assignments={assignments}
             isLoading={assignmentsLoading}
             error={assignmentsError}
           />
-        )}
-        {canShowModule("addGrades", "studentProfile", role) && <AddGradesTile />}
-        {canShowModule("editSession", "studentProfile", role) && (
-          <EditSessionTile />
-        )}
-        {canShowModule("viewSession", "studentProfile", role) && (
-          <ViewSessionTile />
-        )}
-        {canShowModule("viewStateTesting", "studentProfile", role) && (
-          <ViewStateTestingTile
-            studentId={student.id}
-            refreshToken={stateTestScoresVersion}
-          />
-        )}
-        {canShowModule("inputStateTesting", "studentProfile", role) && (
-          <InputStateTestingTile
-            studentId={student.id}
-            onScoreSaved={() => setStateTestScoresVersion((version) => version + 1)}
-          />
-        )}
-        {canShowModule("inputGrades", "studentProfile", role) && (
-          <InputGradesTile />
-        )}
-        {canShowModule("viewProgress", "studentProfile", role) && (
-          <Suspense
-            fallback={
-              <div className="card chart-card profile-progress-card">
-                <CardTitle title="Assignment grades" />
-                <p className="muted" role="status">Loading grade graph...</p>
-              </div>
-            }
-          >
-            <AssignmentGradesTile
-              assignments={assignments}
-              studentId={student.id}
-              onAssignmentsChange={setAssignments}
-              role={role}
-              isLoading={assignmentsLoading}
-              error={assignmentsError}
-            />
-          </Suspense>
-        )}
-        {canShowModule("viewSessionPlan", "studentProfile", role) && (
-          <ViewSessionPlanTile />
-        )}
-
-        {canShowModule("viewGrades", "studentProfile", role) && (
-          <div className="card profile-scores-card">
-            <CardTitle title="Scores" />
-            <div className="score-list">
-              {scores.slice(0, 6).map(([subject, score]) => (
-                <div className="score-row" key={subject}>
-                  <span>{subject}</span>
-                  <div className="score-bar">
-                    <span style={{ width: `${Math.min(Math.max(score, 0), 100)}%` }} />
-                  </div>
-                  <strong>{score.toFixed(2)}%</strong>
+        </Suspense>
+      ),
+    },
+    canShowModule("viewSessionPlan", "studentProfile", role) && {
+      id: "viewSessionPlan",
+      title: "View session plan",
+      content: <ViewSessionPlanTile />,
+    },
+    canShowModule("viewGrades", "studentProfile", role) && {
+      id: "scores",
+      title: "Scores",
+      content: (
+        <div className="card profile-scores-card">
+          <CardTitle title="Scores" />
+          <div className="score-list">
+            {scores.slice(0, 6).map(([subject, score]) => (
+              <div className="score-row" key={subject}>
+                <span>{subject}</span>
+                <div className="score-bar">
+                  <span style={{ width: `${score}%` }} />
                 </div>
-              ))}
-              {assignmentsLoading && (
-                <p className="muted" role="status">Loading assignment grades...</p>
-              )}
-              {!assignmentsLoading && assignmentsError && (
-                <p className="grade-chart-error" role="alert">{assignmentsError}</p>
-              )}
-              {!assignmentsLoading && !assignmentsError && !scores.length && (
-                <p className="muted">No graded assignments are available yet.</p>
-              )}
-            </div>
+                <strong>{score.toFixed(2)}%</strong>
+              </div>
+            ))}
+            {!scores.length && (
+              <p className="muted">No score data is available yet.</p>
+            )}
           </div>
-        )}
-
+        </div>
+      ),
+    },
+    {
+      id: "upcomingEvents",
+      title: "Upcoming events",
+      content: (
         <div className="card profile-upcoming-card">
           <CardTitle title="Upcoming" />
           <div className="event-list">
@@ -336,7 +339,30 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
             ))}
           </div>
         </div>
-      </section>
+      ),
+    },
+  ].filter(Boolean);
+
+  return (
+    <>
+      <div className="profile-page-heading">
+        <button className="back-button" onClick={onBack}>
+          <ArrowLeft size={17} />
+          Back to students
+        </button>
+        <PageHeading
+          eyebrow="Student profile"
+          title={studentName}
+          subtitle="Student details, grades, and intervention progress."
+        />
+      </div>
+
+      <TileWorkspace
+        className="student-profile-layout"
+        key={`student-profile-${userId ?? "default"}-${student.id ?? "unknown"}`}
+        storageKey={`tile-layout-student-${userId ?? "default"}-${student.id ?? "unknown"}`}
+        tiles={studentTiles}
+      />
     </>
   );
 }

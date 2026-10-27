@@ -43,10 +43,14 @@ function mapStudent(row) {
       [row.first_name, row.last_name].filter(Boolean).join(" ") ||
       "Unnamed student",
     grade: row.grade_level ?? row.grade ?? "—",
-    teacher: relatedUserName(row.teacher_user) || "Not assigned",
+    teacherId: row.teacher,
+    interventionistId: row.interventionist,
+    teacher: row.teacher_name || relatedUserName(row.teacher_user) || "Not assigned",
     interventionTeacher:
-      relatedUserName(row.interventionist_user) || "Not assigned",
-    group: row.group ?? "—",
+      row.interventionist_name ||
+      relatedUserName(row.interventionist_user) ||
+      "Not assigned",
+    group: row.group_number ?? row.group ?? "—",
     avatar: `https://api.dicebear.com/9.x/adventurer/svg?seed=${encodeURIComponent(
       [row.first_name, row.last_name].filter(Boolean).join(" ") || row.id
     )}`,
@@ -353,7 +357,7 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
                   onStudentSelect={openStudentProfile}
                   onStudents={() => selectPage("students")}
                   userName={userName}
-                   userId={user?.public_id}
+                  userId={user?.public_id}
                   role={user?.role}
                 />
               )}
