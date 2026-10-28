@@ -15,6 +15,11 @@ export function getAssignmentGrade(assignment) {
   return Number.isFinite(grade) ? grade : null;
 }
 
+export function normalizeAssignmentSubject(subject) {
+  const normalized = subject.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return normalized === "pe" ? "p_e" : normalized;
+}
+
 export function calculateAssignmentGrades(assignments) {
   const gradeTotals = new Map();
 

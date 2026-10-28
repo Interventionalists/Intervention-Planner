@@ -4,6 +4,7 @@ import {
   CartesianGrid,
   ComposedChart,
   Line,
+  ReferenceLine,
   ResponsiveContainer,
   XAxis,
   YAxis,
@@ -15,6 +16,7 @@ import { CardTitle } from "../components/PageElements";
 import {
   getAssignmentClass,
   getAssignmentGrade,
+  normalizeAssignmentSubject,
 } from "../utils/assignmentGrades";
 
 const API_BASE_URL = (
@@ -73,6 +75,7 @@ function getRequestErrorMessage(detail, fallback) {
 
 function AssignmentGradesTile({
   assignments,
+  subjectGoals = {},
   studentId,
   onAssignmentsChange,
   role,
@@ -137,6 +140,33 @@ function AssignmentGradesTile({
         }),
     [assignments, selectedClass]
   );
+  const averageSubjectGoal = useMemo(() => {
+    if (!subjectGoals) return null;
+    const goals = Object.values(subjectGoals)
+      .filter((goal) => goal != null && !(typeof goal === "string" && !goal.trim()))
+      .map(Number)
+      .filter(Number.isFinite);
+    return goals.length
+      ? goals.reduce((total, goal) => total + goal, 0) / goals.length
+      : null;
+  }, [subjectGoals]);
+  const selectedSubjectGoal = useMemo(() => {
+    if (selectedClass === "all" || !subjectGoals) return null;
+    const goal = Object.entries(subjectGoals).find(
+      ([subject]) =>
+        normalizeAssignmentSubject(subject) ===
+        normalizeAssignmentSubject(selectedClass)
+    )?.[1];
+    if (goal == null || (typeof goal === "string" && !goal.trim())) {
+      return null;
+    }
+    const numericGoal = Number(goal);
+    return Number.isFinite(numericGoal) ? numericGoal : null;
+  }, [selectedClass, subjectGoals]);
+  const chartGoal =
+    selectedClass === "all" ? averageSubjectGoal : selectedSubjectGoal;
+  const chartGoalLabel =
+    selectedClass === "all" ? "Average goals" : "Subject goal";
 
   const openSheet = (point) => {
     setIsSheetOpen(true);
@@ -439,34 +469,46 @@ function AssignmentGradesTile({
             ))}
           </select>
         </label>
-        <div className="grade-chart-types" role="group" aria-label="Graph type">
-          <button
-            type="button"
-            aria-label="Line graph"
-            aria-pressed={chartType === "line"}
-            onClick={() => setChartType("line")}
-          >
-            <LineChart size={17} />
-            <span>Line</span>
-          </button>
-          <button
-            type="button"
-            aria-label="Bar graph"
-            aria-pressed={chartType === "bar"}
-            onClick={() => setChartType("bar")}
-          >
-            <BarChart3 size={17} />
-            <span>Bar</span>
-          </button>
-          <button
-            type="button"
-            aria-label="Area graph"
-            aria-pressed={chartType === "area"}
-            onClick={() => setChartType("area")}
-          >
-            <AreaChart size={17} />
-            <span>Area</span>
-          </button>
+        <div className="grade-chart-options">
+          {chartGoal != null && (
+            <div
+              className="grade-chart-goal-legend"
+              role="img"
+              aria-label={`Red dashed line represents ${chartGoalLabel.toLowerCase()}`}
+            >
+              <span aria-hidden="true" />
+              <span>{chartGoalLabel}</span>
+            </div>
+          )}
+          <div className="grade-chart-types" role="group" aria-label="Graph type">
+            <button
+              type="button"
+              aria-label="Line graph"
+              aria-pressed={chartType === "line"}
+              onClick={() => setChartType("line")}
+            >
+              <LineChart size={17} />
+              <span>Line</span>
+            </button>
+            <button
+              type="button"
+              aria-label="Bar graph"
+              aria-pressed={chartType === "bar"}
+              onClick={() => setChartType("bar")}
+            >
+              <BarChart3 size={17} />
+              <span>Bar</span>
+            </button>
+            <button
+              type="button"
+              aria-label="Area graph"
+              aria-pressed={chartType === "area"}
+              onClick={() => setChartType("area")}
+            >
+              <AreaChart size={17} />
+              <span>Area</span>
+            </button>
+          </div>
         </div>
         {canEditPoints && (
           <button
@@ -517,6 +559,15 @@ function AssignmentGradesTile({
                 domain={[0, "auto"]}
                 allowDecimals
               />
+              {chartGoal != null && (
+                <ReferenceLine
+                  y={chartGoal}
+                  stroke="#dc2626"
+                  strokeWidth={2}
+                  strokeDasharray="6 4"
+                  ifOverflow="extendDomain"
+                />
+              )}
               {chartType === "line" && (
                 <Line
                   type="monotone"
@@ -588,7 +639,7 @@ function AssignmentGradesTile({
               <small>{hoveredPoint.point.dateLabel}</small>
             </div>
           )}
-        </div>
+          </div>
       )}
       {isSheetOpen && (
         <div
