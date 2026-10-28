@@ -234,12 +234,24 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
     canShowModule("viewStateTesting", "studentProfile", role) && {
       id: "viewStateTesting",
       title: "View state testing",
-      content: <ViewStateTestingTile />,
+      content: (
+        <ViewStateTestingTile
+          studentId={student.id}
+          refreshToken={stateTestScoresVersion}
+        />
+      ),
     },
     canShowModule("inputStateTesting", "studentProfile", role) && {
       id: "inputStateTesting",
       title: "Input state testing",
-      content: <InputStateTestingTile />,
+      content: (
+        <InputStateTestingTile
+          studentId={student.id}
+          onScoreSaved={() =>
+            setStateTestScoresVersion((version) => version + 1)
+          }
+        />
+      ),
     },
     canShowModule("inputGrades", "studentProfile", role) && {
       id: "inputGrades",
