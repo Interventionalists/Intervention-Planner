@@ -162,7 +162,16 @@ function StudentNotes({ studentId, userId, variant = "profile" }) {
       ) : (
         <>
           {notesError ? (
-            <p className="error-state" role="alert">{notesError}</p>
+            <div className="error-state" role="alert">
+              <p>{notesError}</p>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => refreshNotes().catch(() => {})}
+              >
+                Try again
+              </button>
+            </div>
           ) : notes.length ? (
             <div className="note-history">
               {notes.map((note) => (
