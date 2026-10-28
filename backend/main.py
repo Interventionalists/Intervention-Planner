@@ -8,12 +8,23 @@ from routes.interventionists import router as interventionists_router
 from routes.admins import router as admins_router
 from routes.auth import router as auth_router
 from routes.notes import router as notes_router
+from routes.assignments import router as assignments_router
 from routes.schools import router as schools_router
+from routes.health import router as health_router
+from routes.system_health import router as system_health_router
 from auth.security import get_current_user, require_admin
 
 load_dotenv()
 
-app = FastAPI()
+#swagger/redoc/openapi.json are off unless ENABLE_API_DOCS=true (set it in your local .env).
+#defaulting to off means a deployed environment never exposes the schema by accident.
+docs_enabled = os.environ.get("ENABLE_API_DOCS", "false").strip().lower() in ("1", "true", "yes")
+
+app = FastAPI(
+    docs_url="/docs" if docs_enabled else None,
+    redoc_url="/redoc" if docs_enabled else None,
+    openapi_url="/openapi.json" if docs_enabled else None,
+)
 
 #comma-separated list of allowed frontend origins, e.g.
 #"http://localhost:5173,https://lucasbranch.pages.dev"
@@ -32,13 +43,16 @@ app.add_middleware(
 )
 
 #auth is applied here, per router, so a new endpoint can't forget it.
-#/login and /change-password stay public; admin routes need the admin role.
+#/login, /change-password and /health stay public; admin routes need the admin role.
 protected = [Depends(get_current_user)]
 
 app.include_router(auth_router)
+app.include_router(health_router)
 app.include_router(students_router, dependencies=protected)
 app.include_router(teachers_router, dependencies=protected)
 app.include_router(interventionists_router, dependencies=protected)
 app.include_router(notes_router, dependencies=protected)
+app.include_router(assignments_router, dependencies=protected)
 app.include_router(schools_router, dependencies=protected)
 app.include_router(admins_router, dependencies=[Depends(require_admin)])
+app.include_router(system_health_router, dependencies=[Depends(require_admin)])

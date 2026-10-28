@@ -1,13 +1,15 @@
+import re
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from auth.security import create_access_token
+from auth.security import create_access_token, get_current_user
 from database.supabase_client import (
     fetch_user_by_email,
     hash_password,
     record_login_attempt,
+    update_user,
     update_user_password,
     verify_password,
 )
@@ -30,6 +32,24 @@ class ChangePasswordRequest(BaseModel):
     email: str
     current_password: str
     new_password: str
+
+
+class AccountProfileUpdateRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    first_name: str | None = Field(default=None, min_length=1, max_length=100)
+    last_name: str | None = Field(default=None, min_length=1, max_length=100)
+    email: str | None = Field(default=None, min_length=3, max_length=254)
+    school: int | None = Field(default=None, ge=1)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, email: str | None) -> str | None:
+        if email is None:
+            return email
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+            raise ValueError("Enter a valid email address.")
+        return email
 
 
 #allowlist of user fields returned to the client. FastAPI drops anything not
@@ -126,3 +146,56 @@ def change_password(payload: ChangePasswordRequest):
         raise HTTPException(status_code=500, detail="Password update failed")
 
     return {"message": "Password updated successfully"}
+
+
+@router.patch("/account/profile")
+def update_account_profile(
+    payload: AccountProfileUpdateRequest,
+    user: dict = Depends(get_current_user),
+):
+    updates = payload.model_dump(exclude_unset=True)
+    profile_fields = {"first_name", "last_name", "email"}
+    if user["role"] == "teacher":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Teachers cannot update account details.",
+        )
+    if user["role"] == "interventionist":
+        if set(updates) != {"school"}:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Interventionists may only update their school.",
+            )
+    elif user["role"] == "admin":
+        if not profile_fields.issubset(updates) or any(
+            not updates[field] for field in profile_fields
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Valid name and email values are required to update the profile.",
+            )
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This account cannot update account details.",
+        )
+
+    try:
+        updated_user = update_user(user["id"], updates)
+    except Exception as error:
+        if getattr(error, "code", None) == "23505":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="That email address is already in use.",
+            ) from error
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to update your account.",
+        ) from error
+
+    if updated_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Account not found.",
+        )
+    return {"user": updated_user}

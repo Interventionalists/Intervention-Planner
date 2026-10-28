@@ -21,6 +21,10 @@ const moduleDetails = {
     title: "Daily calendar",
     description: "Review today's intervention schedule and events.",
   },
+  classStudents: {
+    title: "Students",
+    description: "Review students in your classes or intervention groups.",
+  },
   editSession: {
     title: "Edit session",
     description: "Update an intervention session.",
@@ -95,7 +99,11 @@ function normalizeRole(role) {
     .toLowerCase()
     .replace(/[^a-z]/g, "");
 
-  if (normalized === "interventionalist" || normalized === "interventionist") {
+  if (
+    normalized === "interventionalist" ||
+    normalized === "interventionist" ||
+    normalized === "interventioner"
+  ) {
     return "interventionist";
   }
   if (normalized === "teacher") {
@@ -108,9 +116,12 @@ function normalizeRole(role) {
 }
 
 const modulePermissions = {
-  addGrades: { roles: ["teacher"], pages: ["studentProfile"] },
+  classStudents: {
+    roles: ["teacher", "interventionist"],
+    pages: ["dashboard"],
+  },
+  changeStudentGrade: { roles: ["teacher", "admin"], pages: ["studentProfile"] },
   changeParentName: { roles: ["admin"], pages: ["studentProfile"] },
-  changeStudentGrade: { roles: ["admin"], pages: ["studentProfile"] },
   changeStudentName: { roles: ["admin"], pages: ["studentProfile"] },
   dailyCalendar: {
     roles: ["teacher", "interventionist"],

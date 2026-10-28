@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { themePresets } from "./data";
 import { Header, Sidebar } from "./components/AppNavigation";
-import AccountPage from "./AccountPage";
+import AccountPage from "./pages/AccountPage";
 import CalendarPage from "./pages/CalendarPage";
 import DashboardPage from "./pages/DashboardPage";
 import ReportsPage from "./pages/ReportsPage";
@@ -22,6 +22,13 @@ import {
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
+// lazy so the charting library only downloads for admins who open Status
+const SystemHealthPage = lazy(() => import("./pages/SystemHealthPage"));
+
+// pages only admins may open. The backend enforces this too; hiding them here
+// is just so other roles never see a page they can't use.
+const ADMIN_PAGES = new Set(["users", "status"]);
+
 function relatedUserName(user) {
   return user
     ? [user.first_name, user.last_name].filter(Boolean).join(" ")
@@ -36,10 +43,14 @@ function mapStudent(row) {
       [row.first_name, row.last_name].filter(Boolean).join(" ") ||
       "Unnamed student",
     grade: row.grade_level ?? row.grade ?? "—",
-    teacher: relatedUserName(row.teacher_user) || "Not assigned",
+    teacherId: row.teacher,
+    interventionistId: row.interventionist,
+    teacher: row.teacher_name || relatedUserName(row.teacher_user) || "Not assigned",
     interventionTeacher:
-      relatedUserName(row.interventionist_user) || "Not assigned",
-    group: row.group ?? "—",
+      row.interventionist_name ||
+      relatedUserName(row.interventionist_user) ||
+      "Not assigned",
+    group: row.group_number ?? row.group ?? "—",
     avatar: `https://api.dicebear.com/9.x/adventurer/svg?seed=${encodeURIComponent(
       [row.first_name, row.last_name].filter(Boolean).join(" ") || row.id
     )}`,
@@ -121,6 +132,10 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
   const [query, setQuery] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [theme, setTheme] = useState(themePresets[0].colors);
+  const [savedTheme, setSavedTheme] = useState(themePresets[0].colors);
+  const [hasSavedTheme, setHasSavedTheme] = useState(false);
+  const [themeLoadError, setThemeLoadError] = useState("");
+  const [schoolLogo, setSchoolLogo] = useState(null);
   const userName =
     user?.name ||
     [user?.first_name, user?.last_name].filter(Boolean).join(" ") ||
@@ -132,6 +147,63 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
     .slice(0, 2)
     .map((part) => part[0].toUpperCase())
     .join("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    apiFetch(`${API_BASE_URL}/schools-logo`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`School logo request failed (${response.status}).`);
+        }
+        const result = await response.json();
+        if (
+          result.school_logo_api != null &&
+          typeof result.school_logo_api !== "string"
+        ) {
+          throw new Error("The school logo response has an unexpected format.");
+        }
+        setSchoolLogo(result.school_logo_api || null);
+      })
+      .catch((error) => {
+        if (error.name !== "AbortError") {
+          console.error("Unable to load the school logo:", error);
+          setSchoolLogo(null);
+        }
+      });
+
+    return () => controller.abort();
+  }, [user?.school_id ?? user?.school]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    apiFetch(`${API_BASE_URL}/schools-theme`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error("Unable to load your school's color scheme.");
+        }
+        const result = await response.json();
+        if (
+          !Array.isArray(result.colors) ||
+          result.colors.length !== 3 ||
+          result.colors.some((color) => typeof color !== "string")
+        ) {
+          throw new Error("The saved color scheme has an unexpected format.");
+        }
+        setTheme(result.colors);
+        setSavedTheme(result.colors);
+        setHasSavedTheme(Boolean(result.has_theme));
+        setThemeLoadError("");
+      })
+      .catch((error) => {
+        if (error.name !== "AbortError") {
+          setThemeLoadError(error.message || "Unable to load your color scheme.");
+        }
+      });
+
+    return () => controller.abort();
+  }, [user?.school]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -163,6 +235,32 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
     return () => controller.abort();
   }, []);
 
+  const saveTheme = async (colors) => {
+    const response = await apiFetch(`${API_BASE_URL}/schools-theme`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        color_primary: colors[0].replace(/^#/, ""),
+        color_secondary: colors[1].replace(/^#/, ""),
+        color_tertiary: colors[2].replace(/^#/, ""),
+      }),
+    });
+    if (!response.ok) {
+      const result = await response.json().catch(() => null);
+      throw new Error(
+        result?.detail || `Unable to save your school's color scheme (${response.status}).`
+      );
+    }
+    const result = await response.json();
+    if (!Array.isArray(result.colors) || result.colors.length !== 3) {
+      throw new Error("The saved color scheme response has an unexpected format.");
+    }
+    setTheme(result.colors);
+    setSavedTheme(result.colors);
+    setHasSavedTheme(Boolean(result.has_theme));
+    setThemeLoadError("");
+  };
+
   const filteredStudents = useMemo(
     () =>
       studentsData.filter((student) =>
@@ -172,7 +270,7 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
   );
 
   const selectPage = (id) => {
-    if (id === "users" && user?.role !== "admin") {
+    if (ADMIN_PAGES.has(id) && user?.role !== "admin") {
       return;
     }
     setPage(id);
@@ -194,6 +292,12 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
     );
   };
 
+  const updateTheme = (colors) => {
+    if (user?.role === "admin") {
+      setTheme(colors);
+    }
+  };
+
   return (
     <div
       className="app"
@@ -211,6 +315,8 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
         onLogout={onLogout}
         userName={userName}
         role={user?.role}
+        schoolLogo={schoolLogo}
+        onSchoolLogoError={() => setSchoolLogo(null)}
       />
 
       <div className="main-shell">
@@ -221,11 +327,19 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
           userName={userName}
           userInitials={userInitials}
           onAccountClick={() => selectPage("account")}
-          showSearch={page !== "users"}
+          showSearch={!ADMIN_PAGES.has(page)}
         />
 
         <main className="content">
-          {studentsLoading ? (
+          {/* status doesn't depend on student data, so it renders even when
+              students fail to load -- which is exactly when it's needed */}
+          {page === "status" ? (
+            user?.role === "admin" && (
+              <Suspense fallback={<div className="data-state" role="status">Loading system status...</div>}>
+                <SystemHealthPage role={user.role} />
+              </Suspense>
+            )
+          ) : studentsLoading ? (
             <div className="data-state" role="status">Loading students...</div>
           ) : studentsError ? (
             <div className="data-state error-state" role="alert">
@@ -243,7 +357,7 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
                   onStudentSelect={openStudentProfile}
                   onStudents={() => selectPage("students")}
                   userName={userName}
-                   userId={user?.public_id}
+                  userId={user?.public_id}
                   role={user?.role}
                 />
               )}
@@ -274,7 +388,15 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
               {page === "calendar" && <CalendarPage />}
               {page === "reports" && <ReportsPage students={studentsData} />}
               {page === "settings" && (
-                <SettingsPage theme={theme} setTheme={setTheme} />
+                <SettingsPage
+                  theme={theme}
+                  savedTheme={savedTheme}
+                  hasSavedTheme={hasSavedTheme}
+                  setTheme={updateTheme}
+                  onSaveTheme={saveTheme}
+                  canManageTheme={user?.role === "admin"}
+                  loadError={themeLoadError}
+                />
               )}
               {page === "account" && (
                 <AccountPage
