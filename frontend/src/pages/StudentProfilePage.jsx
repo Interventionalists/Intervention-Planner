@@ -40,6 +40,7 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
   const [groupNumber, setGroupNumber] = useState(
     student.group_number == null ? "" : String(student.group_number)
   );
+  const [subjectGoals, setSubjectGoals] = useState({});
   const [profileUpdateError, setProfileUpdateError] = useState("");
   const [profileUpdateMessage, setProfileUpdateMessage] = useState("");
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
@@ -83,6 +84,10 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
     setProfileUpdateError("");
     setProfileUpdateMessage("");
   }, [student.id, student.group_number]);
+
+  useEffect(() => {
+    setSubjectGoals({});
+  }, [student.id]);
 
   const updateStudentProfile = async (updates, successMessage) => {
     setIsUpdatingProfile(true);
@@ -202,6 +207,7 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
           studentId={student.id}
           currentGrades={assignmentGrades}
           gradesLoading={assignmentsLoading}
+          onGoalsChange={setSubjectGoals}
         />
       ),
     },
@@ -254,6 +260,7 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
         >
           <AssignmentGradesTile
             assignments={assignments}
+            subjectGoals={subjectGoals}
             isLoading={assignmentsLoading}
             error={assignmentsError}
           />
