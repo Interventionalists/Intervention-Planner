@@ -169,11 +169,7 @@ const modulePermissions = {
     pages: ["studentProfile"],
   },
   viewSessionPlan: {
-    roles: ["teacher", "admin"],
-    pages: ["studentProfile"],
-  },
-    viewSessionPlan: {
-    roles: [ "interventionist"],
+    roles: ["teacher", "interventionist", "admin"],
     pages: ["dashboard", "studentProfile"],
   },
   viewStateTesting: {

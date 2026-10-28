@@ -37,9 +37,6 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
     isLoading: assignmentsLoading,
     error: assignmentsError,
   } = useStudentAssignments(student.id);
-  const [notes, setNotes] = useState([]);
-  const [notesError, setNotesError] = useState("");
-  const [notesLoading, setNotesLoading] = useState(true);
   const [groupNumber, setGroupNumber] = useState(
     student.group_number == null ? "" : String(student.group_number)
   );
@@ -146,47 +143,6 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
       "Interventionist unassigned."
     );
 
-  useEffect(() => {
-    const controller = new AbortController();
-
-    async function loadNotes() {
-      setNotes([]);
-      setNotesError("");
-      setNotesLoading(true);
-
-      try {
-        if (student.id == null) {
-          throw new Error("This student does not have a database ID.");
-        }
-        const response = await apiFetch(
-          `${API_BASE_URL}/notes-fetchForStudent/${encodeURIComponent(student.id)}`,
-          { signal: controller.signal }
-        );
-        if (!response.ok) {
-          throw new Error(`Notes request failed (${response.status}).`);
-        }
-
-        const data = await response.json();
-        if (!Array.isArray(data.notes)) {
-          throw new Error("The notes response has an unexpected format.");
-        }
-        setNotes(data.notes);
-      } catch (error) {
-        if (error.name !== "AbortError") {
-          console.error("Error fetching student notes:", error);
-          setNotesError("Could not load this student's notes.");
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          setNotesLoading(false);
-        }
-      }
-    }
-
-    loadNotes();
-    return () => controller.abort();
-  }, [student.id]);
-
   const studentTiles = [
     {
       id: "profileIdentity",
@@ -237,6 +193,17 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
       id: "notes",
       title: "Notes",
       content: <NotesTile studentId={student.id} userId={userId} />,
+    },
+    {
+      id: "studentGoals",
+      title: "Goals",
+      content: (
+        <StudentGoalsTile
+          studentId={student.id}
+          currentGrades={assignmentGrades}
+          gradesLoading={assignmentsLoading}
+        />
+      ),
     },
     canShowModule("viewGrades", "studentProfile", role) && {
       id: "viewGrades",
