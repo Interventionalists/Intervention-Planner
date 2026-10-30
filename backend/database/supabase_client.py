@@ -797,3 +797,6 @@ def fetch_student_ownership(student_id: int):
         .execute()
     )
     return response.data[0] if response.data else None
+
+#################################### GROUPS ENDPOINTS ##########################################
+# Functions for managing student groups, including creating, reading, updating, and deleting groups.
