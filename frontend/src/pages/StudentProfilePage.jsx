@@ -228,8 +228,7 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
 
         <StudentGoalsTile
           studentId={student.id}
-          currentGrades={assignmentGrades}
-          gradesLoading={assignmentsLoading}
+          currentGrades={student.scores || {}}
         />
 
         {canShowModule("changeParentName", "studentProfile", role) && (

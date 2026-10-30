@@ -5,17 +5,13 @@ import EditSessionPlansTile from "../dashtiles/EditSessionPlansTile";
 import EditSessionTile from "../dashtiles/EditSessionTile";
 import PersonalMeetingsTile from "../dashtiles/PersonalMeetingsTile";
 import PersonalTodoTile from "../dashtiles/PersonalTodoTile";
-import SelectedStudentTile from "../dashtiles/SelectedStudentTile";
 import StudentsNeedingAttentionTile from "../dashtiles/StudentsNeedingAttentionTile";
 import ViewSessionPlanTile from "../dashtiles/ViewSessionPlanTile";
 import ViewSessionTile from "../dashtiles/ViewSessionTile";
 
 function DashboardPage({
-  student,
   students,
-  onStudentChange,
   onStudentSelect,
-  onStudents,
   userName = "User",
   role,
 }) {
@@ -28,12 +24,6 @@ function DashboardPage({
       />
 
       <section className="dashboard-grid">
-        <SelectedStudentTile
-          student={student}
-          students={students}
-          onStudentChange={onStudentChange}
-          onStudents={onStudents}
-        />
         {canShowModule("studentsNeedingAttention", "dashboard", role) && (
           <StudentsNeedingAttentionTile
             students={students}

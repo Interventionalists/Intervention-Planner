@@ -6,12 +6,12 @@ const API_BASE_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:8000"
 ).replace(/\/+$/, "");
 const SUBJECTS = [
-  ["math", "Math"],
-  ["english", "English"],
-  ["social_studies", "Social studies"],
-  ["science", "Science"],
   ["art", "Art"],
+  ["english", "English"],
+  ["math", "Math"],
   ["p_e", "P.E."],
+  ["science", "Science"],
+  ["social_studies", "Social studies"],
 ];
 
 function normalizeSubject(subject) {
@@ -45,7 +45,7 @@ function StudentGoalsTile({
       return <span className="student-goal-current muted">Loading...</span>;
     }
 
-    const grade = gradesBySubject[subject];
+    const grade = gradesBySubject[normalizeSubject(subject)];
     if (!Number.isFinite(grade)) {
       return <span className="student-goal-current">N/A</span>;
     }

@@ -347,11 +347,8 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
             <>
               {page === "dashboard" && (
                 <DashboardPage
-                  student={selectedStudent}
                   students={studentsData}
-                  onStudentChange={setSelectedStudent}
                   onStudentSelect={openStudentProfile}
-                  onStudents={() => selectPage("students")}
                   userName={userName}
                    userId={user?.public_id}
                   role={user?.role}
