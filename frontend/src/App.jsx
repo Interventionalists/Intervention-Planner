@@ -261,6 +261,27 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
     setThemeLoadError("");
   };
 
+  const saveSchoolLogo = async (logoUrl) => {
+    const response = await apiFetch(`${API_BASE_URL}/schools-logo`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ school_logo_api: logoUrl.trim() || null }),
+    });
+    const result = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(
+        result?.detail || `Unable to save the school logo (${response.status}).`
+      );
+    }
+    if (
+      result?.school_logo_api != null &&
+      typeof result.school_logo_api !== "string"
+    ) {
+      throw new Error("The saved school logo response has an unexpected format.");
+    }
+    setSchoolLogo(result.school_logo_api || null);
+  };
+
   const filteredStudents = useMemo(
     () =>
       studentsData.filter((student) =>
@@ -394,6 +415,8 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
                   hasSavedTheme={hasSavedTheme}
                   setTheme={updateTheme}
                   onSaveTheme={saveTheme}
+                  schoolLogo={schoolLogo}
+                  onSaveLogo={saveSchoolLogo}
                   canManageTheme={user?.role === "admin"}
                   loadError={themeLoadError}
                 />

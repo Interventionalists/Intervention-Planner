@@ -266,7 +266,10 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
         >
           <AssignmentGradesTile
             assignments={assignments}
+            studentId={student.id}
+            onAssignmentsChange={setAssignments}
             subjectGoals={subjectGoals}
+            role={role}
             isLoading={assignmentsLoading}
             error={assignmentsError}
           />
