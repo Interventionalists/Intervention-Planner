@@ -577,6 +577,19 @@ def fetch_school_logo_api(school_id):
     return response.data[0]["school_logo_api"] if response.data else None
 
 
+def save_school_logo_api(school_id, logo_api):
+    response = (
+        supabase.table("schools")
+        .update({"school_logo_api": logo_api})
+        .eq("school_id", school_id)
+        .select("school_logo_api")
+        .execute()
+    )
+    if not response.data:
+        raise RuntimeError("The school logo could not be saved.")
+    return response.data[0]["school_logo_api"]
+
+
 def fetch_school_theme(school_id):
     response = (
         supabase.table("themes")

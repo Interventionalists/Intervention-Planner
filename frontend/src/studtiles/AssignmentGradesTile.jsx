@@ -452,7 +452,8 @@ function AssignmentGradesTile({
 
   return (
     <div className="card chart-card profile-progress-card">
-      <CardTitle title="Assignment grades" />
+      <CardTitle title="Assignment history" />
+      <p className="muted">Every graded assignment over time, with the student's goal line.</p>
       <div className="grade-chart-controls">
         <label className="grade-chart-filter">
           <span>Class</span>

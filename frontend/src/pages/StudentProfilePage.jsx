@@ -13,7 +13,6 @@ import InputGradesTile from "../studtiles/InputGradesTile";
 import InputStateTestingTile from "../studtiles/InputStateTestingTile";
 import NotesTile from "../studtiles/NotesTile";
 import StudentGoalsTile from "../studtiles/StudentGoalsTile";
-import ViewGradesTile from "../studtiles/ViewGradesTile";
 import ViewSessionPlanTile from "../studtiles/ViewSessionPlanTile";
 import ViewSessionTile from "../studtiles/ViewSessionTile";
 import ViewStateTestingTile from "../studtiles/ViewStateTestingTile";
@@ -211,11 +210,6 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
         />
       ),
     },
-    canShowModule("viewGrades", "studentProfile", role) && {
-      id: "viewGrades",
-      title: "View grades",
-      content: <ViewGradesTile scores={student.scores} />,
-    },
     canShowModule("addGrades", "studentProfile", role) && {
       id: "addGrades",
       title: "Add grades",
@@ -260,19 +254,22 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
     },
     canShowModule("viewProgress", "studentProfile", role) && {
       id: "assignmentGrades",
-      title: "Assignment grades",
+      title: "Assignment history",
       content: (
         <Suspense
           fallback={
             <div className="card chart-card profile-progress-card">
-              <CardTitle title="Assignment grades" />
+              <CardTitle title="Assignment history" />
               <p className="muted" role="status">Loading grade graph...</p>
             </div>
           }
         >
           <AssignmentGradesTile
             assignments={assignments}
+            studentId={student.id}
+            onAssignmentsChange={setAssignments}
             subjectGoals={subjectGoals}
+            role={role}
             isLoading={assignmentsLoading}
             error={assignmentsError}
           />
@@ -286,10 +283,11 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
     },
     canShowModule("viewGrades", "studentProfile", role) && {
       id: "scores",
-      title: "Scores",
+      title: "Subject averages",
       content: (
         <div className="card profile-scores-card">
-          <CardTitle title="Scores" />
+          <CardTitle title="Subject averages" />
+          <p className="muted">Current average in each subject, calculated from graded assignments.</p>
           <div className="score-list">
             {scores.slice(0, 6).map(([subject, score]) => (
               <div className="score-row" key={subject}>
