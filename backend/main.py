@@ -29,7 +29,7 @@ app = FastAPI(
 )
 
 #comma-separated list of allowed frontend origins, e.g.
-#"http://localhost:5173,https://lucasbranch.pages.dev"
+#"http://localhost:5173,https://myapp.example.com"
 cors_origins = [
     origin.strip()
     for origin in os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",")
