@@ -406,7 +406,7 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
                   onUserUpdated={onUserUpdated}
                 />
               )}
-              {page === "calendar" && <CalendarPage />}
+              {page === "calendar" && <CalendarPage user={user} />}
               {page === "reports" && <ReportsPage students={studentsData} />}
               {page === "settings" && (
                 <SettingsPage
