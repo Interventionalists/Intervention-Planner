@@ -3,11 +3,14 @@ import { ArrowDown, ArrowUp, MoreHorizontal, Plus, Trash2 } from "lucide-react";
 
 function createInitialLayout(storageKey, tiles) {
   const tileIds = tiles.map((tile) => tile.id);
+  const defaultTileIds = tiles
+    .filter((tile) => tile.defaultVisible !== false)
+    .map((tile) => tile.id);
 
   try {
     const savedLayout = localStorage.getItem(storageKey);
     if (!savedLayout) {
-      return { order: tileIds, catalogIds: tileIds, sizes: {} };
+      return { order: defaultTileIds, catalogIds: tileIds, sizes: {} };
     }
 
     const parsedLayout = JSON.parse(savedLayout);
@@ -21,7 +24,12 @@ function createInitialLayout(storageKey, tiles) {
     const order = parsedLayout.order.filter(
       (id, index) => tileIds.includes(id) && parsedLayout.order.indexOf(id) === index
     );
-    const newTileIds = tileIds.filter((id) => !catalogIds.includes(id));
+    const newTileIds = tiles
+      .filter(
+        (tile) =>
+          !catalogIds.includes(tile.id) && tile.defaultVisible !== false
+      )
+      .map((tile) => tile.id);
     const sizes =
       parsedLayout.sizes && typeof parsedLayout.sizes === "object"
         ? parsedLayout.sizes
@@ -34,7 +42,7 @@ function createInitialLayout(storageKey, tiles) {
     };
   } catch (error) {
     console.error("Could not load the saved tile layout:", error);
-    return { order: tileIds, catalogIds: tileIds, sizes: {} };
+    return { order: defaultTileIds, catalogIds: tileIds, sizes: {} };
   }
 }
 
@@ -48,9 +56,13 @@ function TileWorkspace({ className, storageKey, tiles }) {
 
   useEffect(() => {
     setLayout((currentLayout) => {
-      const newTileIds = tileIds.filter(
-        (id) => !currentLayout.catalogIds.includes(id)
-      );
+      const newTileIds = tiles
+        .filter(
+          (tile) =>
+            !currentLayout.catalogIds.includes(tile.id) &&
+            tile.defaultVisible !== false
+        )
+        .map((tile) => tile.id);
       return {
         ...currentLayout,
         order: [
