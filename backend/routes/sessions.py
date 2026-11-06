@@ -1,14 +1,17 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from auth.security import get_current_user, require_student_access
 from database.supabase_client import (
+    create_calendar_event,
     create_session,
+    delete_calendar_event,
     fetch_session,
     fetch_sessions_for_student,
+    fetch_student_ownership,
     update_session_status,
 )
 
@@ -22,7 +25,14 @@ class SessionCreate(BaseModel):
     plan_type: str = Field(min_length=1, max_length=100)
     focus: str = Field(min_length=1, max_length=300)
     duration_minutes: int = Field(ge=1, le=240)
-    scheduled_at: datetime | None = None
+    scheduled_at: datetime
+
+    @field_validator("scheduled_at")
+    @classmethod
+    def require_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("Session start time must include a timezone.")
+        return value
 
 
 class SessionStatusUpdate(BaseModel):
@@ -51,24 +61,53 @@ def add_session(
 ):
     try:
         require_student_access(user, payload.student_id)
+        ownership = fetch_student_ownership(payload.student_id)
+        if ownership is None or ownership.get("school") is None:
+            raise HTTPException(status_code=404, detail="Student school not found")
+
+        starts_at = payload.scheduled_at
+        ends_at = starts_at + timedelta(minutes=payload.duration_minutes)
+        calendar_event = create_calendar_event({
+            "school": ownership["school"],
+            "event_type": "intervention_session",
+            "title": payload.plan_type,
+            "starts_at": starts_at.isoformat(),
+            "ends_at": ends_at.isoformat(),
+            "regarding_student": payload.student_id,
+            "organizer": user["public_id"],
+        })
+        if not calendar_event:
+            raise HTTPException(status_code=500, detail="Calendar event creation failed")
+
         session_data = payload.model_dump()
-        if session_data["scheduled_at"] is not None:
-            session_data["scheduled_at"] = session_data["scheduled_at"].isoformat()
+        session_data["scheduled_at"] = starts_at.isoformat()
         session_data["status"] = "planned"
         session_data["created_by"] = user["public_id"]
-        session = create_session(session_data)
+        session_data["event_id"] = calendar_event["id"]
+        try:
+            session = create_session(session_data)
+            if not session:
+                raise RuntimeError("Session creation failed")
+        except Exception:
+            try:
+                delete_calendar_event(
+                    calendar_event["public_id"],
+                    ownership["school"],
+                    user["public_id"],
+                )
+            except Exception:
+                pass
+            raise
     except HTTPException:
         raise
     except Exception as error:
         raise HTTPException(status_code=500, detail=str(error)) from error
-    if not session:
-        raise HTTPException(status_code=500, detail="Session creation failed")
     return {"session": session}
 
 
 @router.patch("/sessions-updateStatus/{session_id}")
 def edit_session_status(
-    session_id: str,
+    session_id: int,
     payload: SessionStatusUpdate,
     user: dict = Depends(get_current_user),
 ):

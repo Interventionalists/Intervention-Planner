@@ -244,6 +244,7 @@ export default function SessionPlanningTile({
             <span>Start Date and Time</span>
             <input
               onChange={(event) => setScheduledAt(event.target.value)}
+              required
               type="datetime-local"
               value={scheduledAt}
             />
