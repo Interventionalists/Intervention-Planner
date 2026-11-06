@@ -895,6 +895,7 @@ def update_session_status(session_id: int, status: str):
         .execute()
     )
     return _from_session_row(response.data[0]) if response.data else None
+
 ######################################## CALENDAR ENDPOINTS ########################################
 
 def fetch_calendar_events(school_id: int, range_start: str, range_end: str):
@@ -1135,10 +1136,17 @@ def fetch_groups(school_id: int | None = None):
     response = query.execute()
     return response.data
 
-def create_groups(school_id: int, group_name: str | None = None):
+def create_groups(
+    school_id: int,
+    name: str,
+    purpose: str,
+    interventionist_id: str | None = None,
+):
     group_data = {
         "school": school_id,
-        "group_name": group_name,
+        "name": name,
+        "purpose": purpose,
+        "interventionist": interventionist_id,
     }
     response = (
         supabase.table("session_groups")
@@ -1148,10 +1156,10 @@ def create_groups(school_id: int, group_name: str | None = None):
     )
     return response.data[0] if response.data else None
 
-def add_students_to_group( group_id: int, student_ids: list[int] ):
+def add_students_to_group( group_id: int, student_ids: list[int], added_by: str | None = None):
     response = (
         supabase.table("session_group_members")
-        .insert([{"group_id": group_id, "student_id": student_id} for student_id in student_ids])
+        .insert([{"group_id": group_id, "student_id": student_id, "added_by": added_by} for student_id in student_ids])
         .select("*")
         .execute()
     )
