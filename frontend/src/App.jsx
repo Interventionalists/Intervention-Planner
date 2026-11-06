@@ -379,6 +379,7 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
                   onStudents={() => selectPage("students")}
                   userName={userName}
                   userId={user?.public_id}
+                  user={user}
                   role={user?.role}
                 />
               )}
