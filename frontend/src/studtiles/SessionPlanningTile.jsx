@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "../api";
+import { toSessionView } from "../hooks/useStudentSessions";
+import { sessionDurations, starterPlans } from "./sessionPlanningData";
 import {
   CalendarClock,
   Check,
@@ -12,33 +14,6 @@ const API_BASE_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:8000"
 ).replace(/\/+$/, "");
 
-const starterPlans = [
-  {
-    id: "reading-fluency",
-    title: "Reading fluency",
-    focus: "Accuracy, pacing, and expression",
-    duration: 25,
-  },
-  {
-    id: "math-facts",
-    title: "Math fact practice",
-    focus: "Build fluency with targeted practice",
-    duration: 20,
-  },
-  {
-    id: "reading-comprehension",
-    title: "Reading comprehension",
-    focus: "Find evidence and summarize a text",
-    duration: 30,
-  },
-  {
-    id: "Open-session",
-    title: "Open session",
-    focus: "Flexible time for individualized support",
-    duration: 30,
-  },
-];
-
 function formatSessionDate(value) {
   if (!value) return "Time not set";
 
@@ -46,17 +21,6 @@ function formatSessionDate(value) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
-}
-
-function toSessionView(session) {
-  return {
-    id: session.id,
-    planTitle: session.plan_type,
-    focus: session.focus,
-    duration: session.duration_minutes,
-    scheduledAt: session.scheduled_at,
-    status: session.status,
-  };
 }
 
 async function getResponseResult(response, action) {
@@ -73,46 +37,21 @@ async function getResponseResult(response, action) {
 export default function SessionPlanningTile({
   studentId,
   studentName,
+  sessions,
+  setSessions,
+  sessionsError = "",
   canManage = true,
 }) {
-  const [sessions, setSessions] = useState([]);
   const [selectedPlanId, setSelectedPlanId] = useState(starterPlans[0].id);
   const [selectedDuration, setSelectedDuration] = useState(starterPlans[0].duration);
+  const [sessionDescription, setSessionDescription] = useState(starterPlans[0].focus);
   const [scheduledAt, setScheduledAt] = useState("");
   const [view, setView] = useState("upcoming");
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    const controller = new AbortController();
-
-    async function loadSessions() {
-      setSessions([]);
-      setMessage("");
-      try {
-        if (studentId == null) {
-          throw new Error("This student does not have a database ID.");
-        }
-        const response = await apiFetch(
-          `${API_BASE_URL}/sessions-fetchForStudent/${encodeURIComponent(studentId)}`,
-          { signal: controller.signal }
-        );
-        const result = await getResponseResult(response, "Sessions request");
-        if (!Array.isArray(result.sessions)) {
-          throw new Error("The sessions response has an unexpected format.");
-        }
-        setSessions(result.sessions.map(toSessionView));
-      } catch (error) {
-        if (error.name !== "AbortError") {
-          setMessage(error instanceof TypeError
-            ? "Could not reach the backend. Check that it is running and VITE_API_URL is correct."
-            : error.message || "Could not load this student's sessions.");
-        }
-      }
-    }
-
-    loadSessions();
-    return () => controller.abort();
-  }, [studentId]);
+    if (sessionsError) setMessage(sessionsError);
+  }, [sessionsError]);
 
   const visibleSessions = useMemo(() => {
     const filtered = sessions.filter((session) =>
@@ -145,7 +84,7 @@ export default function SessionPlanningTile({
         body: JSON.stringify({
           student_id: studentId,
           plan_type: plan.title,
-          focus: plan.focus,
+          focus: sessionDescription,
           duration_minutes: selectedDuration,
           scheduled_at: scheduledAt ? new Date(scheduledAt).toISOString() : null,
         }),
@@ -216,7 +155,10 @@ export default function SessionPlanningTile({
               onChange={(event) => {
                 const plan = starterPlans.find((candidate) => candidate.id === event.target.value);
                 setSelectedPlanId(event.target.value);
-                if (plan) setSelectedDuration(plan.duration);
+                if (plan) {
+                  setSelectedDuration(plan.duration);
+                  setSessionDescription(plan.focus);
+                }
               }}
               value={selectedPlanId}
             >
@@ -227,13 +169,22 @@ export default function SessionPlanningTile({
               ))}
             </select>
           </label>
+          <label className="session-field">
+            <span>Description (optional)</span>
+            <textarea
+              maxLength={300}
+              onChange={(event) => setSessionDescription(event.target.value)}
+              rows={3}
+              value={sessionDescription}
+            />
+          </label>
           <label className="session-field session-duration-field">
             <span>Duration</span>
             <select
               onChange={(event) => setSelectedDuration(Number(event.target.value))}
               value={selectedDuration}
             >
-              {[15, 20, 25, 30, 45, 60].map((duration) => (
+              {sessionDurations.map((duration) => (
                 <option key={duration} value={duration}>
                   {duration} minutes
                 </option>
@@ -294,7 +245,7 @@ export default function SessionPlanningTile({
                     {session.status}
                   </span>
                 </div>
-                <p>{session.focus}</p>
+                {session.focus && <p>{session.focus}</p>}
                 <div className="session-item-meta">
                   <span>{formatSessionDate(session.scheduledAt)}</span>
                   <span>{session.duration} min</span>

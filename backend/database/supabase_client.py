@@ -873,6 +873,19 @@ def fetch_session(session_id: int):
     return _from_session_row(response.data[0]) if response.data else None
 
 
+def update_session_details(session_id: int, updates: dict):
+    row_updates = _to_session_row({"event_id": session_id, **updates})
+    row_updates.pop("event_id")
+    response = (
+        supabase.table("session_details")
+        .update(row_updates)
+        .eq("event_id", session_id)
+        .select("*")
+        .execute()
+    )
+    return _from_session_row(response.data[0]) if response.data else None
+
+
 def update_session_status(session_id: int, status: str):
     response = (
         supabase.table("session_details")
@@ -1050,6 +1063,17 @@ def create_calendar_event(event_data: dict):
         supabase.table("calendar_events")
         .insert(event_data)
         .select("*")
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+
+def fetch_calendar_event_by_id(event_id: int):
+    response = (
+        supabase.table("calendar_events")
+        .select("*")
+        .eq("id", event_id)
+        .limit(1)
         .execute()
     )
     return response.data[0] if response.data else None

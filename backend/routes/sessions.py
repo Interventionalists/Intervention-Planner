@@ -9,9 +9,12 @@ from database.supabase_client import (
     create_calendar_event,
     create_session,
     delete_calendar_event,
+    fetch_calendar_event_by_id,
     fetch_session,
     fetch_sessions_for_student,
     fetch_student_ownership,
+    update_calendar_event,
+    update_session_details,
     update_session_status,
 )
 
@@ -23,7 +26,7 @@ class SessionCreate(BaseModel):
 
     student_id: int = Field(ge=1)
     plan_type: str = Field(min_length=1, max_length=100)
-    focus: str = Field(min_length=1, max_length=300)
+    focus: str = Field(default="", max_length=300)
     duration_minutes: int = Field(ge=1, le=240)
     scheduled_at: datetime
 
@@ -37,6 +40,22 @@ class SessionCreate(BaseModel):
 
 class SessionStatusUpdate(BaseModel):
     status: Literal["completed", "cancelled"]
+
+
+class SessionUpdate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    plan_type: str = Field(min_length=1, max_length=100)
+    focus: str = Field(default="", max_length=300)
+    duration_minutes: int = Field(ge=1, le=240)
+    scheduled_at: datetime
+
+    @field_validator("scheduled_at")
+    @classmethod
+    def require_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("Session start time must include a timezone.")
+        return value
 
 
 @router.get("/sessions-fetchForStudent/{student_id}")
@@ -123,4 +142,76 @@ def edit_session_status(
         raise HTTPException(status_code=500, detail=str(error)) from error
     if not updated_session:
         raise HTTPException(status_code=404, detail="Session not found")
+    return {"session": updated_session}
+
+
+@router.put("/sessions-update/{session_id}")
+def edit_planned_session(
+    session_id: int,
+    payload: SessionUpdate,
+    user: dict = Depends(get_current_user),
+):
+    try:
+        session = fetch_session(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        if session["status"] != "planned":
+            raise HTTPException(status_code=409, detail="Only planned sessions can be edited")
+        require_student_access(user, session["student_id"])
+
+        calendar_event = fetch_calendar_event_by_id(session_id)
+        if not calendar_event:
+            raise HTTPException(status_code=404, detail="Calendar event not found")
+        if (
+            user["role"] != "admin"
+            and str(calendar_event.get("organizer")) != str(user["public_id"])
+        ):
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        starts_at = payload.scheduled_at
+        ends_at = starts_at + timedelta(minutes=payload.duration_minutes)
+        event_updates = {
+            "title": payload.plan_type,
+            "starts_at": starts_at.isoformat(),
+            "ends_at": ends_at.isoformat(),
+        }
+        organizer_id = None if user["role"] == "admin" else user["public_id"]
+        updated_event = update_calendar_event(
+            calendar_event["public_id"],
+            calendar_event["school"],
+            event_updates,
+            organizer_id,
+        )
+        if not updated_event:
+            raise HTTPException(status_code=404, detail="Calendar event not found")
+
+        session_updates = {
+            "plan_type": payload.plan_type,
+            "focus": payload.focus,
+            "duration_minutes": payload.duration_minutes,
+            "scheduled_at": starts_at.isoformat(),
+        }
+        try:
+            updated_session = update_session_details(session_id, session_updates)
+            if not updated_session:
+                raise RuntimeError("Session update failed")
+        except Exception:
+            try:
+                update_calendar_event(
+                    calendar_event["public_id"],
+                    calendar_event["school"],
+                    {
+                        "title": calendar_event.get("title"),
+                        "starts_at": calendar_event["starts_at"],
+                        "ends_at": calendar_event["ends_at"],
+                    },
+                    organizer_id,
+                )
+            except Exception:
+                pass
+            raise
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=str(error)) from error
     return {"session": updated_session}

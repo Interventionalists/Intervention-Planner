@@ -13,6 +13,8 @@ import InputStateTestingTile from "../studtiles/InputStateTestingTile";
 import NotesTile from "../studtiles/NotesTile";
 import StudentGoalsTile from "../studtiles/StudentGoalsTile";
 import SessionPlanningTile from "../studtiles/SessionPlanningTile";
+import EditPlannedSessionTile from "../studtiles/EditPlannedSessionTile";
+import { useStudentSessions } from "../hooks/useStudentSessions";
 import ViewStateTestingTile from "../studtiles/ViewStateTestingTile";
 
 const API_BASE_URL = (
@@ -34,6 +36,12 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
     isLoading: assignmentsLoading,
     error: assignmentsError,
   } = useStudentAssignments(student.id);
+  const {
+    sessions,
+    setSessions,
+    isLoading: sessionsLoading,
+    error: sessionsError,
+  } = useStudentSessions(student.id);
   const [groupNumber, setGroupNumber] = useState(
     student.group_number == null ? "" : String(student.group_number)
   );
@@ -272,6 +280,22 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
           canManage={canShowModule("editSession", "studentProfile", role)}
           studentId={student.id}
           studentName={studentName}
+          sessions={sessions}
+          setSessions={setSessions}
+          sessionsError={sessionsError}
+        />
+      ),
+    },
+    canShowModule("editSession", "studentProfile", role) && {
+      id: "editPlannedSession",
+      title: "Edit planned session",
+      content: (
+        <EditPlannedSessionTile
+          studentName={studentName}
+          sessions={sessions}
+          setSessions={setSessions}
+          isLoading={sessionsLoading}
+          sessionsError={sessionsError}
         />
       ),
     },
