@@ -1,5 +1,7 @@
 import math
 import os
+import secrets
+
 import bcrypt
 from supabase import create_client, Client
 from dotenv import load_dotenv
@@ -803,15 +805,28 @@ def fetch_student_ownership(student_id: int):
 
 def _to_session_row(data: dict):
     row = dict(data)
+    if "id" in row:
+        row["event_id"] = row.pop("id")
+    if "focus" in row:
+        row["session_details"] = row.pop("focus")
     if "duration_minutes" in row:
         row["duration"] = row.pop("duration_minutes")
+    if "scheduled_at" in row:
+        row["scheduled_time"] = row.pop("scheduled_at")
+    row.setdefault("event_id", secrets.randbelow(2**63 - 1) + 1)
     return row
 
 
 def _from_session_row(row: dict):
     session = dict(row)
+    if "event_id" in session:
+        session["id"] = session.pop("event_id")
+    if "session_details" in session:
+        session["focus"] = session.pop("session_details")
     if "duration" in session:
         session["duration_minutes"] = session.pop("duration")
+    if "scheduled_time" in session:
+        session["scheduled_at"] = session.pop("scheduled_time")
     return session
 
 
@@ -839,7 +854,7 @@ def fetch_session(session_id: str):
     response = (
         supabase.table("session_details")
         .select("*")
-        .eq("id", session_id)
+        .eq("event_id", session_id)
         .limit(1)
         .execute()
     )
@@ -850,7 +865,7 @@ def update_session_status(session_id: str, status: str):
     response = (
         supabase.table("session_details")
         .update({"status": status})
-        .eq("id", session_id)
+        .eq("event_id", session_id)
         .select("*")
         .execute()
     )
