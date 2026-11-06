@@ -8,13 +8,11 @@ import AddGradesTile from "../studtiles/AddGradesTile";
 import ChangeParentNameTile from "../studtiles/ChangeParentNameTile";
 import ChangeStudentGradeTile from "../studtiles/ChangeStudentGradeTile";
 import ChangeStudentNameTile from "../studtiles/ChangeStudentNameTile";
-import EditSessionTile from "../studtiles/EditSessionTile";
 import InputGradesTile from "../studtiles/InputGradesTile";
 import InputStateTestingTile from "../studtiles/InputStateTestingTile";
 import NotesTile from "../studtiles/NotesTile";
 import StudentGoalsTile from "../studtiles/StudentGoalsTile";
-import ViewSessionPlanTile from "../studtiles/ViewSessionPlanTile";
-import ViewSessionTile from "../studtiles/ViewSessionTile";
+import SessionPlanningTile from "../studtiles/SessionPlanningTile";
 import ViewStateTestingTile from "../studtiles/ViewStateTestingTile";
 
 const API_BASE_URL = (
@@ -215,16 +213,6 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
       title: "Add grades",
       content: <AddGradesTile />,
     },
-    canShowModule("editSession", "studentProfile", role) && {
-      id: "editSession",
-      title: "Edit session",
-      content: <EditSessionTile />,
-    },
-    canShowModule("viewSession", "studentProfile", role) && {
-      id: "viewSession",
-      title: "View session",
-      content: <ViewSessionTile />,
-    },
     canShowModule("viewStateTesting", "studentProfile", role) && {
       id: "viewStateTesting",
       title: "View state testing",
@@ -274,9 +262,15 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
       ),
     },
     canShowModule("viewSessionPlan", "studentProfile", role) && {
-      id: "viewSessionPlan",
-      title: "View session plan",
-      content: <ViewSessionPlanTile />,
+      id: "sessionPlanning",
+      title: "Session planning",
+      content: (
+        <SessionPlanningTile
+          canManage={canShowModule("editSession", "studentProfile", role)}
+          studentId={student.id}
+          studentName={studentName}
+        />
+      ),
     },
     canShowModule("viewGrades", "studentProfile", role) && {
       id: "scores",

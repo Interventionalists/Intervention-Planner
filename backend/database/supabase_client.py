@@ -797,3 +797,61 @@ def fetch_student_ownership(student_id: int):
         .execute()
     )
     return response.data[0] if response.data else None
+
+
+############################### SESSION FUNCTIONS ######################################
+
+def _to_session_row(data: dict):
+    row = dict(data)
+    if "duration_minutes" in row:
+        row["duration"] = row.pop("duration_minutes")
+    return row
+
+
+def _from_session_row(row: dict):
+    session = dict(row)
+    if "duration" in session:
+        session["duration_minutes"] = session.pop("duration")
+    return session
+
+
+def fetch_sessions_for_student(student_id: int):
+    response = (
+        supabase.table("session_details")
+        .select("*")
+        .eq("student_id", student_id)
+        .execute()
+    )
+    return [_from_session_row(row) for row in (response.data or [])]
+
+
+def create_session(session_data: dict):
+    response = (
+        supabase.table("session_details")
+        .insert(_to_session_row(session_data))
+        .select("*")
+        .execute()
+    )
+    return _from_session_row(response.data[0]) if response.data else None
+
+
+def fetch_session(session_id: str):
+    response = (
+        supabase.table("session_details")
+        .select("*")
+        .eq("id", session_id)
+        .limit(1)
+        .execute()
+    )
+    return _from_session_row(response.data[0]) if response.data else None
+
+
+def update_session_status(session_id: str, status: str):
+    response = (
+        supabase.table("session_details")
+        .update({"status": status})
+        .eq("id", session_id)
+        .select("*")
+        .execute()
+    )
+    return _from_session_row(response.data[0]) if response.data else None
