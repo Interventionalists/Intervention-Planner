@@ -1,5 +1,6 @@
 import math
 import os
+
 import bcrypt
 from supabase import create_client, Client
 from dotenv import load_dotenv
@@ -811,6 +812,89 @@ def fetch_student_ownership(student_id: int):
     )
     return response.data[0] if response.data else None
 
+############################### SESSION FUNCTIONS ######################################
+
+def _to_session_row(data: dict):
+    row = dict(data)
+    if "id" in row:
+        row["event_id"] = row.pop("id")
+    if "event_id" not in row:
+        raise ValueError("A calendar event ID is required to create a session.")
+    if "focus" in row:
+        row["session_details"] = row.pop("focus")
+    if "duration_minutes" in row:
+        row["duration"] = row.pop("duration_minutes")
+    if "scheduled_at" in row:
+        row["scheduled_time"] = row.pop("scheduled_at")
+    return row
+
+
+def _from_session_row(row: dict):
+    session = dict(row)
+    if "event_id" in session:
+        session["id"] = session.pop("event_id")
+    if "session_details" in session:
+        session["focus"] = session.pop("session_details")
+    if "duration" in session:
+        session["duration_minutes"] = session.pop("duration")
+    if "scheduled_time" in session:
+        session["scheduled_at"] = session.pop("scheduled_time")
+    return session
+
+
+def fetch_sessions_for_student(student_id: int):
+    response = (
+        supabase.table("session_details")
+        .select("*")
+        .eq("student_id", student_id)
+        .execute()
+    )
+    return [_from_session_row(row) for row in (response.data or [])]
+
+
+def create_session(session_data: dict):
+    response = (
+        supabase.table("session_details")
+        .insert(_to_session_row(session_data))
+        .select("*")
+        .execute()
+    )
+    return _from_session_row(response.data[0]) if response.data else None
+
+
+def fetch_session(session_id: int):
+    response = (
+        supabase.table("session_details")
+        .select("*")
+        .eq("event_id", session_id)
+        .limit(1)
+        .execute()
+    )
+    return _from_session_row(response.data[0]) if response.data else None
+
+
+def update_session_details(session_id: int, updates: dict):
+    row_updates = _to_session_row({"event_id": session_id, **updates})
+    row_updates.pop("event_id")
+    response = (
+        supabase.table("session_details")
+        .update(row_updates)
+        .eq("event_id", session_id)
+        .select("*")
+        .execute()
+    )
+    return _from_session_row(response.data[0]) if response.data else None
+
+
+def update_session_status(session_id: int, status: str):
+    response = (
+        supabase.table("session_details")
+        .update({"status": status})
+        .eq("event_id", session_id)
+        .select("*")
+        .execute()
+    )
+    return _from_session_row(response.data[0]) if response.data else None
 ######################################## CALENDAR ENDPOINTS ########################################
 
 def fetch_calendar_events(school_id: int, range_start: str, range_end: str):
@@ -855,7 +939,7 @@ def fetch_calendar_events(school_id: int, range_start: str, range_end: str):
     })
     session_details_response = (
         supabase.table("session_details")
-        .select("event_id, plan_type, focus, student_id, created_by, duration, scheduled_time, status")
+        .select("event_id, plan_type, session_details, student_id, created_by, duration, scheduled_time, status")
         .in_("event_id", event_ids)
         .execute()
     )
@@ -905,8 +989,10 @@ def fetch_calendar_events(school_id: int, range_start: str, range_end: str):
     }
     session_details_by_event = {}
     for detail in session_details:
+        session_detail = dict(detail)
+        session_detail["focus"] = session_detail.pop("session_details", None)
         session_details_by_event.setdefault(detail["event_id"], []).append({
-            **detail,
+            **session_detail,
             "student_name": student_names.get(detail.get("student_id")),
             "created_by_name": user_names.get(str(detail.get("created_by"))),
         })
@@ -977,6 +1063,17 @@ def create_calendar_event(event_data: dict):
         supabase.table("calendar_events")
         .insert(event_data)
         .select("*")
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+
+def fetch_calendar_event_by_id(event_id: int):
+    response = (
+        supabase.table("calendar_events")
+        .select("*")
+        .eq("id", event_id)
+        .limit(1)
         .execute()
     )
     return response.data[0] if response.data else None

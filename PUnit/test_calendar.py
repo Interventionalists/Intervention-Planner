@@ -178,7 +178,7 @@ def test_fetch_calendar_events_resolves_school_participants(monkeypatch):
             {
                 "event_id": 9,
                 "plan_type": "Reading",
-                "focus": "Fluency",
+                "session_details": "Fluency",
                 "student_id": 42,
                 "created_by": "user-456",
                 "duration": 30,
