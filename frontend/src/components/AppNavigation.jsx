@@ -16,10 +16,10 @@ import {
 const navItems = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "students", label: "Students", icon: Users },
+  { id: "groups", label: "Groups", icon: UsersRound },
   { id: "users", label: "Users", icon: UserRoundCog, adminOnly: true },
   { id: "status", label: "Status", icon: Activity, adminOnly: true },
   { id: "calendar", label: "Calendar", icon: CalendarDays },
-  { id: "groups", label: "Groups", icon: UsersRound },
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
