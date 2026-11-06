@@ -538,7 +538,6 @@ def add_calendar_event(
                     status_code=404,
                     detail="Intervention group not found.",
                 )
-        event_data = payload.model_dump(mode="json", exclude={"school"})
         event_data.update(
             school=school_id,
             organizer=user["public_id"],
