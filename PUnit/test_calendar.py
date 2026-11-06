@@ -200,6 +200,75 @@ def test_create_calendar_meeting_saves_invitees_and_recurrence(client, monkeypat
     ]
 
 
+def test_create_calendar_event_for_group(client, monkeypatch):
+    saved = {}
+    monkeypatch.setattr(
+        calendar,
+        "fetch_user_school_by_public_id",
+        lambda _public_id: 7,
+    )
+    monkeypatch.setattr(
+        calendar,
+        "fetch_groups",
+        lambda school_id: [{"id": 3, "school": school_id}],
+    )
+
+    def fake_create_calendar_event(event_data):
+        saved.update(event_data)
+        return {"public_id": "event-123", **event_data}
+
+    monkeypatch.setattr(calendar, "create_calendar_event", fake_create_calendar_event)
+
+    response = client.post(
+        "/calendar-events",
+        json={
+            "school": 7,
+            "event_type": "Group session",
+            "title": "Reading group",
+            "starts_at": "2026-11-10T09:00:00-06:00",
+            "ends_at": "2026-11-10T09:30:00-06:00",
+            "location": "Room 12",
+            "session_group_id": 3,
+        },
+    )
+
+    assert response.status_code == 200
+    assert saved["school"] == 7
+    assert saved["session_group_id"] == 3
+    assert saved["organizer"] == "user-123"
+    assert response.json()["event"]["public_id"] == "event-123"
+
+
+def test_create_calendar_event_rejects_group_from_another_school(
+    client, monkeypatch
+):
+    monkeypatch.setattr(
+        calendar,
+        "fetch_user_school_by_public_id",
+        lambda _public_id: 7,
+    )
+    monkeypatch.setattr(calendar, "fetch_groups", lambda _school_id: [])
+    monkeypatch.setattr(
+        calendar,
+        "create_calendar_event",
+        lambda *_args: pytest.fail("Unknown group reached event creation"),
+    )
+
+    response = client.post(
+        "/calendar-events",
+        json={
+            "school": 7,
+            "event_type": "Group session",
+            "title": "Reading group",
+            "starts_at": "2026-11-10T09:00:00-06:00",
+            "ends_at": "2026-11-10T09:30:00-06:00",
+            "session_group_id": 3,
+        },
+    )
+
+    assert response.status_code == 404
+
+
 def test_update_calendar_event_accepts_hex_color_for_organizer(client, monkeypatch):
     event_id = "123e4567-e89b-12d3-a456-426614174000"
     saved = {}

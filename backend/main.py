@@ -10,6 +10,7 @@ from routes.auth import router as auth_router
 from routes.calendar import router as calendar_router
 from routes.notes import router as notes_router
 from routes.assignments import router as assignments_router
+from routes.groups import router as groups_router
 from routes.sessions import router as sessions_router
 from routes.schools import router as schools_router
 from routes.health import router as health_router
@@ -56,6 +57,7 @@ app.include_router(interventionists_router, dependencies=protected)
 app.include_router(calendar_router, dependencies=protected)
 app.include_router(notes_router, dependencies=protected)
 app.include_router(assignments_router, dependencies=protected)
+app.include_router(groups_router, dependencies=protected)
 app.include_router(sessions_router, dependencies=protected)
 app.include_router(schools_router, dependencies=protected)
 app.include_router(admins_router, dependencies=[Depends(require_admin)])
