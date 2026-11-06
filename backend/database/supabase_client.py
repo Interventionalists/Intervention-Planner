@@ -867,3 +867,36 @@ def delete_calendar_event(
         query = query.eq("organizer", organizer_id)
     response = query.select("public_id").execute()
     return bool(response.data)
+
+
+
+################################ GROUPS FUNCTIONS #####################################
+
+def fetch_groups(school_id: int | None = None):
+    query = supabase.table("session_groups").select("*")
+    if school_id is not None:
+        query = query.eq("school", school_id)
+    response = query.execute()
+    return response.data
+
+def create_groups(school_id: int, group_name: str | None = None):
+    group_data = {
+        "school": school_id,
+        "group_name": group_name,
+    }
+    response = (
+        supabase.table("session_groups")
+        .insert(group_data)
+        .select("*")
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+def add_students_to_group( group_id: int, student_ids: list[int] ):
+    response = (
+        supabase.table("session_group_members")
+        .insert([{"group_id": group_id, "student_id": student_id} for student_id in student_ids])
+        .select("*")
+        .execute()
+    )
+    return response.data if response.data else None
