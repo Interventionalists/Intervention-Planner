@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from auth.security import (
@@ -12,6 +12,7 @@ from database.supabase_client import (
     create_calendar_event,
     delete_calendar_event,
     fetch_calendar_event,
+    fetch_calendar_events,
     fetch_student_ownership,
     fetch_user_school_by_public_id,
     update_calendar_event,
@@ -26,12 +27,53 @@ def _validate_timezone(value: datetime) -> datetime:
     return value
 
 
+@router.get("/calendar-events")
+def get_calendar_events(
+    starts_at: datetime = Query(),
+    ends_at: datetime = Query(),
+    user: dict = Depends(get_current_user),
+):
+    try:
+        if (
+            starts_at.tzinfo is None
+            or starts_at.utcoffset() is None
+            or ends_at.tzinfo is None
+            or ends_at.utcoffset() is None
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="Calendar range timestamps must include a timezone.",
+            )
+        if ends_at <= starts_at:
+            raise HTTPException(
+                status_code=422,
+                detail="Calendar range end must be after its start.",
+            )
+        school_id = fetch_user_school_by_public_id(user["public_id"])
+        if school_id is None:
+            raise HTTPException(
+                status_code=403,
+                detail="The signed-in user does not have a school assigned.",
+            )
+        events = fetch_calendar_events(
+            school_id,
+            starts_at.isoformat(),
+            ends_at.isoformat(),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    return {"events": events}
+
+
 class CalendarEventCreate(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     school: int = Field(ge=1)
     event_type: str = Field(min_length=1)
     title: str | None = None
+    color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
     starts_at: datetime
     ends_at: datetime
     location: str | None = None
@@ -56,6 +98,7 @@ class CalendarEventUpdate(BaseModel):
 
     event_type: str | None = Field(default=None, min_length=1)
     title: str | None = None
+    color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
     starts_at: datetime | None = None
     ends_at: datetime | None = None
     location: str | None = None
