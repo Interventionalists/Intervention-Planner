@@ -6,10 +6,13 @@ from database.supabase_client import (
     add_students_to_group,
     create_groups,
     fetch_groups,
+    fetch_group_student_ids,
     fetch_interventionist_students,
     fetch_interventionists,
     fetch_students,
     fetch_user_school_by_public_id,
+    edit_group as update_group_record,
+    replace_group_students,
 )
 
 router = APIRouter()
@@ -20,7 +23,7 @@ class GroupCreate(BaseModel):
 
     name: str = Field(min_length=1)
     purpose: str = Field(min_length=1)
-    student_ids: list[int] = Field(default_factory=list)
+    student_ids: list[int] | None = None
 
 
 @router.get("/groups-fetch")
@@ -33,6 +36,9 @@ def get_groups(user: dict = Depends(get_current_user)):
                 detail="The signed-in user does not have a school assigned.",
             )
         groups = fetch_groups(school_id)
+        student_ids_by_group = fetch_group_student_ids(
+            [group["id"] for group in groups]
+        )
         interventionists = fetch_interventionists(school_id)
         names_by_id = {
             str(interventionist["public_id"]): " ".join(
@@ -48,6 +54,7 @@ def get_groups(user: dict = Depends(get_current_user)):
         groups = [
             {
                 **group,
+                "student_ids": student_ids_by_group.get(group["id"], []),
                 "interventionist_name": names_by_id.get(
                     str(group.get("interventionist"))
                 ),
@@ -78,12 +85,13 @@ def add_group(
                 status_code=403,
                 detail="The signed-in user does not have a school assigned.",
             )
-        if len(payload.student_ids) != len(set(payload.student_ids)):
+        student_ids = payload.student_ids or []
+        if len(student_ids) != len(set(student_ids)):
             raise HTTPException(
                 status_code=400,
                 detail="A student can only be added to the group once.",
             )
-        if payload.student_ids:
+        if student_ids:
             available_students = (
                 fetch_students(school_id)
                 if user["role"] == "admin"
@@ -92,7 +100,7 @@ def add_group(
             available_student_ids = {
                 student["id"] for student in available_students
             }
-            if not set(payload.student_ids).issubset(available_student_ids):
+            if not set(student_ids).issubset(available_student_ids):
                 raise HTTPException(
                     status_code=400,
                     detail="One or more selected students are not available to you.",
@@ -106,9 +114,9 @@ def add_group(
             payload.purpose,
             interventionist_id,
         )
-        if group is not None and payload.student_ids:
+        if group is not None and student_ids:
             members = add_students_to_group(
-                group["id"], payload.student_ids, user["public_id"]
+                group["id"], student_ids, user["public_id"]
             )
             if not members:
                 raise HTTPException(
@@ -124,8 +132,8 @@ def add_group(
     return {"group": group}
 
 
-router.put("/groups-edit/{group_id}")
-def edit_group(
+@router.put("/groups-edit/{group_id}")
+def update_group(
     group_id: int,
     payload: GroupCreate,
     user: dict = Depends(get_current_user),
@@ -142,11 +150,38 @@ def edit_group(
                 status_code=403,
                 detail="The signed-in user does not have a school assigned.",
             )
+        if payload.student_ids is not None:
+            if len(payload.student_ids) != len(set(payload.student_ids)):
+                raise HTTPException(
+                    status_code=400,
+                    detail="A student can only be added to the group once.",
+                )
+            if payload.student_ids:
+                available_students = (
+                    fetch_students(school_id)
+                    if user["role"] == "admin"
+                    else fetch_interventionist_students(
+                        user["public_id"], school_id
+                    )
+                )
+                available_student_ids = {
+                    student["id"] for student in available_students
+                }
+                if not set(payload.student_ids).issubset(available_student_ids):
+                    raise HTTPException(
+                        status_code=400,
+                        detail="One or more selected students are not available to you.",
+                    )
         updates = {
             "name": payload.name,
             "purpose": payload.purpose,
         }
-        group = edit_group(group_id, updates)
+        group = update_group_record(group_id, school_id, updates)
+        if group is not None and payload.student_ids is not None:
+            replace_group_students(
+                group_id, payload.student_ids, user["public_id"]
+            )
+            group["student_ids"] = payload.student_ids
     except HTTPException:
         raise
     except Exception as error:

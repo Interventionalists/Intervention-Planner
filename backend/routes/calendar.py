@@ -13,6 +13,7 @@ from database.supabase_client import (
     delete_calendar_event,
     fetch_calendar_event,
     fetch_calendar_events,
+    fetch_groups,
     fetch_student_ownership,
     fetch_user_school_by_public_id,
     update_calendar_event,
@@ -80,6 +81,7 @@ class CalendarEventCreate(BaseModel):
     series_id: UUID | None = None
     recurrence_rule: str | None = None
     regarding_student: int | None = Field(default=None, ge=1)
+    session_group_id: int | None = Field(default=None, ge=1)
 
     @field_validator("starts_at", "ends_at")
     @classmethod
@@ -169,6 +171,13 @@ def add_calendar_event(
                     detail="Calendar events can only be created for your school.",
                 )
         _validate_regarding_student(payload.regarding_student, school_id, user)
+        if payload.session_group_id is not None:
+            groups = fetch_groups(school_id)
+            if not any(group["id"] == payload.session_group_id for group in groups):
+                raise HTTPException(
+                    status_code=404,
+                    detail="Intervention group not found.",
+                )
         event_data = payload.model_dump(mode="json", exclude={"school"})
         event_data.update(
             school=school_id,

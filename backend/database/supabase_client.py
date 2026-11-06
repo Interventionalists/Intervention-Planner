@@ -1136,6 +1136,24 @@ def fetch_groups(school_id: int | None = None):
     response = query.execute()
     return response.data
 
+def fetch_group_student_ids(group_ids: list[int]) -> dict[int, list[int]]:
+    if not group_ids:
+        return {}
+    response = (
+        supabase.table("session_group_members")
+        .select("group_id, student_id")
+        .in_("group_id", group_ids)
+        .execute()
+    )
+    student_ids_by_group: dict[int, list[int]] = {
+        group_id: [] for group_id in group_ids
+    }
+    for membership in response.data:
+        student_ids_by_group.setdefault(membership["group_id"], []).append(
+            membership["student_id"]
+        )
+    return student_ids_by_group
+
 def create_groups(
     school_id: int,
     name: str,
@@ -1157,6 +1175,8 @@ def create_groups(
     return response.data[0] if response.data else None
 
 def add_students_to_group( group_id: int, student_ids: list[int], added_by: str | None = None):
+    if not student_ids:
+        return []
     response = (
         supabase.table("session_group_members")
         .insert([{"group_id": group_id, "student_id": student_id, "added_by": added_by} for student_id in student_ids])
@@ -1165,11 +1185,38 @@ def add_students_to_group( group_id: int, student_ids: list[int], added_by: str 
     )
     return response.data if response.data else None
 
-def edit_group(group_id: int, updates: dict):
+def replace_group_students(
+    group_id: int,
+    student_ids: list[int],
+    added_by: str | None = None,
+):
+    existing_ids = fetch_group_student_ids([group_id]).get(group_id, [])
+    existing_set = set(existing_ids)
+    desired_set = set(student_ids)
+
+    added_ids = desired_set - existing_set
+    if added_ids:
+        if not add_students_to_group(group_id, sorted(added_ids), added_by):
+            raise RuntimeError("Unable to add students to the group.")
+
+    removed_ids = existing_set - desired_set
+    if removed_ids:
+        (
+            supabase.table("session_group_members")
+            .delete()
+            .eq("group_id", group_id)
+            .in_("student_id", list(removed_ids))
+            .execute()
+        )
+
+    return student_ids
+
+def edit_group(group_id: int, school_id: int, updates: dict):
     response = (
         supabase.table("session_groups")
         .update(updates)
         .eq("id", group_id)
+        .eq("school", school_id)
         .select("*")
         .execute()
     )
