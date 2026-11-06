@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, MoreHorizontal, Plus, Trash2 } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  GripVertical,
+  MoreHorizontal,
+  Plus,
+  Trash2,
+} from "lucide-react";
 
 function createInitialLayout(storageKey, tiles) {
   const tileIds = tiles.map((tile) => tile.id);
@@ -38,12 +45,13 @@ function createInitialLayout(storageKey, tiles) {
   }
 }
 
-function TileWorkspace({ className, storageKey, tiles }) {
+function TileWorkspace({ className, storageKey, tiles, gridSizing = false }) {
   const [layout, setLayout] = useState(() =>
     createInitialLayout(storageKey, tiles)
   );
   const [openMenuId, setOpenMenuId] = useState(null);
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
+  const [draggedTileId, setDraggedTileId] = useState(null);
   const tileIds = tiles.map((tile) => tile.id);
 
   useEffect(() => {
@@ -112,7 +120,29 @@ function TileWorkspace({ className, storageKey, tiles }) {
   };
 
   const saveTileSize = (event, tileId) => {
-    const { offsetWidth: width, offsetHeight: height } = event.currentTarget;
+    const tile = event.currentTarget;
+    if (gridSizing) {
+      const maxWidth = tile.parentElement.clientWidth;
+      const minWidth = Math.min(220, maxWidth);
+      const snap = (value, min, max) =>
+        Math.min(max, Math.max(min, min + Math.round((value - min) / 50) * 50));
+      const width = snap(tile.offsetWidth, minWidth, maxWidth);
+      const height = Math.max(
+        180,
+        180 + Math.round((tile.offsetHeight - 180) / 50) * 50
+      );
+      setLayout((current) => ({
+        ...current,
+        sizes:
+          current.sizes[tileId]?.width === width &&
+          current.sizes[tileId]?.height === height
+            ? current.sizes
+            : { ...current.sizes, [tileId]: { width, height } },
+      }));
+      return;
+    }
+
+    const { offsetWidth: width, offsetHeight: height } = tile;
     setLayout((currentLayout) => ({
       ...currentLayout,
       sizes:
@@ -123,14 +153,60 @@ function TileWorkspace({ className, storageKey, tiles }) {
     }));
   };
 
+  const reorderTile = (sourceId, targetId) => {
+    setLayout((currentLayout) => {
+      const order = [...currentLayout.order];
+      const sourceIndex = order.indexOf(sourceId);
+      const targetIndex = order.indexOf(targetId);
+      if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) {
+        return currentLayout;
+      }
+
+      order.splice(sourceIndex, 1);
+      order.splice(order.indexOf(targetId), 0, sourceId);
+      return { ...currentLayout, order };
+    });
+  };
+
   return (
     <>
-      <section className={className}>
+      <section
+        className={className}
+        onDragOver={
+          gridSizing ? (event) => event.preventDefault() : undefined
+        }
+        onDrop={
+          gridSizing
+            ? (event) => {
+                event.preventDefault();
+                if (!draggedTileId) return;
+                const nearest = [
+                  ...event.currentTarget.querySelectorAll(".managed-tile"),
+                ]
+                  .filter((tile) => tile.dataset.tileId !== draggedTileId)
+                  .map((tile) => {
+                    const bounds = tile.getBoundingClientRect();
+                    return {
+                      id: tile.dataset.tileId,
+                      distance: Math.hypot(
+                        event.clientX - (bounds.left + bounds.width / 2),
+                        event.clientY - (bounds.top + bounds.height / 2)
+                      ),
+                    };
+                  })
+                  .sort((a, b) => a.distance - b.distance)[0];
+                if (nearest) reorderTile(draggedTileId, nearest.id);
+                setDraggedTileId(null);
+              }
+            : undefined
+        }
+      >
         {visibleTiles.map((tile, index) => {
           const size = layout.sizes[tile.id];
           return (
             <div
               className="managed-tile"
+              data-tile-id={tile.id}
               key={tile.id}
               onPointerUp={(event) => saveTileSize(event, tile.id)}
               style={{
@@ -139,6 +215,43 @@ function TileWorkspace({ className, storageKey, tiles }) {
               }}
             >
               <div className="tile-control-row">
+                {gridSizing && (
+                  <button
+                    aria-label={`Drag to move ${tile.title}`}
+                    className="tile-drag-handle"
+                    draggable
+                    onDragStart={(event) => {
+                      setDraggedTileId(tile.id);
+                      event.dataTransfer.effectAllowed = "move";
+                      event.dataTransfer.setData("text/plain", tile.id);
+                      const tileElement =
+                        event.currentTarget.closest(".managed-tile");
+                      const bounds = tileElement.getBoundingClientRect();
+                      const ghost = tileElement.cloneNode(true);
+                      Object.assign(ghost.style, {
+                        position: "fixed",
+                        top: "0",
+                        left: "-10000px",
+                        width: `${bounds.width}px`,
+                        height: `${bounds.height}px`,
+                        opacity: "0.55",
+                        pointerEvents: "none",
+                      });
+                      document.body.appendChild(ghost);
+                      event.dataTransfer.setDragImage(
+                        ghost,
+                        event.clientX - bounds.left,
+                        event.clientY - bounds.top
+                      );
+                      requestAnimationFrame(() => ghost.remove());
+                    }}
+                    onDragEnd={() => setDraggedTileId(null)}
+                    title="Drag to move"
+                    type="button"
+                  >
+                    <GripVertical size={17} />
+                  </button>
+                )}
                 <button
                   aria-label={`Options for ${tile.title}`}
                   aria-expanded={openMenuId === tile.id}

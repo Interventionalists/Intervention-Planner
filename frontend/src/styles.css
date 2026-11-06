@@ -784,9 +784,18 @@ nav { display: grid; gap: 6px; }
 }
 
 .dashboard-grid {
-  display: grid;
-  grid-template-columns: 1.1fr 1fr 1fr;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
   gap: 16px;
+}
+
+.dashboard-grid > .managed-tile {
+  width: 220px;
+  height: 180px;
+  min-width: min(220px, 100%);
+  max-height: none;
+  flex: 0 0 auto;
 }
 
 .managed-tile {
@@ -844,6 +853,7 @@ nav { display: grid; gap: 6px; }
 }
 
 .tile-menu-toggle,
+.tile-drag-handle,
 .tile-add-button {
   display: inline-grid;
   place-items: center;
@@ -852,6 +862,16 @@ nav { display: grid; gap: 6px; }
   color: var(--primary);
   background: white;
   cursor: pointer;
+}
+
+.tile-drag-handle {
+  width: 26px;
+  height: 26px;
+  cursor: grab;
+}
+
+.tile-drag-handle:active {
+  cursor: grabbing;
 }
 
 .tile-menu-toggle {
@@ -2129,6 +2149,7 @@ nav { display: grid; gap: 6px; }
 
 @media (max-width: 1050px) {
   .dashboard-grid { grid-template-columns: 1fr 1fr; }
+  .dashboard-grid > .managed-tile { min-width: 0; }
   .student-card { grid-row: span 2; }
   .reports-grid { grid-template-columns: 1fr 1fr; }
   .calendar-grid, .students-layout, .settings-grid { grid-template-columns: 1fr; }
@@ -2227,6 +2248,10 @@ nav { display: grid; gap: 6px; }
   .profile > span { display: none; }
   .content { padding: 25px 15px 50px; }
   .dashboard-grid, .reports-grid { grid-template-columns: 1fr; }
+  .dashboard-grid > .managed-tile {
+    grid-column: span 1 !important;
+    max-width: 100%;
+  }
   .student-profile-layout { grid-template-columns: 1fr; }
   .profile-identity-card { grid-row: auto; }
   .managed-tile { width: 100%; min-width: 0; }

@@ -151,6 +151,7 @@ function DashboardPage({
 
       <TileWorkspace
         className="dashboard-grid"
+        gridSizing
         key={`dashboard-${userId ?? role ?? "default"}`}
         storageKey={`tile-layout-dashboard-${userId ?? role ?? "default"}`}
         tiles={dashboardTiles}
