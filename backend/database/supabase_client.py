@@ -1165,3 +1165,12 @@ def add_students_to_group( group_id: int, student_ids: list[int], added_by: str 
     )
     return response.data if response.data else None
 
+def edit_group(group_id: int, updates: dict):
+    response = (
+        supabase.table("session_groups")
+        .update(updates)
+        .eq("id", group_id)
+        .select("*")
+        .execute()
+    )
+    return response.data[0] if response.data else None

@@ -99,6 +99,82 @@ def test_create_group_assigns_interventionist_caller(client, monkeypatch):
     assert response.json()["group"]["id"] == 3
 
 
+def test_create_group_adds_selected_assigned_students(client, monkeypatch):
+    monkeypatch.setattr(
+        groups, "fetch_user_school_by_public_id", lambda _public_id: 7
+    )
+    monkeypatch.setattr(
+        groups,
+        "fetch_interventionist_students",
+        lambda interventionist_id, school_id: [
+            {"id": 11, "school": school_id, "interventionist": interventionist_id}
+        ],
+    )
+    monkeypatch.setattr(
+        groups,
+        "create_groups",
+        lambda school_id, name, purpose, interventionist_id: {
+            "id": 3,
+            "school": school_id,
+            "name": name,
+            "purpose": purpose,
+            "interventionist": interventionist_id,
+        },
+    )
+    added_members = {}
+
+    def fake_add_students_to_group(group_id, student_ids, added_by):
+        added_members.update(
+            group_id=group_id, student_ids=student_ids, added_by=added_by
+        )
+        return [{"group_id": group_id, "student_id": student_ids[0]}]
+
+    monkeypatch.setattr(groups, "add_students_to_group", fake_add_students_to_group)
+
+    response = client.post(
+        "/groups-create",
+        json={
+            "name": "Reading group",
+            "purpose": "Fluency practice",
+            "student_ids": [11],
+        },
+    )
+
+    assert response.status_code == 200
+    assert added_members == {
+        "group_id": 3,
+        "student_ids": [11],
+        "added_by": "user-123",
+    }
+
+
+def test_create_group_rejects_students_not_assigned_to_interventionist(
+    client, monkeypatch
+):
+    monkeypatch.setattr(
+        groups, "fetch_user_school_by_public_id", lambda _public_id: 7
+    )
+    monkeypatch.setattr(
+        groups, "fetch_interventionist_students", lambda *_args: []
+    )
+    monkeypatch.setattr(
+        groups,
+        "create_groups",
+        lambda *_args: pytest.fail("Invalid student reached group creation"),
+    )
+
+    response = client.post(
+        "/groups-create",
+        json={
+            "name": "Reading group",
+            "purpose": "Fluency practice",
+            "student_ids": [11],
+        },
+    )
+
+    assert response.status_code == 400
+
+
 def test_create_group_rejects_teacher(client, monkeypatch):
     app = client.app
     app.dependency_overrides[groups.get_current_user] = lambda: {

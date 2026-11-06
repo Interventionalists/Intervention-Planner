@@ -1604,9 +1604,17 @@ nav { display: grid; gap: 6px; }
   gap: 16px;
 }
 
-.groups-create-card { margin-bottom: 24px; }
+.groups-create-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  align-items: start;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.groups-create-layout.card { padding: 20px; }
+.groups-create-card { min-width: 0; }
 .groups-create-card > h2 { margin: 0 0 16px; font-size: 18px; }
-.groups-create-form { display: grid; gap: 14px; max-width: 720px; }
+.groups-create-form { display: grid; gap: 14px; }
 .groups-create-form label { display: grid; gap: 6px; color: #475467; font-size: 13px; font-weight: 600; }
 .groups-create-form input,
 .groups-create-form textarea {
@@ -1619,6 +1627,7 @@ nav { display: grid; gap: 6px; }
   font: inherit;
 }
 .groups-create-form textarea { resize: vertical; }
+.groups-selected-count { margin: 0; color: #667085; font-size: 13px; }
 .groups-create-form .primary-button {
   justify-self: start;
   min-height: 40px;
@@ -1633,6 +1642,24 @@ nav { display: grid; gap: 6px; }
 }
 .groups-create-form .primary-button:hover:not(:disabled) { filter: brightness(.92); }
 .groups-create-form .primary-button:disabled { cursor: not-allowed; opacity: .55; }
+.groups-assigned-students { min-width: 0; }
+.groups-assigned-students > h2 { margin: 0 0 6px; font-size: 18px; }
+.groups-student-hint { margin: 0 0 14px; color: #667085; font-size: 13px; }
+.groups-student-list { display: grid; gap: 8px; max-height: 420px; overflow-y: auto; padding-right: 4px; }
+.groups-student-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.groups-student-option:has(input:checked) { border-color: var(--primary); background: #f5f8fc; }
+.groups-student-option input { width: 16px; height: 16px; margin: 0; accent-color: var(--primary); }
+.groups-student-option > span { display: grid; gap: 4px; }
+.groups-student-option strong { color: #202a3a; font-size: 14px; }
+.groups-student-option small { color: #758095; font-size: 12px; }
 .groups-list { display: grid; gap: 12px; }
 .group-card { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .group-card h3 { margin: 0; color: #202a3a; font-size: 16px; }
@@ -2216,6 +2243,7 @@ nav { display: grid; gap: 6px; }
 }
 
 @media (max-width: 760px) {
+  .groups-create-layout { grid-template-columns: 1fr; }
   .unassigned-student-row { align-items: stretch; flex-direction: column; }
   .user-row { grid-template-columns: 1fr auto; }
   .user-school { grid-column: 1 / -1; }

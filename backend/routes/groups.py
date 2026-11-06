@@ -3,9 +3,12 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from auth.security import get_current_user
 from database.supabase_client import (
+    add_students_to_group,
     create_groups,
     fetch_groups,
+    fetch_interventionist_students,
     fetch_interventionists,
+    fetch_students,
     fetch_user_school_by_public_id,
 )
 
@@ -17,6 +20,7 @@ class GroupCreate(BaseModel):
 
     name: str = Field(min_length=1)
     purpose: str = Field(min_length=1)
+    student_ids: list[int] = Field(default_factory=list)
 
 
 @router.get("/groups-fetch")
@@ -74,6 +78,25 @@ def add_group(
                 status_code=403,
                 detail="The signed-in user does not have a school assigned.",
             )
+        if len(payload.student_ids) != len(set(payload.student_ids)):
+            raise HTTPException(
+                status_code=400,
+                detail="A student can only be added to the group once.",
+            )
+        if payload.student_ids:
+            available_students = (
+                fetch_students(school_id)
+                if user["role"] == "admin"
+                else fetch_interventionist_students(user["public_id"], school_id)
+            )
+            available_student_ids = {
+                student["id"] for student in available_students
+            }
+            if not set(payload.student_ids).issubset(available_student_ids):
+                raise HTTPException(
+                    status_code=400,
+                    detail="One or more selected students are not available to you.",
+                )
         interventionist_id = (
             user["public_id"] if user["role"] == "interventionist" else None
         )
@@ -83,10 +106,51 @@ def add_group(
             payload.purpose,
             interventionist_id,
         )
+        if group is not None and payload.student_ids:
+            members = add_students_to_group(
+                group["id"], payload.student_ids, user["public_id"]
+            )
+            if not members:
+                raise HTTPException(
+                    status_code=500,
+                    detail="The group was created, but adding students failed.",
+                )
     except HTTPException:
         raise
     except Exception as error:
         raise HTTPException(status_code=500, detail=str(error)) from error
     if group is None:
         raise HTTPException(status_code=500, detail="Group creation failed.")
+    return {"group": group}
+
+
+router.put("/groups-edit/{group_id}")
+def edit_group(
+    group_id: int,
+    payload: GroupCreate,
+    user: dict = Depends(get_current_user),
+):
+    if user["role"] not in ("admin", "interventionist"):
+        raise HTTPException(
+            status_code=403,
+            detail="Only admins and interventionists can edit groups.",
+        )
+    try:
+        school_id = fetch_user_school_by_public_id(user["public_id"])
+        if school_id is None:
+            raise HTTPException(
+                status_code=403,
+                detail="The signed-in user does not have a school assigned.",
+            )
+        updates = {
+            "name": payload.name,
+            "purpose": payload.purpose,
+        }
+        group = edit_group(group_id, updates)
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=str(error)) from error
+    if group is None:
+        raise HTTPException(status_code=404, detail="Group not found.")
     return {"group": group}
