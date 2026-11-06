@@ -810,3 +810,60 @@ def fetch_student_ownership(student_id: int):
         .execute()
     )
     return response.data[0] if response.data else None
+
+######################################## CALENDAR ENDPOINTS ########################################
+
+def create_calendar_event(event_data: dict):
+    response = (
+        supabase.table("calendar_events")
+        .insert(event_data)
+        .select("*")
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+
+def fetch_calendar_event(public_id: str):
+    response = (
+        supabase.table("calendar_events")
+        .select("*")
+        .eq("public_id", public_id)
+        .limit(1)
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+
+def update_calendar_event(
+    public_id: str,
+    school_id: int,
+    updates: dict,
+    organizer_id: str | None = None,
+):
+    query = (
+        supabase.table("calendar_events")
+        .update(updates)
+        .eq("public_id", public_id)
+        .eq("school", school_id)
+    )
+    if organizer_id is not None:
+        query = query.eq("organizer", organizer_id)
+    response = query.select("*").execute()
+    return response.data[0] if response.data else None
+
+
+def delete_calendar_event(
+    public_id: str,
+    school_id: int,
+    organizer_id: str | None = None,
+):
+    query = (
+        supabase.table("calendar_events")
+        .delete()
+        .eq("public_id", public_id)
+        .eq("school", school_id)
+    )
+    if organizer_id is not None:
+        query = query.eq("organizer", organizer_id)
+    response = query.select("public_id").execute()
+    return bool(response.data)
