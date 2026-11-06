@@ -867,3 +867,113 @@ def delete_calendar_event(
         query = query.eq("organizer", organizer_id)
     response = query.select("public_id").execute()
     return bool(response.data)
+
+######################################## SESSION DETAILS ########################################
+#session_details rows are keyed by the internal calendar_events.id (event_id).
+
+SESSION_EVENT_COLUMNS = "id, public_id, school, organizer, title, starts_at, ends_at, event_type"
+
+#fetches the session_details row for a calendar event's internal id, or None.
+def fetch_session_details(event_id: int):
+    response = (
+        supabase.table("session_details")
+        .select("*")
+        .eq("event_id", event_id)
+        .limit(1)
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+#all session_details rows for one student.
+def fetch_session_details_for_student(student_id: int):
+    response = supabase.table("session_details").select("*").eq("student_id", student_id).execute()
+    return response.data
+
+#all session_details rows created by one user (public_id).
+def fetch_session_details_created_by(public_id: str):
+    response = supabase.table("session_details").select("*").eq("created_by", public_id).execute()
+    return response.data
+
+#calendar events by internal id, used to attach event info to session rows.
+def fetch_calendar_events_by_ids(event_ids: list[int]):
+    if not event_ids:
+        return []
+    response = (
+        supabase.table("calendar_events")
+        .select(SESSION_EVENT_COLUMNS)
+        .in_("id", event_ids)
+        .execute()
+    )
+    return response.data
+
+#updates the session_details row for an event. Returns the updated row or None.
+def update_session_details(event_id: int, updates: dict):
+    response = (
+        supabase.table("session_details")
+        .update(updates)
+        .eq("event_id", event_id)
+        .select("*")
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+
+######################################## SESSION GROUPS ########################################
+
+#fetches a session group by its public_id, or None.
+def fetch_session_group(public_id: str):
+    response = (
+        supabase.table("session_groups")
+        .select("*")
+        .eq("public_id", public_id)
+        .limit(1)
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+#lists session groups, optionally limited to one school.
+def fetch_session_groups(school_id: int | None = None):
+    query = supabase.table("session_groups").select("*")
+    if school_id is not None:
+        query = query.eq("school", school_id)
+    return query.execute().data
+
+#student ids in a session group (internal group id).
+def fetch_session_group_members(group_id: int):
+    response = (
+        supabase.table("session_group_members")
+        .select("student_id")
+        .eq("group_id", group_id)
+        .execute()
+    )
+    return [row["student_id"] for row in response.data]
+
+#updates a session group scoped to its school (and interventionist, for
+#non-admin callers). Returns the updated row or None.
+def update_session_group(
+    public_id: str,
+    school_id: int,
+    updates: dict,
+    interventionist_id: str | None = None,
+):
+    query = (
+        supabase.table("session_groups")
+        .update(updates)
+        .eq("public_id", public_id)
+        .eq("school", school_id)
+    )
+    if interventionist_id is not None:
+        query = query.eq("interventionist", interventionist_id)
+    response = query.select("*").execute()
+    return response.data[0] if response.data else None
+
+#role and school for a user public_id, or None if the user doesn't exist.
+def fetch_user_role_and_school(public_id: str):
+    response = (
+        supabase.table("users")
+        .select("role, school")
+        .eq("public_id", public_id)
+        .limit(1)
+        .execute()
+    )
+    return response.data[0] if response.data else None

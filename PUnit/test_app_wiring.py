@@ -15,9 +15,11 @@ from routes import (
     admins,
     assignments,
     auth,
+    calendar,
     interventionists,
     notes,
     schools,
+    sessions,
     students,
     system_health,
     teachers,
@@ -48,6 +50,8 @@ def concrete(path):
         .replace("{assignment_id}", "11111111-1111-1111-1111-111111111111")
         .replace("{interventionist_id}", "11111111-1111-1111-1111-111111111111")
         .replace("{requester_id}", "11111111-1111-1111-1111-111111111111")
+        .replace("{event_id}", "11111111-1111-1111-1111-111111111111")
+        .replace("{group_id}", "11111111-1111-1111-1111-111111111111")
         .replace("{public_id}", "pub-1")
         .replace("{timestamp}", "2026-01-01")
     )
@@ -58,7 +62,7 @@ PROTECTED = [
     r
     for r in router_routes(
         auth, students, teachers, interventionists, notes, assignments, schools,
-        admins, system_health,
+        admins, system_health, calendar, sessions,
     )
     if r[1] not in PUBLIC_PATHS
 ]
