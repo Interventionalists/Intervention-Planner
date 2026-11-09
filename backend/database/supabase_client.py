@@ -896,6 +896,7 @@ def update_session_status(session_id: int, status: str):
         .execute()
     )
     return _from_session_row(response.data[0]) if response.data else None
+
 ######################################## CALENDAR ENDPOINTS ########################################
 
 def fetch_calendar_invitees(school_id: int):
@@ -1280,4 +1281,136 @@ def delete_calendar_event(
     if organizer_id is not None:
         query = query.eq("organizer", organizer_id)
     response = query.select("public_id").execute()
+    return bool(response.data)
+
+
+
+################################ GROUPS FUNCTIONS #####################################
+
+def fetch_groups(school_id: int | None = None):
+    query = supabase.table("session_groups").select("*")
+    if school_id is not None:
+        query = query.eq("school", school_id)
+    response = query.execute()
+    return response.data
+
+def fetch_group_student_ids(group_ids: list[int]) -> dict[int, list[int]]:
+    if not group_ids:
+        return {}
+    response = (
+        supabase.table("session_group_members")
+        .select("group_id, student_id")
+        .in_("group_id", group_ids)
+        .execute()
+    )
+    student_ids_by_group: dict[int, list[int]] = {
+        group_id: [] for group_id in group_ids
+    }
+    for membership in response.data:
+        student_ids_by_group.setdefault(membership["group_id"], []).append(
+            membership["student_id"]
+        )
+    return student_ids_by_group
+
+def create_groups(
+    school_id: int,
+    name: str,
+    purpose: str,
+    interventionist_id: str | None = None,
+):
+    group_data = {
+        "school": school_id,
+        "name": name,
+        "purpose": purpose,
+        "interventionist": interventionist_id,
+    }
+    response = (
+        supabase.table("session_groups")
+        .insert(group_data)
+        .select("*")
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+def add_students_to_group( group_id: int, student_ids: list[int], added_by: str | None = None):
+    if not student_ids:
+        return []
+    response = (
+        supabase.table("session_group_members")
+        .insert([{"group_id": group_id, "student_id": student_id, "added_by": added_by} for student_id in student_ids])
+        .select("*")
+        .execute()
+    )
+    return response.data if response.data else None
+
+def replace_group_students(
+    group_id: int,
+    student_ids: list[int],
+    added_by: str | None = None,
+):
+    existing_ids = fetch_group_student_ids([group_id]).get(group_id, [])
+    existing_set = set(existing_ids)
+    desired_set = set(student_ids)
+
+    added_ids = desired_set - existing_set
+    if added_ids:
+        if not add_students_to_group(group_id, sorted(added_ids), added_by):
+            raise RuntimeError("Unable to add students to the group.")
+
+    removed_ids = existing_set - desired_set
+    if removed_ids:
+        (
+            supabase.table("session_group_members")
+            .delete()
+            .eq("group_id", group_id)
+            .in_("student_id", list(removed_ids))
+            .execute()
+        )
+
+    return student_ids
+
+def edit_group(group_id: int, school_id: int, updates: dict):
+    response = (
+        supabase.table("session_groups")
+        .update(updates)
+        .eq("id", group_id)
+        .eq("school", school_id)
+        .select("*")
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+def delete_group(group_id: int, school_id: int) -> bool:
+    group = (
+        supabase.table("session_groups")
+        .select("id")
+        .eq("id", group_id)
+        .eq("school", school_id)
+        .limit(1)
+        .execute()
+    )
+    if not group.data:
+        return False
+
+    (
+        supabase.table("calendar_events")
+        .update({"session_group_id": None})
+        .eq("session_group_id", group_id)
+        .eq("school", school_id)
+        .execute()
+    )
+    (
+        supabase.table("session_group_members")
+        .delete()
+        .eq("group_id", group_id)
+        .execute()
+    )
+    response = (
+        supabase.table("session_groups")
+        .delete()
+        .eq("id", group_id)
+        .eq("school", school_id)
+        .select("id")
+        .execute()
+    )
     return bool(response.data)
