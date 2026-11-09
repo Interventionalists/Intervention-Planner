@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -6,56 +6,101 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
+import { apiFetch } from "../api";
 
-function createInitialLayout(storageKey, tiles) {
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const SAVE_DELAY_MS = 600;
+
+function defaultLayout(tiles) {
+  return {
+    order: tiles
+      .filter((tile) => tile.defaultVisible !== false)
+      .map((tile) => tile.id),
+    catalogIds: tiles.map((tile) => tile.id),
+    sizes: {},
+  };
+}
+
+//turns a saved layout (from the server or the local cache) into one that only
+//references tiles that exist now, and shows any tiles added since it was saved.
+function normalizeLayout(parsedLayout, tiles) {
   const tileIds = tiles.map((tile) => tile.id);
-  const defaultTileIds = tiles
-    .filter((tile) => tile.defaultVisible !== false)
-    .map((tile) => tile.id);
+  if (!parsedLayout || !Array.isArray(parsedLayout.order)) {
+    throw new Error("Saved tile layout has an invalid order.");
+  }
 
+  const catalogIds = Array.isArray(parsedLayout.catalogIds)
+    ? parsedLayout.catalogIds
+    : parsedLayout.order;
+  const order = parsedLayout.order.filter(
+    (id, index) => tileIds.includes(id) && parsedLayout.order.indexOf(id) === index
+  );
+  const newTileIds = tiles
+    .filter(
+      (tile) => !catalogIds.includes(tile.id) && tile.defaultVisible !== false
+    )
+    .map((tile) => tile.id);
+  const sizes =
+    parsedLayout.sizes && typeof parsedLayout.sizes === "object"
+      ? parsedLayout.sizes
+      : {};
+
+  return {
+    order: [...order, ...newTileIds],
+    catalogIds: tileIds,
+    sizes,
+  };
+}
+
+function readCachedLayout(storageKey) {
   try {
     const savedLayout = localStorage.getItem(storageKey);
-    if (!savedLayout) {
-      return { order: defaultTileIds, catalogIds: tileIds, sizes: {} };
-    }
-
-    const parsedLayout = JSON.parse(savedLayout);
-    if (!Array.isArray(parsedLayout.order)) {
-      throw new Error("Saved tile layout has an invalid order.");
-    }
-
-    const catalogIds = Array.isArray(parsedLayout.catalogIds)
-      ? parsedLayout.catalogIds
-      : parsedLayout.order;
-    const order = parsedLayout.order.filter(
-      (id, index) => tileIds.includes(id) && parsedLayout.order.indexOf(id) === index
-    );
-    const newTileIds = tiles
-      .filter(
-        (tile) =>
-          !catalogIds.includes(tile.id) && tile.defaultVisible !== false
-      )
-      .map((tile) => tile.id);
-    const sizes =
-      parsedLayout.sizes && typeof parsedLayout.sizes === "object"
-        ? parsedLayout.sizes
-        : {};
-
-    return {
-      order: [...order, ...newTileIds],
-      catalogIds: tileIds,
-      sizes,
-    };
-  } catch (error) {
-    console.error("Could not load the saved tile layout:", error);
-    return { order: defaultTileIds, catalogIds: tileIds, sizes: {} };
+    return savedLayout ? JSON.parse(savedLayout) : null;
+  } catch {
+    return null;
   }
 }
 
-function TileWorkspace({ className, storageKey, tiles, gridSizing = false }) {
+function createInitialLayout(storageKey, tiles) {
+  const cachedLayout = readCachedLayout(storageKey);
+  if (!cachedLayout) {
+    return defaultLayout(tiles);
+  }
+  try {
+    return normalizeLayout(cachedLayout, tiles);
+  } catch (error) {
+    console.error("Could not load the saved tile layout:", error);
+    return defaultLayout(tiles);
+  }
+}
+
+function saveLayoutToServer(pageKey, layout, options = {}) {
+  return apiFetch(`${API_BASE_URL}/layouts/${encodeURIComponent(pageKey)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ layout }),
+    ...options,
+  });
+}
+
+//pageKey identifies the page in the user_layouts table (one row per user per
+//page). storageKey is a local cache so the page renders instantly and still
+//works if the backend can't be reached.
+function TileWorkspace({
+  className,
+  pageKey,
+  storageKey,
+  tiles,
+  gridSizing = false,
+}) {
   const [layout, setLayout] = useState(() =>
     createInitialLayout(storageKey, tiles)
   );
+  //no server writes until the server copy has been loaded, so a stale local
+  //cache can't overwrite a layout saved from another device.
+  const [hasLoadedServerLayout, setHasLoadedServerLayout] = useState(!pageKey);
+  const lastSavedLayout = useRef(null);
+  const pendingSave = useRef(null);
   const [openMenuId, setOpenMenuId] = useState(null);
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
   const [draggedTileId, setDraggedTileId] = useState(null);
@@ -82,12 +127,91 @@ function TileWorkspace({ className, storageKey, tiles, gridSizing = false }) {
   }, [storageKey, tileIds.join("|")]);
 
   useEffect(() => {
+    if (!pageKey) {
+      return undefined;
+    }
+    const controller = new AbortController();
+    setHasLoadedServerLayout(false);
+
+    apiFetch(`${API_BASE_URL}/layouts/${encodeURIComponent(pageKey)}`, {
+      signal: controller.signal,
+    })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`Layout request failed (${response.status}).`);
+        }
+        return response.json();
+      })
+      .then((data) => {
+        if (data.layout) {
+          const serverLayout = normalizeLayout(data.layout, tiles);
+          lastSavedLayout.current = JSON.stringify(data.layout);
+          setLayout(serverLayout);
+        }
+        //no server copy yet: the current (possibly cached) layout gets
+        //uploaded by the save effect below, migrating old local layouts.
+        setHasLoadedServerLayout(true);
+      })
+      .catch((error) => {
+        if (error.name === "AbortError") {
+          return;
+        }
+        //keep using the local layout; changes stay cached locally and the
+        //server will be tried again next time the page opens.
+        console.error("Could not load the saved tile layout:", error);
+      });
+
+    return () => controller.abort();
+    // tiles is read once per page load; tile changes are merged by the effect above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageKey]);
+
+  useEffect(() => {
     try {
       localStorage.setItem(storageKey, JSON.stringify(layout));
     } catch (error) {
-      console.error("Could not save the tile layout:", error);
+      console.error("Could not cache the tile layout:", error);
     }
-  }, [layout, storageKey]);
+
+    if (!pageKey || !hasLoadedServerLayout) {
+      return undefined;
+    }
+    const serializedLayout = JSON.stringify(layout);
+    if (serializedLayout === lastSavedLayout.current) {
+      return undefined;
+    }
+
+    const timer = setTimeout(() => {
+      pendingSave.current = null;
+      saveLayoutToServer(pageKey, layout)
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error(`Layout save failed (${response.status}).`);
+          }
+          lastSavedLayout.current = serializedLayout;
+        })
+        .catch((error) => {
+          console.error("Could not save the tile layout:", error);
+        });
+    }, SAVE_DELAY_MS);
+    pendingSave.current = { pageKey, layout };
+
+    return () => clearTimeout(timer);
+  }, [layout, storageKey, pageKey, hasLoadedServerLayout]);
+
+  //if the user leaves the page inside the debounce window, send the last
+  //change anyway; keepalive lets the request finish after unmount.
+  useEffect(
+    () => () => {
+      if (pendingSave.current) {
+        const { pageKey: key, layout: unsavedLayout } = pendingSave.current;
+        saveLayoutToServer(key, unsavedLayout, { keepalive: true }).catch(
+          () => {}
+        );
+      }
+    },
+    []
+  );
 
   const visibleTiles = layout.order
     .map((id) => tiles.find((tile) => tile.id === id))

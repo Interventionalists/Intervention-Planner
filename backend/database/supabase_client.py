@@ -1414,3 +1414,47 @@ def delete_group(group_id: int, school_id: int) -> bool:
         .execute()
     )
     return bool(response.data)
+
+################################## LAYOUT FUNCTIONS ########################################
+
+#returns the saved layout json for one user on one page, or None if they
+#have never customized that page.
+def fetch_user_layout(user_id: str, page_key: str):
+    response = (
+        supabase.table("user_layouts")
+        .select("layout, updated_at")
+        .eq("user_id", user_id)
+        .eq("page_key", page_key)
+        .limit(1)
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+#creates or replaces the layout for (user_id, page_key); relies on the
+#unique (user_id, page_key) constraint so each page has one row per user.
+def upsert_user_layout(user_id: str, page_key: str, layout: dict):
+    response = (
+        supabase.table("user_layouts")
+        .upsert(
+            {
+                "user_id": user_id,
+                "page_key": page_key,
+                "layout": layout,
+                "updated_at": datetime.now().astimezone().isoformat(),
+            },
+            on_conflict="user_id,page_key",
+        )
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+#clears a saved layout so the page falls back to its defaults.
+def delete_user_layout(user_id: str, page_key: str) -> bool:
+    response = (
+        supabase.table("user_layouts")
+        .delete()
+        .eq("user_id", user_id)
+        .eq("page_key", page_key)
+        .execute()
+    )
+    return bool(response.data)
