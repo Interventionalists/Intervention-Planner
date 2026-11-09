@@ -257,6 +257,7 @@ function CalendarPage({ user }) {
   const [inviteesError, setInviteesError] = useState("");
   const [createError, setCreateError] = useState("");
   const [isCreatingMeeting, setIsCreatingMeeting] = useState(false);
+  const [availabilityConfirmOpen, setAvailabilityConfirmOpen] = useState(false);
   const [deleteScope, setDeleteScope] = useState("series");
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [isDeletingMeeting, setIsDeletingMeeting] = useState(false);
@@ -419,6 +420,7 @@ function CalendarPage({ user }) {
             "Student"
           : "Student",
         initials: getInviteeInitials(invitee || {}, "Student"),
+        avatar: invitee?.profile_api_link || null,
       };
     });
   const availabilityPeople = [
@@ -446,6 +448,46 @@ function CalendarPage({ user }) {
     inviteeBusyTimes,
     availabilityPeople
   );
+  const meetingConflicts = (() => {
+    const startsAt = new Date(meetingForm.startsAt);
+    const endsAt = new Date(meetingForm.endsAt);
+    if (
+      Number.isNaN(startsAt.getTime()) ||
+      Number.isNaN(endsAt.getTime()) ||
+      endsAt <= startsAt ||
+      isLoadingAvailability ||
+      availabilityError
+    ) {
+      return [];
+    }
+
+    return inviteeBusyTimes.flatMap((busy) => {
+      if (editingEvent && String(busy.event_id) === String(editingEvent.id)) {
+        return [];
+      }
+      const busyStartsAt = new Date(busy.starts_at);
+      const busyEndsAt = new Date(busy.ends_at);
+      if (
+        Number.isNaN(busyStartsAt.getTime()) ||
+        Number.isNaN(busyEndsAt.getTime()) ||
+        busyStartsAt >= endsAt ||
+        busyEndsAt <= startsAt
+      ) {
+        return [];
+      }
+      const person = availabilityPeople.find((candidate) =>
+        candidate.type === "user"
+          ? candidate.id === busy.user_id
+          : candidate.id === busy.student_id
+      );
+      if (!person) return [];
+      return [{
+        person,
+        startsAt: new Date(Math.max(startsAt.getTime(), busyStartsAt.getTime())),
+        endsAt: new Date(Math.min(endsAt.getTime(), busyEndsAt.getTime())),
+      }];
+    });
+  })();
   const meetingPreview = (() => {
     const startsAt = new Date(meetingForm.startsAt);
     const endsAt = new Date(meetingForm.endsAt);
@@ -624,6 +666,7 @@ function CalendarPage({ user }) {
   }
 
   function openCreateMeeting() {
+    setAvailabilityConfirmOpen(false);
     setEditingEvent(null);
     setMeetingForm(getDefaultMeetingForm(selectedDate));
     setCreateColor(themeColorOptions[0].color);
@@ -638,6 +681,7 @@ function CalendarPage({ user }) {
   }
 
   function openEditMeeting(event, scope = "series") {
+    setAvailabilityConfirmOpen(false);
     const recurrence = event.recurrence;
     const formStart =
       scope === "series"
@@ -702,7 +746,7 @@ function CalendarPage({ user }) {
     invitee.grade_level == null ? "" : `grade ${invitee.grade_level}`,
   ].filter(Boolean).join(" ").toLocaleLowerCase().includes(normalizedInviteeSearch));
 
-  async function createMeeting(submitEvent) {
+  async function createMeeting(submitEvent, confirmedAvailability = false) {
     submitEvent.preventDefault();
     setCreateError("");
     const startsAt = new Date(meetingForm.startsAt);
@@ -725,6 +769,14 @@ function CalendarPage({ user }) {
         setCreateError("The repeat end date must be on or after the first meeting.");
         return;
       }
+    }
+    if (isLoadingAvailability) {
+      setCreateError("Wait for availability to finish loading before saving.");
+      return;
+    }
+    if (!confirmedAvailability && (availabilityError || meetingConflicts.length > 0)) {
+      setAvailabilityConfirmOpen(true);
+      return;
     }
 
     const schoolId = user?.school_id ?? user?.school;
@@ -775,6 +827,7 @@ function CalendarPage({ user }) {
       setSelectedDate(startsAt);
       setCalendarRefreshKey((current) => current + 1);
       setIsCreateOpen(false);
+      setAvailabilityConfirmOpen(false);
       setEditingEvent(null);
     } catch (error) {
       setCreateError(error.message || "Unable to create the meeting.");
@@ -1273,6 +1326,13 @@ function CalendarPage({ user }) {
                             onChange={() => toggleInvitee({ student_id: invitee.id })}
                           />
                           <span className="calendar-invitee-avatar student" aria-hidden="true">
+                            {invitee.profile_api_link && (
+                              <img
+                                src={invitee.profile_api_link}
+                                alt=""
+                                onError={(event) => event.currentTarget.remove()}
+                              />
+                            )}
                             {getInviteeInitials(invitee, "Student")}
                           </span>
                           <span>{[invitee.first_name, invitee.last_name].filter(Boolean).join(" ") || "Student"}</span>
@@ -1301,6 +1361,9 @@ function CalendarPage({ user }) {
                       {availabilityPeople.map((person) => (
                         <span key={`${person.type}:${person.id}`}>
                           <i style={{ backgroundColor: person.color }} aria-hidden="true">
+                            {person.avatar && (
+                              <img src={person.avatar} alt="" onError={(event) => event.currentTarget.remove()} />
+                            )}
                             {person.initials}
                           </i>
                           {person.isCurrentUser ? "You" : person.name}
@@ -1311,6 +1374,21 @@ function CalendarPage({ user }) {
                       Schedules are overlaid. Blank time is open for everyone.
                       {meetingPreview && " Dashed outline shows the proposed meeting."}
                     </p>
+                    {meetingConflicts.length > 0 && (
+                      <p className="calendar-availability-warning" role="alert">
+                        This time overlaps with busy schedules for{" "}
+                        {meetingConflicts.map(({ person }, index) => (
+                          <span key={`${person.type}:${person.id}:${index}`}>
+                            {index ? ", " : ""}
+                            {person.isCurrentUser ? "you" : person.name}
+                          </span>
+                        ))}
+                        . You’ll be asked to confirm before saving.
+                        {meetingForm.repeatEveryWeeks > 0 &&
+                          !(editingEvent?.recurrence && editScope === "occurrence") &&
+                          " This only checks the first occurrence."}
+                      </p>
+                    )}
                     {isLoadingAvailability ? (
                       <p className="calendar-invitees-state" role="status">Loading schedule…</p>
                     ) : availabilityError ? (
@@ -1334,7 +1412,18 @@ function CalendarPage({ user }) {
                               }}
                               title={`${item.person.name} · ${formatTime(item.start)}–${formatTime(item.end)}`}
                             >
-                              <strong>{item.person.isCurrentUser ? "You" : item.person.initials}</strong>
+                              <strong>
+                                {item.person.isCurrentUser
+                                  ? "You"
+                                  : item.person.avatar
+                                    ? (
+                                      <span className="calendar-availability-event-avatar">
+                                        <img src={item.person.avatar} alt="" onError={(event) => event.currentTarget.remove()} />
+                                        {item.person.initials}
+                                      </span>
+                                    )
+                                    : item.person.initials}
+                              </strong>
                               {item.height >= 38 && (
                                 <span>{formatTime(item.start)}–{formatTime(item.end)}</span>
                               )}
@@ -1388,6 +1477,78 @@ function CalendarPage({ user }) {
                 </button>
               </footer>
             </form>
+          </section>
+        </div>
+      )}
+      {availabilityConfirmOpen && (
+        <div
+          className="calendar-event-modal-backdrop calendar-availability-confirm-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !isCreatingMeeting) {
+              setAvailabilityConfirmOpen(false);
+            }
+          }}
+        >
+          <section
+            className="calendar-event-modal calendar-availability-confirm"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="calendar-availability-confirm-title"
+            aria-describedby="calendar-availability-confirm-description"
+            onKeyDown={(event) => {
+              if (event.key === "Escape" && !isCreatingMeeting) {
+                setAvailabilityConfirmOpen(false);
+              }
+            }}
+          >
+            <div className="calendar-event-modal-header">
+              <div>
+                <h2 id="calendar-availability-confirm-title">
+                  {availabilityError ? "Availability couldn’t be checked" : "Someone is busy"}
+                </h2>
+                <p id="calendar-availability-confirm-description" className="calendar-event-modal-subtitle">
+                  {availabilityError
+                    ? `We couldn't verify everyone’s schedule: ${availabilityError}`
+                    : `This meeting overlaps with ${meetingConflicts.length === 1 ? "a busy schedule" : "busy schedules"}:`}
+                </p>
+              </div>
+            </div>
+            {!availabilityError && (
+              <ul className="calendar-availability-conflict-list">
+                {meetingConflicts.map(({ person, startsAt: conflictStart, endsAt: conflictEnd }, index) => (
+                  <li key={`${person.type}:${person.id}:${index}`}>
+                    <strong>{person.isCurrentUser ? "You" : person.name}</strong>
+                    <span>{formatTime(conflictStart)}–{formatTime(conflictEnd)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {meetingForm.repeatEveryWeeks > 0 &&
+              !(editingEvent?.recurrence && editScope === "occurrence") && (
+                <p className="calendar-availability-confirm-note">
+                  Only the first occurrence was checked. Future meetings may also conflict.
+                </p>
+              )}
+            <p className="calendar-availability-confirm-question">
+              Do you really want to schedule this meeting anyway?
+            </p>
+            <footer className="calendar-create-actions">
+              <button
+                type="button"
+                onClick={() => setAvailabilityConfirmOpen(false)}
+                disabled={isCreatingMeeting}
+              >
+                Go back
+              </button>
+              <button
+                type="button"
+                className="calendar-schedule-conflict-button"
+                onClick={() => createMeeting({ preventDefault() {} }, true)}
+                disabled={isCreatingMeeting}
+              >
+                {isCreatingMeeting ? "Scheduling…" : "Schedule anyway"}
+              </button>
+            </footer>
           </section>
         </div>
       )}

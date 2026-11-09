@@ -95,7 +95,11 @@ def test_list_calendar_events_rejects_reversed_range(client, monkeypatch):
 def test_list_calendar_invitees_uses_signed_in_school(client, monkeypatch):
     invitees = {
         "users": [{"public_id": "staff-123", "first_name": "Staff"}],
-        "students": [{"id": 42, "first_name": "Student"}],
+        "students": [{
+            "id": 42,
+            "first_name": "Student",
+            "profile_api_link": "https://example.test/student-avatar.png",
+        }],
     }
     requested = {}
 
@@ -159,6 +163,7 @@ def test_calendar_availability_returns_busy_times_for_all_school_invitees(
         )
         return [
             {
+                "id": 1,
                 "title": "Private event",
                 "organizer": invitee_id,
                 "starts_at": "2026-11-09T09:00:00-06:00",
@@ -186,18 +191,21 @@ def test_calendar_availability_returns_busy_times_for_all_school_invitees(
     assert response.json() == {
         "busy": [
             {
+                "event_id": 1,
                 "user_id": invitee_id,
                 "student_id": None,
                 "starts_at": "2026-11-09T09:00:00-06:00",
                 "ends_at": "2026-11-09T09:30:00-06:00",
             },
             {
+                "event_id": 1,
                 "user_id": second_invitee_id,
                 "student_id": None,
                 "starts_at": "2026-11-09T09:00:00-06:00",
                 "ends_at": "2026-11-09T09:30:00-06:00",
             },
             {
+                "event_id": 1,
                 "user_id": None,
                 "student_id": 42,
                 "starts_at": "2026-11-09T09:00:00-06:00",

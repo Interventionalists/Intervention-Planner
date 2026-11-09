@@ -909,7 +909,7 @@ def fetch_calendar_invitees(school_id: int):
     )
     students_response = (
         supabase.table("students")
-        .select("id, first_name, last_name, grade_level")
+        .select("id, first_name, last_name, grade_level, profile_api_link")
         .eq("school", school_id)
         .order("first_name")
         .execute()
