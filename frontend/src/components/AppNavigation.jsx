@@ -1,6 +1,5 @@
 import {
   Activity,
-  BarChart3,
   CalendarDays,
   CircleUserRound,
   LayoutDashboard,
@@ -9,6 +8,7 @@ import {
   Search,
   Settings,
   Users,
+  UsersRound,
   UserRoundCog,
   X,
 } from "lucide-react";
@@ -16,10 +16,10 @@ import {
 const navItems = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "students", label: "Students", icon: Users },
+  { id: "groups", label: "Groups", icon: UsersRound },
   { id: "users", label: "Users", icon: UserRoundCog, adminOnly: true },
   { id: "status", label: "Status", icon: Activity, adminOnly: true },
   { id: "calendar", label: "Calendar", icon: CalendarDays },
-  { id: "reports", label: "Reports", icon: BarChart3 },
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
