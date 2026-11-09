@@ -184,6 +184,7 @@ def get_calendar_availability(
             }
             for busy_user_id in event_user_ids & target_user_ids:
                 busy.append({
+                    "event_id": event["id"],
                     "user_id": busy_user_id,
                     "student_id": None,
                     "starts_at": event["starts_at"],
@@ -191,6 +192,7 @@ def get_calendar_availability(
                 })
             for busy_student_id in event_student_ids & target_student_ids:
                 busy.append({
+                    "event_id": event["id"],
                     "user_id": None,
                     "student_id": busy_student_id,
                     "starts_at": event["starts_at"],
