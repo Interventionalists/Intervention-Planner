@@ -178,6 +178,7 @@ function DashboardPage({
         className="dashboard-grid"
         gridSizing
         key={`dashboard-${userId ?? role ?? "default"}`}
+        pageKey="dashboard"
         storageKey={`tile-layout-dashboard-${userId ?? role ?? "default"}`}
         tiles={dashboardTiles}
       />

@@ -363,6 +363,7 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
         className="student-profile-layout"
         gridSizing
         key={`student-profile-${userId ?? "default"}-${student.id ?? "unknown"}`}
+        pageKey={`student-${student.id ?? "unknown"}`}
         storageKey={`tile-layout-student-${userId ?? "default"}-${student.id ?? "unknown"}`}
         tiles={studentTiles}
       />
