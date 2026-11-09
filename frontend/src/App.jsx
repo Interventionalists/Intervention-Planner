@@ -5,7 +5,7 @@ import { Header, Sidebar } from "./components/AppNavigation";
 import AccountPage from "./pages/AccountPage";
 import CalendarPage from "./pages/CalendarPage";
 import DashboardPage from "./pages/DashboardPage";
-import ReportsPage from "./pages/ReportsPage";
+import GroupsPage from "./pages/GroupsPage";
 import SettingsPage from "./pages/SettingsPage";
 import StudentProfilePage from "./pages/StudentProfilePage";
 import StudentsPage from "./pages/StudentsPage";
@@ -360,6 +360,8 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
                 <SystemHealthPage role={user.role} />
               </Suspense>
             )
+          ) : page === "groups" ? (
+            <GroupsPage user={user} />
           ) : studentsLoading ? (
             <div className="data-state" role="status">Loading students...</div>
           ) : studentsError ? (
@@ -379,6 +381,7 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
                   onStudents={() => selectPage("students")}
                   userName={userName}
                   userId={user?.public_id}
+                  user={user}
                   role={user?.role}
                 />
               )}
@@ -406,8 +409,7 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
                   onUserUpdated={onUserUpdated}
                 />
               )}
-              {page === "calendar" && <CalendarPage />}
-              {page === "reports" && <ReportsPage students={studentsData} />}
+              {page === "calendar" && <CalendarPage user={user} />}
               {page === "settings" && (
                 <SettingsPage
                   theme={theme}

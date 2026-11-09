@@ -21,6 +21,22 @@ const moduleDetails = {
     title: "Daily calendar",
     description: "Review today's intervention schedule and events.",
   },
+  calendarDayView: {
+    title: "Day view",
+    description: "See your meetings and events for a selected day.",
+  },
+  calendarWeekView: {
+    title: "Week view",
+    description: "See your meetings and events across the week.",
+  },
+  upcomingEvents: {
+    title: "Upcoming events",
+    description: "See what's coming up in your calendar.",
+  },
+  quickNewEvent: {
+    title: "Quick new event",
+    description: "Add an event to your calendar without leaving the dashboard.",
+  },
   classStudents: {
     title: "Students",
     description: "Review students in your classes or intervention groups.",
@@ -124,6 +140,22 @@ const modulePermissions = {
   changeParentName: { roles: ["admin"], pages: ["studentProfile"] },
   changeStudentName: { roles: ["admin"], pages: ["studentProfile"] },
   dailyCalendar: {
+    roles: ["teacher", "interventionist"],
+    pages: ["dashboard"],
+  },
+  calendarDayView: {
+    roles: ["teacher", "interventionist"],
+    pages: ["dashboard"],
+  },
+  calendarWeekView: {
+    roles: ["teacher", "interventionist"],
+    pages: ["dashboard"],
+  },
+  upcomingEvents: {
+    roles: ["teacher", "interventionist"],
+    pages: ["dashboard"],
+  },
+  quickNewEvent: {
     roles: ["teacher", "interventionist"],
     pages: ["dashboard"],
   },
