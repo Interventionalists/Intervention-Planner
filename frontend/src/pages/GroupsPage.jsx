@@ -28,6 +28,8 @@ function GroupsPage({ user }) {
   const [successMessage, setSuccessMessage] = useState("");
   const [schedulingGroup, setSchedulingGroup] = useState(null);
   const [scheduleMessage, setScheduleMessage] = useState("");
+  const [deletingGroupId, setDeletingGroupId] = useState(null);
+  const [groupDeleteError, setGroupDeleteError] = useState(null);
   const canCreateGroups = ["admin", "interventionist"].includes(user?.role);
 
   useEffect(() => {
@@ -191,6 +193,42 @@ function GroupsPage({ user }) {
     }
   };
 
+  const deleteGroup = async (group) => {
+    if (
+      !window.confirm(
+        `Delete "${group.name}"? This will remove the group and its student memberships. Existing scheduled events will remain without this group link. This action cannot be undone.`
+      )
+    ) {
+      return;
+    }
+
+    setGroupDeleteError(null);
+    setDeletingGroupId(group.id);
+    try {
+      const response = await apiFetch(
+        `${API_BASE_URL}/groups-delete/${encodeURIComponent(group.id)}`,
+        { method: "DELETE" }
+      );
+      const result = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(result?.detail || "Unable to delete group.");
+      }
+      if (result?.deleted !== true) {
+        throw new Error("The delete group response has an unexpected format.");
+      }
+      setGroups((currentGroups) =>
+        currentGroups.filter((currentGroup) => currentGroup.id !== group.id)
+      );
+    } catch (error) {
+      setGroupDeleteError({
+        groupId: group.id,
+        message: error.message || "Unable to delete group.",
+      });
+    } finally {
+      setDeletingGroupId(null);
+    }
+  };
+
   return (
     <>
       <PageHeading
@@ -313,7 +351,7 @@ function GroupsPage({ user }) {
                     {editError && <p className="assignment-error" role="alert">{editError}</p>}
                     <div className="group-edit-actions">
                       <button
-                        className="primary-button"
+                        className="primary-button group-edit-save-button"
                         type="submit"
                         disabled={isEditing || areStudentsLoading || Boolean(studentsError)}
                       >
@@ -351,12 +389,26 @@ function GroupsPage({ user }) {
                             setScheduleMessage("");
                             setSchedulingGroup(group);
                           }}
+                          disabled={deletingGroupId !== null}
                         >
                           Schedule
+                        </button>
+                        <button
+                          className="ghost-button group-delete-button"
+                          type="button"
+                          onClick={() => deleteGroup(group)}
+                          disabled={deletingGroupId !== null}
+                        >
+                          {deletingGroupId === group.id ? "Deleting..." : "Delete"}
                         </button>
                       </div>
                     )}
                   </div>
+                )}
+                {groupDeleteError?.groupId === group.id && (
+                  <p className="assignment-error group-delete-error" role="alert">
+                    {groupDeleteError.message}
+                  </p>
                 )}
                 {(group.interventionist_name || group.interventionist) && (
                   <span className="group-owner">
