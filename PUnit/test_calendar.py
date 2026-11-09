@@ -118,6 +118,123 @@ def test_list_calendar_invitees_uses_signed_in_school(client, monkeypatch):
     assert requested["school_id"] == 7
 
 
+def test_calendar_availability_returns_busy_times_for_all_school_invitees(
+    client, monkeypatch
+):
+    invitee_id = "123e4567-e89b-12d3-a456-426614174000"
+    second_invitee_id = "223e4567-e89b-12d3-a456-426614174000"
+    requested = {}
+    monkeypatch.setattr(calendar, "fetch_user_school_by_public_id", lambda _id: 7)
+    monkeypatch.setattr(
+        calendar,
+        "fetch_calendar_invitees",
+        lambda _school_id: {
+            "users": [
+                {"public_id": invitee_id},
+                {"public_id": second_invitee_id},
+            ],
+            "students": [{"id": 42}],
+        },
+    )
+
+    def fake_fetch_events(
+        school_id,
+        range_start,
+        range_end,
+        user_public_id,
+        attendee_user_id=None,
+        attendee_student_id=None,
+        attendee_user_ids=None,
+        attendee_student_ids=None,
+    ):
+        requested.update(
+            school_id=school_id,
+            range_start=range_start,
+            range_end=range_end,
+            user_public_id=user_public_id,
+            attendee_user_id=attendee_user_id,
+            attendee_student_id=attendee_student_id,
+            attendee_user_ids=attendee_user_ids,
+            attendee_student_ids=attendee_student_ids,
+        )
+        return [
+            {
+                "title": "Private event",
+                "organizer": invitee_id,
+                "starts_at": "2026-11-09T09:00:00-06:00",
+                "ends_at": "2026-11-09T09:30:00-06:00",
+                "participants": [
+                    {"user_id": second_invitee_id, "student_id": None},
+                    {"user_id": None, "student_id": 42},
+                ],
+            }
+        ]
+
+    monkeypatch.setattr(calendar, "fetch_calendar_events", fake_fetch_events)
+
+    response = client.get(
+        "/calendar-availability",
+        params={
+            "user_ids": [invitee_id, second_invitee_id],
+            "student_ids": [42],
+            "starts_at": "2026-11-09T00:00:00-06:00",
+            "ends_at": "2026-11-16T00:00:00-06:00",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "busy": [
+            {
+                "user_id": invitee_id,
+                "student_id": None,
+                "starts_at": "2026-11-09T09:00:00-06:00",
+                "ends_at": "2026-11-09T09:30:00-06:00",
+            },
+            {
+                "user_id": second_invitee_id,
+                "student_id": None,
+                "starts_at": "2026-11-09T09:00:00-06:00",
+                "ends_at": "2026-11-09T09:30:00-06:00",
+            },
+            {
+                "user_id": None,
+                "student_id": 42,
+                "starts_at": "2026-11-09T09:00:00-06:00",
+                "ends_at": "2026-11-09T09:30:00-06:00",
+            }
+        ]
+    }
+    assert requested["school_id"] == 7
+    assert requested["attendee_user_ids"] == {invitee_id, second_invitee_id}
+    assert requested["attendee_student_ids"] == {42}
+
+
+def test_calendar_availability_rejects_non_school_invitee(client, monkeypatch):
+    monkeypatch.setattr(calendar, "fetch_user_school_by_public_id", lambda _id: 7)
+    monkeypatch.setattr(
+        calendar,
+        "fetch_calendar_invitees",
+        lambda _school_id: {"users": [], "students": []},
+    )
+    monkeypatch.setattr(
+        calendar,
+        "fetch_calendar_events",
+        lambda *_args, **_kwargs: pytest.fail("Unknown invitee reached event lookup"),
+    )
+
+    response = client.get(
+        "/calendar-availability",
+        params={
+            "user_id": "123e4567-e89b-12d3-a456-426614174000",
+            "starts_at": "2026-11-09T00:00:00-06:00",
+            "ends_at": "2026-11-16T00:00:00-06:00",
+        },
+    )
+
+    assert response.status_code == 404
+
+
 def test_create_calendar_meeting_saves_invitees_and_recurrence(client, monkeypatch):
     event_id = "123e4567-e89b-12d3-a456-426614174000"
     invitee_id = "123e4567-e89b-12d3-a456-426614174001"
@@ -663,6 +780,8 @@ def test_fetch_calendar_events_resolves_school_participants(monkeypatch):
         "every_n_weeks": 1,
         "ends_on": "2026-12-31",
     }
+    assert result[0]["series_starts_at"] == "2026-11-04T09:00:00-06:00"
+    assert result[0]["series_ends_at"] == "2026-11-04T09:30:00-06:00"
     next_occurrences = supabase_client.fetch_calendar_events(
         7,
         "2026-11-09T00:00:00-06:00",
@@ -672,3 +791,4 @@ def test_fetch_calendar_events_resolves_school_participants(monkeypatch):
     assert [(event["id"], event["starts_at"]) for event in next_occurrences] == [
         (9, "2026-11-11T09:00:00-06:00")
     ]
+    assert next_occurrences[0]["series_starts_at"] == "2026-11-04T09:00:00-06:00"

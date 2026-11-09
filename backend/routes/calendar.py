@@ -100,6 +100,118 @@ def get_calendar_invitees(user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=str(error)) from error
 
 
+@router.get("/calendar-availability")
+def get_calendar_availability(
+    starts_at: datetime = Query(),
+    ends_at: datetime = Query(),
+    user_id: UUID | None = Query(None),
+    student_id: int | None = Query(None, ge=1),
+    user_ids: list[UUID] = Query(default=[]),
+    student_ids: list[int] = Query(default=[]),
+    user: dict = Depends(get_current_user),
+):
+    target_user_ids = {str(value) for value in user_ids}
+    target_student_ids = set(student_ids)
+    if user_id is not None:
+        target_user_ids.add(str(user_id))
+    if student_id is not None:
+        target_student_ids.add(student_id)
+    if not target_user_ids and not target_student_ids:
+        raise HTTPException(
+            status_code=422,
+            detail="Provide at least one staff user ID or student ID.",
+        )
+    if len(target_user_ids) + len(target_student_ids) > 50:
+        raise HTTPException(
+            status_code=422,
+            detail="Availability can be checked for up to 50 invitees at a time.",
+        )
+    if (
+        starts_at.tzinfo is None
+        or starts_at.utcoffset() is None
+        or ends_at.tzinfo is None
+        or ends_at.utcoffset() is None
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Availability range timestamps must include a timezone.",
+        )
+    if ends_at <= starts_at or ends_at - starts_at > timedelta(days=14):
+        raise HTTPException(
+            status_code=422,
+            detail="Availability range must be positive and no longer than 14 days.",
+        )
+    try:
+        school_id = fetch_user_school_by_public_id(user["public_id"])
+        if school_id is None:
+            raise HTTPException(
+                status_code=403,
+                detail="The signed-in user does not have a school assigned.",
+            )
+        invitees = fetch_calendar_invitees(school_id)
+        allowed_user_ids = {
+            str(invitee["public_id"]) for invitee in invitees["users"]
+        }
+        allowed_student_ids = {
+            invitee["id"] for invitee in invitees["students"]
+        }
+        if not target_user_ids.issubset(allowed_user_ids) or not target_student_ids.issubset(
+            allowed_student_ids
+        ):
+            raise HTTPException(status_code=404, detail="Invitee not found.")
+
+        events = fetch_calendar_events(
+            school_id,
+            starts_at.isoformat(),
+            ends_at.isoformat(),
+            user["public_id"],
+            attendee_user_ids=target_user_ids,
+            attendee_student_ids=target_student_ids,
+        )
+        busy = []
+        for event in events:
+            event_user_ids = {
+                str(participant["user_id"])
+                for participant in event.get("participants", [])
+                if participant.get("user_id") is not None
+            }
+            if event.get("organizer") is not None:
+                event_user_ids.add(str(event["organizer"]))
+            event_student_ids = {
+                participant["student_id"]
+                for participant in event.get("participants", [])
+                if participant.get("student_id") is not None
+            }
+            for busy_user_id in event_user_ids & target_user_ids:
+                busy.append({
+                    "user_id": busy_user_id,
+                    "student_id": None,
+                    "starts_at": event["starts_at"],
+                    "ends_at": event["ends_at"],
+                })
+            for busy_student_id in event_student_ids & target_student_ids:
+                busy.append({
+                    "user_id": None,
+                    "student_id": busy_student_id,
+                    "starts_at": event["starts_at"],
+                    "ends_at": event["ends_at"],
+                })
+        busy.sort(
+            key=lambda item: (
+                item["starts_at"],
+                0 if item["user_id"] is not None else 1,
+                str(item["user_id"] or item["student_id"]),
+            )
+        )
+        return {
+            "busy": busy
+        }
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=str(error)) from error
+
+
 class CalendarParticipantCreate(BaseModel):
     user_id: UUID | None = None
     student_id: int | None = Field(default=None, ge=1)
