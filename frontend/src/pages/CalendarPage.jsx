@@ -16,6 +16,9 @@ import { apiFetch } from "../api";
 import { PageHeading } from "../components/PageElements";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const availabilityHours = ["8 am", "9 am", "10 am", "11 am", "12 pm", "1 pm", "2 pm", "3 pm", "4 pm"];
+const availabilityHourHeight = 49;
+const availabilityColors = ["#2563eb", "#20804b", "#7a3db8", "#e8791a", "#d92d20", "#079bd8"];
 const hours = ["8 am", "9 am", "10 am", "11 am", "12 pm", "1 pm", "2 pm", "3 pm", "4 pm"];
 const hourRowHeight = 55;
 const dayRowHeight = 49;
@@ -187,6 +190,59 @@ function formatTime(value) {
   return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 }
 
+function getAvailabilityDayTimeline(day, busyTimes, people) {
+  const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 8);
+  const dayEnd = new Date(dayStart);
+  dayEnd.setHours(17, 0, 0, 0);
+  const timeline = busyTimes
+    .map((busy) => {
+      const start = new Date(busy.starts_at);
+      const end = new Date(busy.ends_at);
+      if (
+        Number.isNaN(start.getTime()) ||
+        Number.isNaN(end.getTime()) ||
+        start >= dayEnd ||
+        end <= dayStart ||
+        end <= start
+      ) {
+        return null;
+      }
+      const person = people.find((invitee) =>
+        invitee.type === "user"
+          ? invitee.id === busy.user_id
+          : invitee.id === busy.student_id
+      );
+      if (!person) return null;
+      const visibleStart = Math.max(start.getTime(), dayStart.getTime());
+      const visibleEnd = Math.min(end.getTime(), dayEnd.getTime());
+      return {
+        person,
+        start: visibleStart,
+        end: visibleEnd,
+        startOffset: (visibleStart - dayStart.getTime()) / 60000,
+        endOffset: (visibleEnd - dayStart.getTime()) / 60000,
+        lane: 0,
+      };
+    })
+    .filter(Boolean)
+    .sort((first, second) => first.startOffset - second.startOffset);
+
+  const laneEnds = [];
+  for (const item of timeline) {
+    let lane = laneEnds.findIndex((endOffset) => endOffset <= item.startOffset);
+    if (lane < 0) lane = laneEnds.length;
+    item.lane = lane;
+    laneEnds[lane] = item.endOffset;
+  }
+
+  return timeline.map((item) => ({
+    ...item,
+    laneCount: laneEnds.length,
+    top: (item.startOffset / 60) * availabilityHourHeight,
+    height: ((item.endOffset - item.startOffset) / 60) * availabilityHourHeight,
+  }));
+}
+
 function CalendarPage({ user }) {
   const [view, setView] = useState("week");
   const [selectedDate, setSelectedDate] = useState(initialDate);
@@ -202,6 +258,9 @@ function CalendarPage({ user }) {
   const [meetingForm, setMeetingForm] = useState(() => getDefaultMeetingForm(initialDate));
   const [invitees, setInvitees] = useState({ users: [], students: [] });
   const [selectedInvitees, setSelectedInvitees] = useState([]);
+  const [inviteeBusyTimes, setInviteeBusyTimes] = useState([]);
+  const [isLoadingAvailability, setIsLoadingAvailability] = useState(false);
+  const [availabilityError, setAvailabilityError] = useState("");
   const [inviteeSearch, setInviteeSearch] = useState("");
   const [isLoadingInvitees, setIsLoadingInvitees] = useState(false);
   const [inviteesError, setInviteesError] = useState("");
@@ -234,6 +293,16 @@ function CalendarPage({ user }) {
   const rangeEnd = new Date(rangeStart);
   rangeEnd.setDate(rangeStart.getDate() + (view === "month" ? 42 : 7));
   const selectedEvents = getEventsForDate(selectedDate, calendarEvents);
+  const meetingDate = meetingForm.startsAt
+    ? new Date(meetingForm.startsAt)
+    : new Date();
+  const availabilityDayStart = new Date(
+    meetingDate.getFullYear(),
+    meetingDate.getMonth(),
+    meetingDate.getDate()
+  );
+  const availabilityDayEnd = new Date(availabilityDayStart);
+  availabilityDayEnd.setDate(availabilityDayEnd.getDate() + 1);
   const eventDuration = selectedEvent
     ? formatEventDuration(selectedEvent.starts_at, selectedEvent.ends_at)
     : null;
@@ -256,6 +325,11 @@ function CalendarPage({ user }) {
     { label: "Purple", color: "#7a3db8" },
     { label: "Gray", color: "#667085" },
   ];
+  const availabilityTimeline = getAvailabilityDayTimeline(
+    availabilityDayStart,
+    inviteeBusyTimes,
+    availabilityPeople
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -329,6 +403,95 @@ function CalendarPage({ user }) {
     return () => controller.abort();
   }, [isCreateOpen]);
 
+  const availabilityPeopleKey = selectedInvitees
+    .map((invitee) =>
+      invitee.user_id
+        ? `user:${invitee.user_id}`
+        : `student:${invitee.student_id}`
+    )
+    .sort()
+    .join("|");
+  const availabilityPeople = selectedInvitees.map((selected, index) => {
+    if (selected.user_id) {
+      const invitee = invitees.users.find(
+        (person) => person.public_id === selected.user_id
+      );
+      return {
+        type: "user",
+        id: selected.user_id,
+        name: invitee
+          ? [invitee.first_name, invitee.last_name].filter(Boolean).join(" ") ||
+            "Staff member"
+          : "Staff member",
+        color: availabilityColors[index % availabilityColors.length],
+        initials: getInviteeInitials(invitee || {}, "Staff"),
+      };
+    }
+
+    const invitee = invitees.students.find(
+      (person) => person.id === selected.student_id
+    );
+    return {
+      type: "student",
+      id: selected.student_id,
+      name: invitee
+        ? [invitee.first_name, invitee.last_name].filter(Boolean).join(" ") ||
+          "Student"
+        : "Student",
+      color: availabilityColors[index % availabilityColors.length],
+      initials: getInviteeInitials(invitee || {}, "Student"),
+    };
+  });
+
+  useEffect(() => {
+    if (!isCreateOpen || availabilityPeople.length === 0) return undefined;
+    const controller = new AbortController();
+    const params = new URLSearchParams({
+      starts_at: availabilityDayStart.toISOString(),
+      ends_at: availabilityDayEnd.toISOString(),
+    });
+    availabilityPeople.forEach((invitee) => {
+      params.append(
+        invitee.type === "user" ? "user_ids" : "student_ids",
+        String(invitee.id)
+      );
+    });
+
+    async function loadInviteeAvailability() {
+      setIsLoadingAvailability(true);
+      setAvailabilityError("");
+      try {
+        const response = await apiFetch(
+          `${API_BASE_URL}/calendar-availability?${params}`,
+          { signal: controller.signal }
+        );
+        const result = await response.json().catch(() => null);
+        if (!response.ok) {
+          throw new Error(result?.detail || `Unable to load availability (${response.status}).`);
+        }
+        if (!Array.isArray(result?.busy)) {
+          throw new Error("The availability response has an unexpected format.");
+        }
+        setInviteeBusyTimes(result.busy);
+        setAvailabilityError("");
+      } catch (error) {
+        if (error.name !== "AbortError") {
+          setAvailabilityError(error.message || "Unable to load availability.");
+        }
+      } finally {
+        if (!controller.signal.aborted) setIsLoadingAvailability(false);
+      }
+    }
+
+    loadInviteeAvailability();
+    return () => controller.abort();
+  }, [
+    isCreateOpen,
+    availabilityPeopleKey,
+    availabilityDayStart.getTime(),
+    availabilityDayEnd.getTime(),
+  ]);
+
   useEffect(() => {
     if (!selectedEvent) return undefined;
     const closeOnEscape = (event) => {
@@ -360,22 +523,32 @@ function CalendarPage({ user }) {
     setEditScope("series");
     setSelectedInvitees([]);
     setInviteeSearch("");
+    setInviteeBusyTimes([]);
+    setAvailabilityError("");
     setCreateError("");
     setInviteesError("");
     setIsCreateOpen(true);
   }
 
-  function openEditMeeting(event) {
-    const formDefaults = getDefaultMeetingForm(new Date(event.starts_at));
+  function openEditMeeting(event, scope = "series") {
     const recurrence = event.recurrence;
+    const formStart =
+      scope === "series"
+        ? recurrence?.series_starts_at || event.series_starts_at || event.starts_at
+        : event.starts_at;
+    const formEnd =
+      scope === "series"
+        ? recurrence?.series_ends_at || event.series_ends_at || event.ends_at
+        : event.ends_at;
+    const formDefaults = getDefaultMeetingForm(new Date(formStart));
     setEditingEvent(event);
-    setEditScope("series");
+    setEditScope(scope);
     setMeetingForm({
       ...formDefaults,
       title: event.title || "",
       eventType: event.event_type || "meeting",
-      startsAt: formatLocalDateTimeInput(event.starts_at),
-      endsAt: formatLocalDateTimeInput(event.ends_at),
+      startsAt: formatLocalDateTimeInput(formStart),
+      endsAt: formatLocalDateTimeInput(formEnd),
       location: event.location || "",
       repeatEveryWeeks: recurrence?.every_n_weeks || 0,
       weekdays: recurrence?.weekdays || [],
@@ -387,6 +560,8 @@ function CalendarPage({ user }) {
       ...(participant.student_id != null ? { student_id: participant.student_id } : {}),
     })));
     setInviteeSearch("");
+    setInviteeBusyTimes([]);
+    setAvailabilityError("");
     setCreateError("");
     setInviteesError("");
     setIsCreateOpen(true);
@@ -394,10 +569,12 @@ function CalendarPage({ user }) {
   }
 
   function toggleInvitee(invitee) {
+    const exists = selectedInvitees.some((selected) => invitee.user_id
+      ? selected.user_id === invitee.user_id
+      : selected.student_id === invitee.student_id);
+    setAvailabilityError("");
+    setInviteeBusyTimes([]);
     setSelectedInvitees((current) => {
-      const exists = current.some((selected) => invitee.user_id
-        ? selected.user_id === invitee.user_id
-        : selected.student_id === invitee.student_id);
       return exists
         ? current.filter((selected) => invitee.user_id
           ? selected.user_id !== invitee.user_id
@@ -604,6 +781,7 @@ function CalendarPage({ user }) {
           setColorDraft(event.color || themeColorOptions[0].color);
           setColorSaveError("");
           setColorSaveMessage("");
+          setEditScope("series");
           setDeleteScope("series");
           setDeleteConfirmOpen(false);
           setDeleteError("");
@@ -768,7 +946,7 @@ function CalendarPage({ user }) {
           }}
         >
           <section
-            className="calendar-event-modal calendar-create-modal"
+            className={`calendar-event-modal calendar-create-modal${availabilityPeople.length ? " calendar-create-modal-with-availability" : ""}`}
             role="dialog"
             aria-modal="true"
             aria-labelledby="calendar-create-title"
@@ -844,17 +1022,6 @@ function CalendarPage({ user }) {
                   />
                 </label>
               </div>
-
-              {editingEvent?.recurrence && (
-                <label className="calendar-create-repeat-select calendar-meeting-scope">
-                  Apply changes to
-                  <select value={editScope} onChange={(event) => setEditScope(event.target.value)}>
-                    <option value="series">Entire series</option>
-                    <option value="future">This and all future occurrences</option>
-                    <option value="occurrence">Just this occurrence</option>
-                  </select>
-                </label>
-              )}
 
               <fieldset className="calendar-create-repeat calendar-create-color">
                 <legend>Event color</legend>
@@ -953,27 +1120,28 @@ function CalendarPage({ user }) {
               </fieldset>
               )}
 
-              <fieldset className="calendar-create-invitees">
+              <fieldset className={`calendar-create-invitees${availabilityPeople.length ? " availability-open" : ""}`}>
                 <legend>Invite people</legend>
-                <label className="calendar-invitee-search">
-                  <Search size={16} aria-hidden="true" />
-                  <input
-                    type="search"
-                    value={inviteeSearch}
-                    onChange={(event) => setInviteeSearch(event.target.value)}
-                    placeholder="Search staff and students"
-                    aria-label="Search staff and students to invite"
-                  />
-                </label>
-                {isLoadingInvitees ? (
-                  <p className="calendar-invitees-state" role="status">Loading people from your school…</p>
-                ) : inviteesError ? (
-                  <p className="calendar-invitees-state error-state" role="alert">{inviteesError}</p>
-                ) : (
-                  <div className="calendar-invitee-groups">
-                    <div>
-                      <h3>Staff</h3>
-                      {filteredUsers.length ? filteredUsers.map((invitee) => (
+                <div className="calendar-invitee-picker">
+                  <label className="calendar-invitee-search">
+                    <Search size={16} aria-hidden="true" />
+                    <input
+                      type="search"
+                      value={inviteeSearch}
+                      onChange={(event) => setInviteeSearch(event.target.value)}
+                      placeholder="Search staff and students"
+                      aria-label="Search staff and students to invite"
+                    />
+                  </label>
+                  {isLoadingInvitees ? (
+                    <p className="calendar-invitees-state" role="status">Loading people from your school…</p>
+                  ) : inviteesError ? (
+                    <p className="calendar-invitees-state error-state" role="alert">{inviteesError}</p>
+                  ) : (
+                    <div className="calendar-invitee-groups">
+                      <div>
+                        <h3>Staff</h3>
+                        {filteredUsers.length ? filteredUsers.map((invitee) => (
                         <label className="calendar-invitee-option" key={invitee.public_id}>
                           <input
                             type="checkbox"
@@ -986,11 +1154,11 @@ function CalendarPage({ user }) {
                           <span>{[invitee.first_name, invitee.last_name].filter(Boolean).join(" ") || "Staff member"}</span>
                           <small>{invitee.role}</small>
                         </label>
-                      )) : <p className="calendar-invitees-state">{invitees.users.length ? "No staff match your search." : "No staff found."}</p>}
-                    </div>
-                    <div>
-                      <h3>Students</h3>
-                      {filteredStudents.length ? filteredStudents.map((invitee) => (
+                        )) : <p className="calendar-invitees-state">{invitees.users.length ? "No staff match your search." : "No staff found."}</p>}
+                      </div>
+                      <div>
+                        <h3>Students</h3>
+                        {filteredStudents.length ? filteredStudents.map((invitee) => (
                         <label className="calendar-invitee-option" key={invitee.id}>
                           <input
                             type="checkbox"
@@ -1003,9 +1171,72 @@ function CalendarPage({ user }) {
                           <span>{[invitee.first_name, invitee.last_name].filter(Boolean).join(" ") || "Student"}</span>
                           {invitee.grade_level != null && <small>Grade {invitee.grade_level}</small>}
                         </label>
-                      )) : <p className="calendar-invitees-state">{invitees.students.length ? "No students match your search." : "No students found."}</p>}
+                        )) : <p className="calendar-invitees-state">{invitees.students.length ? "No students match your search." : "No students found."}</p>}
+                      </div>
                     </div>
-                  </div>
+                  )}
+                </div>
+                {availabilityPeople.length > 0 && (
+                  <section className="calendar-invitee-availability">
+                    <header>
+                      <div>
+                        <strong>Availability for {availabilityPeople.length} invitee{availabilityPeople.length === 1 ? "" : "s"}</strong>
+                        <small>
+                          {formatEventDate(availabilityDayStart)}
+                        </small>
+                      </div>
+                    </header>
+                    <div className="calendar-availability-people">
+                      {availabilityPeople.map((person) => (
+                        <span key={`${person.type}:${person.id}`}>
+                          <i style={{ backgroundColor: person.color }} aria-hidden="true">
+                            {person.initials}
+                          </i>
+                          {person.name}
+                        </span>
+                      ))}
+                    </div>
+                    <p className="calendar-availability-hint">
+                      Schedules are overlaid. Blank time is open for everyone.
+                    </p>
+                    {isLoadingAvailability ? (
+                      <p className="calendar-invitees-state" role="status">Loading schedule…</p>
+                    ) : availabilityError ? (
+                      <p className="calendar-invitees-state error-state" role="alert">{availabilityError}</p>
+                    ) : (
+                      <div className="calendar-availability-timeline-grid">
+                        <div className="calendar-availability-hours" aria-hidden="true">
+                          {availabilityHours.map((hour) => <span key={hour}>{hour}</span>)}
+                        </div>
+                        <div className="calendar-availability-timeline">
+                          {availabilityTimeline.map((item, index) => (
+                            <div
+                              className="calendar-availability-event"
+                              key={`${item.person.type}:${item.person.id}:${item.start}:${index}`}
+                              style={{
+                                top: `${item.top}px`,
+                                height: `${item.height}px`,
+                                left: `calc(${(item.lane / item.laneCount) * 100}% + 2px)`,
+                                width: `calc(${100 / item.laneCount}% - 4px)`,
+                                "--availability-color": item.person.color,
+                              }}
+                              title={`${item.person.name} · ${formatTime(item.start)}–${formatTime(item.end)}`}
+                            >
+                              <strong>{item.person.initials}</strong>
+                              {item.height >= 38 && (
+                                <span>{formatTime(item.start)}–{formatTime(item.end)}</span>
+                              )}
+                            </div>
+                          ))}
+                          {!availabilityTimeline.length && (
+                            <p className="calendar-availability-all-open">
+                              No scheduled events — everyone is open.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </section>
                 )}
               </fieldset>
 
@@ -1175,41 +1406,76 @@ function CalendarPage({ user }) {
             {canChangeEventColor && (
               <section className="calendar-meeting-actions">
                 {deleteError && <p className="calendar-create-error" role="alert">{deleteError}</p>}
-                {selectedEvent.recurrence && (
-                  <label className="calendar-create-repeat-select calendar-meeting-scope">
-                    Delete
-                    <select
-                      value={deleteScope}
-                      onChange={(event) => {
-                        setDeleteScope(event.target.value);
-                        setDeleteError("");
-                      }}
-                    >
-                      <option value="series">Entire series</option>
-                      <option value="future">This and all future occurrences</option>
-                      <option value="occurrence">Just this occurrence</option>
-                    </select>
-                  </label>
-                )}
                 <div className="calendar-meeting-action-buttons">
-                  <button
-                    type="button"
-                    onClick={() => openEditMeeting(selectedEvent)}
-                    disabled={isDeletingMeeting}
-                  >
-                    Edit meeting
-                  </button>
-                  <button
-                    type="button"
-                    className="calendar-delete-meeting-button"
-                    onClick={() => {
-                      setDeleteError("");
-                      setDeleteConfirmOpen(true);
-                    }}
-                    disabled={isDeletingMeeting}
-                  >
-                    Delete meeting
-                  </button>
+                  {selectedEvent.recurrence ? (
+                    <div className="calendar-action-group">
+                      <select
+                        aria-label="Choose which meetings to edit"
+                        value={editScope}
+                        onChange={(event) => setEditScope(event.target.value)}
+                        disabled={isDeletingMeeting}
+                      >
+                        <option value="series">Entire series</option>
+                        <option value="future">This and future</option>
+                        <option value="occurrence">This occurrence</option>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => openEditMeeting(selectedEvent, editScope)}
+                        disabled={isDeletingMeeting}
+                      >
+                        Edit meeting
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => openEditMeeting(selectedEvent)}
+                      disabled={isDeletingMeeting}
+                    >
+                      Edit meeting
+                    </button>
+                  )}
+                  {selectedEvent.recurrence ? (
+                    <div className="calendar-action-group calendar-delete-action-group">
+                      <select
+                        aria-label="Choose which meetings to delete"
+                        value={deleteScope}
+                        onChange={(event) => {
+                          setDeleteScope(event.target.value);
+                          setDeleteError("");
+                        }}
+                        disabled={isDeletingMeeting}
+                      >
+                        <option value="series">Entire series</option>
+                        <option value="future">This and future</option>
+                        <option value="occurrence">This occurrence</option>
+                      </select>
+                      <button
+                        type="button"
+                        className="calendar-delete-meeting-button"
+                        onClick={() => {
+                          setDeleteError("");
+                          setDeleteConfirmOpen(true);
+                        }}
+                        disabled={isDeletingMeeting}
+                      >
+                        Delete meeting
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="calendar-delete-meeting-button"
+                      onClick={() => {
+                        setDeleteError("");
+                        setDeleteConfirmOpen(true);
+                      }}
+                      disabled={isDeletingMeeting}
+                    >
+                      Delete meeting
+                    </button>
+                  )}
                 </div>
                 {deleteConfirmOpen && (
                   <div className="calendar-delete-confirm" role="alertdialog" aria-label="Confirm meeting deletion">

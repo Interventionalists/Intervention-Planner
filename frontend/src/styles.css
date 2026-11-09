@@ -2268,6 +2268,7 @@ nav { display: grid; gap: 6px; }
 .calendar-color-save:disabled { cursor: not-allowed; opacity: .5; }
 
 .calendar-create-modal { width: min(100%, 680px); gap: 18px; }
+.calendar-create-modal-with-availability { width: min(100%, 960px); }
 .calendar-create-form { display: grid; gap: 18px; }
 .calendar-create-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .calendar-create-fields > label, .calendar-create-repeat-select { display: grid; gap: 6px; color: #475467; font-size: 11px; font-weight: 600; }
@@ -2277,13 +2278,30 @@ nav { display: grid; gap: 6px; }
 .calendar-create-repeat, .calendar-create-invitees { display: grid; gap: 12px; min-width: 0; margin: 0; padding: 14px; border: 1px solid #e6e9ee; border-radius: 10px; }
 .calendar-create-repeat > legend, .calendar-create-invitees > legend { padding: 0 5px; color: #344054; font-size: 12px; font-weight: 600; }
 .calendar-create-color > p { margin: 0; color: #7b8491; font-size: 11px; }
-.calendar-meeting-scope { display: grid; grid-template-columns: 130px minmax(0, 1fr); align-items: center; gap: 8px; color: #475467; font-size: 11px; font-weight: 600; }
-.calendar-meeting-scope select { width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid #d5dbe4; border-radius: 7px; background: #fff; color: #344054; font: inherit; font-weight: 400; }
+.calendar-meeting-scope { display: grid; gap: 7px; padding: 12px; border: 1px solid #e6e9ee; border-radius: 9px; color: #344054; background: #f8f9fb; font-size: 11px; font-weight: 600; }
+.calendar-meeting-scope select { width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid #d5dbe4; border-radius: 7px; background: #fff; color: #344054; font: inherit; font-weight: 500; }
+.calendar-meeting-scope small { color: #667085; font-size: 10px; font-weight: 400; }
 .calendar-meeting-actions { display: grid; gap: 10px; padding-top: 14px; border-top: 1px solid #eef0f3; }
-.calendar-meeting-action-buttons { display: flex; justify-content: flex-end; gap: 8px; }
+.calendar-meeting-action-buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .calendar-meeting-action-buttons button { padding: 8px 12px; border: 1px solid #d5dbe4; border-radius: 7px; background: #fff; color: #344054; font-size: 11px; font-weight: 600; cursor: pointer; }
 .calendar-meeting-action-buttons .calendar-delete-meeting-button { border-color: #fecdca; color: #b42318; }
 .calendar-meeting-action-buttons button:disabled { cursor: not-allowed; opacity: .6; }
+.calendar-action-group { display: inline-flex; min-width: 0; }
+.calendar-action-group select {
+  min-width: 0;
+  max-width: 154px;
+  padding: 8px 25px 8px 9px;
+  border: 1px solid #d5dbe4;
+  border-right: 0;
+  border-radius: 7px 0 0 7px;
+  color: #475467;
+  background: #f8f9fb;
+  font: inherit;
+  font-size: 10px;
+}
+.calendar-action-group > button { border-radius: 0 7px 7px 0; white-space: nowrap; }
+.calendar-delete-action-group select { border-color: #fecdca; background: #fffafa; color: #8d3933; }
+.calendar-meeting-action-buttons .calendar-delete-action-group .calendar-delete-meeting-button { border-radius: 0 7px 7px 0; }
 .calendar-create-repeat-select { grid-template-columns: 110px minmax(0, 1fr); align-items: center; }
 .calendar-create-weekdays { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; color: #667085; font-size: 11px; }
 .calendar-create-weekdays > span { margin-right: 3px; font-weight: 600; }
@@ -2296,6 +2314,11 @@ nav { display: grid; gap: 6px; }
 .calendar-create-weekdays > small { color: #7b8491; font-size: 10px; }
 .calendar-create-weekday-summary { color: var(--primary); font-size: 11px; font-weight: 600; }
 .calendar-invitee-option input { accent-color: var(--primary); }
+.calendar-invitee-picker { display: grid; align-content: start; gap: 12px; min-width: 0; }
+.calendar-create-invitees.availability-open { grid-template-columns: minmax(0, 1.15fr) minmax(260px, .85fr); align-items: start; }
+.calendar-create-invitees.availability-open > legend { grid-column: 1 / -1; }
+.calendar-create-invitees.availability-open .calendar-invitee-picker { grid-column: 1; grid-row: 2; }
+.calendar-create-invitees.availability-open .calendar-invitee-availability { grid-column: 2; grid-row: 2; max-height: 390px; overflow-y: auto; }
 .calendar-invitee-search { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid #d5dbe4; border-radius: 8px; color: #7b8491; }
 .calendar-invitee-search:focus-within { outline: 2px solid color-mix(in srgb, var(--primary) 20%, transparent); border-color: var(--primary); }
 .calendar-invitee-search input { width: 100%; min-width: 0; padding: 0; border: 0; outline: 0; background: transparent; color: #344054; font: inherit; font-size: 11px; }
@@ -2309,6 +2332,23 @@ nav { display: grid; gap: 6px; }
 .calendar-invitee-avatar.student { background: #e8f5f2; color: #18735f; }
 .calendar-invitee-option small { color: #7b8491; font-size: 9px; text-transform: capitalize; }
 .calendar-invitees-state { margin: 0; color: #7b8491; font-size: 11px; }
+.calendar-invitee-availability { display: grid; gap: 8px; padding: 12px; border: 1px solid #e3e8ef; border-radius: 9px; background: #f8fafc; }
+.calendar-invitee-availability > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.calendar-invitee-availability > header > div:first-child { display: grid; gap: 3px; min-width: 0; }
+.calendar-invitee-availability > header strong { color: #344054; font-size: 11px; }
+.calendar-invitee-availability > header small { color: #7b8491; font-size: 10px; }
+.calendar-availability-hint { margin: 0; color: #7b8491; font-size: 10px; }
+.calendar-availability-people { display: flex; flex-wrap: wrap; gap: 6px; }
+.calendar-availability-people > span { display: inline-flex; align-items: center; gap: 5px; color: #475467; font-size: 9px; }
+.calendar-availability-people i { display: grid; width: 20px; height: 20px; place-items: center; border-radius: 50%; color: #fff; font-size: 8px; font-style: normal; font-weight: 700; }
+.calendar-availability-timeline-grid { display: grid; grid-template-columns: 48px minmax(0, 1fr); }
+.calendar-availability-hours { display: grid; grid-template-rows: repeat(9, 49px); color: #7b8491; font-size: 9px; }
+.calendar-availability-hours > span { padding-top: 5px; border-top: 1px solid #e9edf2; }
+.calendar-availability-timeline { position: relative; height: 441px; min-width: 0; overflow: hidden; border-left: 1px solid #e9edf2; background: repeating-linear-gradient(to bottom, #f3faf6 0, #f3faf6 48px, #e4eee8 48px, #e4eee8 49px); }
+.calendar-availability-event { position: absolute; z-index: 1; display: flex; min-width: 0; flex-direction: column; gap: 2px; overflow: hidden; padding: 3px 4px; border-left: 3px solid var(--availability-color); border-radius: 3px; color: #344054; background: color-mix(in srgb, var(--availability-color) 20%, white); font-size: 9px; line-height: 1.15; }
+.calendar-availability-event > strong { color: var(--availability-color); font-size: 9px; }
+.calendar-availability-event > span { overflow: hidden; color: #475467; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.calendar-availability-all-open { position: absolute; inset: 12px 6px auto; margin: 0; color: #398065; font-size: 10px; text-align: center; }
 .calendar-create-error { margin: 0; color: #b42318; font-size: 12px; }
 .calendar-create-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .calendar-create-actions button { padding: 9px 13px; border: 1px solid #d5dbe4; border-radius: 7px; background: #fff; color: #475467; font-size: 11px; font-weight: 600; cursor: pointer; }
@@ -2422,6 +2462,14 @@ nav { display: grid; gap: 6px; }
 }
 
 @media (max-width: 760px) {
+  .calendar-create-invitees.availability-open { grid-template-columns: minmax(0, 1fr); }
+  .calendar-create-invitees.availability-open > legend,
+  .calendar-create-invitees.availability-open .calendar-invitee-picker,
+  .calendar-create-invitees.availability-open .calendar-invitee-availability {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .calendar-create-invitees.availability-open .calendar-invitee-availability { max-height: 260px; }
   .unassigned-student-row { align-items: stretch; flex-direction: column; }
   .user-row { grid-template-columns: 1fr auto; }
   .user-school { grid-column: 1 / -1; }

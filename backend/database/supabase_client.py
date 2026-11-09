@@ -924,6 +924,10 @@ def fetch_calendar_events(
     range_start: str,
     range_end: str,
     user_public_id: str,
+    attendee_user_id: str | None = None,
+    attendee_student_id: int | None = None,
+    attendee_user_ids: set[str] | None = None,
+    attendee_student_ids: set[int] | None = None,
 ):
     single_events_response = (
         supabase.table("calendar_events")
@@ -958,17 +962,46 @@ def fetch_calendar_events(
         .execute()
     )
     participant_rows = participants_response.data
-    attending_event_ids = {
-        row["event_id"]
-        for row in participant_rows
-        if str(row.get("user_id")) == str(user_public_id)
-    }
-    events = [
-        event
-        for event in events
-        if str(event.get("organizer")) == str(user_public_id)
-        or event["id"] in attending_event_ids
-    ]
+    target_user_ids = set(attendee_user_ids or ())
+    target_student_ids = set(attendee_student_ids or ())
+    if attendee_user_id is not None:
+        target_user_ids.add(str(attendee_user_id))
+    if attendee_student_id is not None:
+        target_student_ids.add(attendee_student_id)
+    if target_user_ids or target_student_ids:
+        attending_event_ids = {
+            row["event_id"]
+            for row in participant_rows
+            if (
+                row.get("user_id") is not None
+                and str(row["user_id"]) in target_user_ids
+            )
+            or (
+                row.get("student_id") is not None
+                and row["student_id"] in target_student_ids
+            )
+        }
+        events = [
+            event
+            for event in events
+            if (
+                event.get("organizer") is not None
+                and str(event["organizer"]) in target_user_ids
+            )
+            or event["id"] in attending_event_ids
+        ]
+    else:
+        attending_event_ids = {
+            row["event_id"]
+            for row in participant_rows
+            if str(row.get("user_id")) == str(user_public_id)
+        }
+        events = [
+            event
+            for event in events
+            if str(event.get("organizer")) == str(user_public_id)
+            or event["id"] in attending_event_ids
+        ]
     if not events:
         return []
 
@@ -1097,6 +1130,8 @@ def fetch_calendar_events(
                 if occurrence_end > requested_start:
                     result.append({
                         **event_record,
+                        "series_starts_at": starts_at.isoformat(),
+                        "series_ends_at": ends_at.isoformat(),
                         "starts_at": occurrence_start.isoformat(),
                         "ends_at": occurrence_end.isoformat(),
                     })
