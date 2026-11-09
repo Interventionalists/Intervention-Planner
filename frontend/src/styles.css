@@ -378,8 +378,9 @@ nav { display: grid; gap: 6px; }
 .profile-page-heading .page-heading { margin-bottom: 25px; }
 
 .student-profile-layout {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
   gap: 16px;
 }
 
@@ -665,7 +666,8 @@ nav { display: grid; gap: 6px; }
   gap: 16px;
 }
 
-.dashboard-grid > .managed-tile {
+.dashboard-grid > .managed-tile,
+.student-profile-layout > .managed-tile {
   width: 220px;
   height: 180px;
   min-width: min(220px, 100%);
@@ -740,8 +742,9 @@ nav { display: grid; gap: 6px; }
 }
 
 .tile-drag-handle {
-  width: 26px;
-  height: 26px;
+  height: 100%;
+  flex: 1;
+  background: transparent;
   cursor: grab;
 }
 
@@ -1927,7 +1930,8 @@ nav { display: grid; gap: 6px; }
 
 @media (max-width: 1050px) {
   .dashboard-grid { grid-template-columns: 1fr 1fr; }
-  .dashboard-grid > .managed-tile { min-width: 0; }
+  .dashboard-grid > .managed-tile,
+  .student-profile-layout > .managed-tile { min-width: 0; }
   .student-card { grid-row: span 2; }
   .reports-grid { grid-template-columns: 1fr 1fr; }
   .calendar-grid, .students-layout, .settings-grid { grid-template-columns: 1fr; }

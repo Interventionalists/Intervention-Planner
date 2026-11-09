@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
-  GripVertical,
   MoreHorizontal,
   Plus,
   Trash2,
@@ -248,9 +247,7 @@ function TileWorkspace({ className, storageKey, tiles, gridSizing = false }) {
                     onDragEnd={() => setDraggedTileId(null)}
                     title="Drag to move"
                     type="button"
-                  >
-                    <GripVertical size={17} />
-                  </button>
+                  />
                 )}
                 <button
                   aria-label={`Options for ${tile.title}`}
