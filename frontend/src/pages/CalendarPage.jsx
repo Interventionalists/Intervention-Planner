@@ -227,17 +227,8 @@ function getAvailabilityDayTimeline(day, busyTimes, people) {
     .filter(Boolean)
     .sort((first, second) => first.startOffset - second.startOffset);
 
-  const laneEnds = [];
-  for (const item of timeline) {
-    let lane = laneEnds.findIndex((endOffset) => endOffset <= item.startOffset);
-    if (lane < 0) lane = laneEnds.length;
-    item.lane = lane;
-    laneEnds[lane] = item.endOffset;
-  }
-
   return timeline.map((item) => ({
     ...item,
-    laneCount: laneEnds.length,
     top: (item.startOffset / 60) * availabilityHourHeight,
     height: ((item.endOffset - item.startOffset) / 60) * availabilityHourHeight,
   }));
@@ -276,6 +267,8 @@ function CalendarPage({ user }) {
   const [loadError, setLoadError] = useState("");
   const closeModalButton = useRef(null);
   const eventTrigger = useRef(null);
+  const meetingDrag = useRef(null);
+  const [isDraggingMeeting, setIsDraggingMeeting] = useState(false);
   const weekStart = startOfWeek(selectedDate);
   const monthStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
   const calendarStart = startOfWeek(monthStart);
@@ -325,12 +318,6 @@ function CalendarPage({ user }) {
     { label: "Purple", color: "#7a3db8" },
     { label: "Gray", color: "#667085" },
   ];
-  const availabilityTimeline = getAvailabilityDayTimeline(
-    availabilityDayStart,
-    inviteeBusyTimes,
-    availabilityPeople
-  );
-
   useEffect(() => {
     const controller = new AbortController();
     const params = new URLSearchParams({
@@ -403,45 +390,89 @@ function CalendarPage({ user }) {
     return () => controller.abort();
   }, [isCreateOpen]);
 
-  const availabilityPeopleKey = selectedInvitees
-    .map((invitee) =>
-      invitee.user_id
-        ? `user:${invitee.user_id}`
-        : `student:${invitee.student_id}`
-    )
-    .sort()
-    .join("|");
-  const availabilityPeople = selectedInvitees.map((selected, index) => {
-    if (selected.user_id) {
-      const invitee = invitees.users.find(
-        (person) => person.public_id === selected.user_id
+  const selectedAvailabilityPeople = selectedInvitees
+    .filter((selected) => selected.user_id !== user?.public_id)
+    .map((selected) => {
+      if (selected.user_id) {
+        const invitee = invitees.users.find(
+          (person) => person.public_id === selected.user_id
+        );
+        return {
+          type: "user",
+          id: selected.user_id,
+          name: invitee
+            ? [invitee.first_name, invitee.last_name].filter(Boolean).join(" ") ||
+              "Staff member"
+            : "Staff member",
+          initials: getInviteeInitials(invitee || {}, "Staff"),
+        };
+      }
+
+      const invitee = invitees.students.find(
+        (person) => person.id === selected.student_id
       );
       return {
-        type: "user",
-        id: selected.user_id,
+        type: "student",
+        id: selected.student_id,
         name: invitee
           ? [invitee.first_name, invitee.last_name].filter(Boolean).join(" ") ||
-            "Staff member"
-          : "Staff member",
-        color: availabilityColors[index % availabilityColors.length],
-        initials: getInviteeInitials(invitee || {}, "Staff"),
+            "Student"
+          : "Student",
+        initials: getInviteeInitials(invitee || {}, "Student"),
       };
+    });
+  const availabilityPeople = [
+    ...(user?.public_id
+      ? [{
+          type: "user",
+          id: user.public_id,
+          name: [user.first_name, user.last_name].filter(Boolean).join(" ") || "You",
+          color: availabilityColors[0],
+          initials: getInviteeInitials(user, "You"),
+          isCurrentUser: true,
+        }]
+      : []),
+    ...selectedAvailabilityPeople.map((person, index) => ({
+      ...person,
+      color: availabilityColors[(index + 1) % availabilityColors.length],
+    })),
+  ];
+  const availabilityPeopleKey = availabilityPeople
+    .map((person) => `${person.type}:${person.id}`)
+    .sort()
+    .join("|");
+  const availabilityTimeline = getAvailabilityDayTimeline(
+    availabilityDayStart,
+    inviteeBusyTimes,
+    availabilityPeople
+  );
+  const meetingPreview = (() => {
+    const startsAt = new Date(meetingForm.startsAt);
+    const endsAt = new Date(meetingForm.endsAt);
+    const dayStart = new Date(availabilityDayStart);
+    dayStart.setHours(8, 0, 0, 0);
+    const dayEnd = new Date(availabilityDayStart);
+    dayEnd.setHours(17, 0, 0, 0);
+
+    if (
+      Number.isNaN(startsAt.getTime()) ||
+      Number.isNaN(endsAt.getTime()) ||
+      endsAt <= startsAt ||
+      startsAt >= dayEnd ||
+      endsAt <= dayStart
+    ) {
+      return null;
     }
 
-    const invitee = invitees.students.find(
-      (person) => person.id === selected.student_id
-    );
+    const visibleStart = Math.max(startsAt.getTime(), dayStart.getTime());
+    const visibleEnd = Math.min(endsAt.getTime(), dayEnd.getTime());
     return {
-      type: "student",
-      id: selected.student_id,
-      name: invitee
-        ? [invitee.first_name, invitee.last_name].filter(Boolean).join(" ") ||
-          "Student"
-        : "Student",
-      color: availabilityColors[index % availabilityColors.length],
-      initials: getInviteeInitials(invitee || {}, "Student"),
+      top: ((visibleStart - dayStart.getTime()) / 3600000) * availabilityHourHeight,
+      height: ((visibleEnd - visibleStart) / 3600000) * availabilityHourHeight,
+      startsAt,
+      endsAt,
     };
-  });
+  })();
 
   useEffect(() => {
     if (!isCreateOpen || availabilityPeople.length === 0) return undefined;
@@ -514,6 +545,82 @@ function CalendarPage({ user }) {
       nextDate.setDate(nextDate.getDate() + direction * 7);
     }
     setSelectedDate(nextDate);
+  }
+
+  function shiftMeetingByMinutes(startsAtValue, endsAtValue, minutes) {
+    const startsAt = new Date(startsAtValue);
+    const endsAt = new Date(endsAtValue);
+    if (
+      Number.isNaN(startsAt.getTime()) ||
+      Number.isNaN(endsAt.getTime()) ||
+      endsAt <= startsAt
+    ) {
+      return null;
+    }
+
+    const duration = endsAt.getTime() - startsAt.getTime();
+    const dayStart = new Date(startsAt);
+    dayStart.setHours(8, 0, 0, 0);
+    const dayEnd = new Date(startsAt);
+    dayEnd.setHours(17, 0, 0, 0);
+    const latestStart = Math.max(dayStart.getTime(), dayEnd.getTime() - duration);
+    startsAt.setTime(Math.min(
+      Math.max(startsAt.getTime() + minutes * 60000, dayStart.getTime()),
+      latestStart
+    ));
+    const shiftedEnd = new Date(startsAt.getTime() + duration);
+    return {
+      startsAt: formatLocalDateTimeInput(startsAt),
+      endsAt: formatLocalDateTimeInput(shiftedEnd),
+    };
+  }
+
+  function handleMeetingPointerDown(event) {
+    if (event.button !== 0 || !meetingPreview) return;
+    event.preventDefault();
+    meetingDrag.current = {
+      pointerId: event.pointerId,
+      startY: event.clientY,
+      startsAt: meetingForm.startsAt,
+      endsAt: meetingForm.endsAt,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setIsDraggingMeeting(true);
+  }
+
+  function handleMeetingPointerMove(event) {
+    const drag = meetingDrag.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const steps = Math.round(
+      (event.clientY - drag.startY) / (availabilityHourHeight / 4)
+    );
+    const shiftedTimes = shiftMeetingByMinutes(
+      drag.startsAt,
+      drag.endsAt,
+      steps * 15
+    );
+    if (shiftedTimes) {
+      setMeetingForm((current) => ({ ...current, ...shiftedTimes }));
+    }
+  }
+
+  function endMeetingDrag(event) {
+    if (meetingDrag.current?.pointerId !== event.pointerId) return;
+    meetingDrag.current = null;
+    setIsDraggingMeeting(false);
+  }
+
+  function handleMeetingPreviewKeyDown(event) {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+    event.preventDefault();
+    const shiftedTimes = shiftMeetingByMinutes(
+      meetingForm.startsAt,
+      meetingForm.endsAt,
+      event.key === "ArrowUp" ? -15 : 15
+    );
+    if (shiftedTimes) {
+      setMeetingForm((current) => ({ ...current, ...shiftedTimes }));
+    }
   }
 
   function openCreateMeeting() {
@@ -1180,7 +1287,11 @@ function CalendarPage({ user }) {
                   <section className="calendar-invitee-availability">
                     <header>
                       <div>
-                        <strong>Availability for {availabilityPeople.length} invitee{availabilityPeople.length === 1 ? "" : "s"}</strong>
+                        <strong>
+                          {availabilityPeople.length === 1
+                            ? "Your availability"
+                            : `Your availability and ${availabilityPeople.length - 1} invitee${availabilityPeople.length === 2 ? "" : "s"}`}
+                        </strong>
                         <small>
                           {formatEventDate(availabilityDayStart)}
                         </small>
@@ -1192,12 +1303,13 @@ function CalendarPage({ user }) {
                           <i style={{ backgroundColor: person.color }} aria-hidden="true">
                             {person.initials}
                           </i>
-                          {person.name}
+                          {person.isCurrentUser ? "You" : person.name}
                         </span>
                       ))}
                     </div>
                     <p className="calendar-availability-hint">
                       Schedules are overlaid. Blank time is open for everyone.
+                      {meetingPreview && " Dashed outline shows the proposed meeting."}
                     </p>
                     {isLoadingAvailability ? (
                       <p className="calendar-invitees-state" role="status">Loading schedule…</p>
@@ -1216,18 +1328,43 @@ function CalendarPage({ user }) {
                               style={{
                                 top: `${item.top}px`,
                                 height: `${item.height}px`,
-                                left: `calc(${(item.lane / item.laneCount) * 100}% + 2px)`,
-                                width: `calc(${100 / item.laneCount}% - 4px)`,
+                                left: "2px",
+                                right: "2px",
                                 "--availability-color": item.person.color,
                               }}
                               title={`${item.person.name} · ${formatTime(item.start)}–${formatTime(item.end)}`}
                             >
-                              <strong>{item.person.initials}</strong>
+                              <strong>{item.person.isCurrentUser ? "You" : item.person.initials}</strong>
                               {item.height >= 38 && (
                                 <span>{formatTime(item.start)}–{formatTime(item.end)}</span>
                               )}
                             </div>
                           ))}
+                          {meetingPreview && (
+                            <button
+                              type="button"
+                              className={`calendar-availability-meeting-preview${isDraggingMeeting ? " dragging" : ""}`}
+                              style={{
+                                top: `${meetingPreview.top}px`,
+                                height: `${meetingPreview.height}px`,
+                                "--meeting-preview-color": createColor,
+                              }}
+                              title="Drag to move in 15-minute increments. Use the up and down arrow keys to adjust."
+                              aria-label={`Move ${meetingForm.title || "Meeting"}, ${formatTime(meetingPreview.startsAt)} to ${formatTime(meetingPreview.endsAt)}. Use up and down arrow keys to adjust by 15 minutes.`}
+                              onPointerDown={handleMeetingPointerDown}
+                              onPointerMove={handleMeetingPointerMove}
+                              onPointerUp={endMeetingDrag}
+                              onPointerCancel={endMeetingDrag}
+                              onKeyDown={handleMeetingPreviewKeyDown}
+                            >
+                              <strong>{meetingForm.title || "Meeting"}</strong>
+                              {meetingPreview.height >= 38 && (
+                                <span>
+                                  {formatTime(meetingPreview.startsAt)}–{formatTime(meetingPreview.endsAt)}
+                                </span>
+                              )}
+                            </button>
+                          )}
                           {!availabilityTimeline.length && (
                             <p className="calendar-availability-all-open">
                               No scheduled events — everyone is open.

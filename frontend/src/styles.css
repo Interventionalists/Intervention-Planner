@@ -2348,6 +2348,11 @@ nav { display: grid; gap: 6px; }
 .calendar-availability-event { position: absolute; z-index: 1; display: flex; min-width: 0; flex-direction: column; gap: 2px; overflow: hidden; padding: 3px 4px; border-left: 3px solid var(--availability-color); border-radius: 3px; color: #344054; background: color-mix(in srgb, var(--availability-color) 20%, white); font-size: 9px; line-height: 1.15; }
 .calendar-availability-event > strong { color: var(--availability-color); font-size: 9px; }
 .calendar-availability-event > span { overflow: hidden; color: #475467; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.calendar-availability-meeting-preview { position: absolute; z-index: 2; display: flex; min-width: 0; flex-direction: column; gap: 2px; overflow: hidden; box-sizing: border-box; padding: 3px 4px; border: 1px dashed var(--meeting-preview-color); border-left: 3px solid var(--meeting-preview-color); border-radius: 3px; color: #344054; background: color-mix(in srgb, var(--meeting-preview-color) 18%, white); font-family: inherit; font-size: 9px; line-height: 1.15; text-align: left; cursor: grab; touch-action: none; }
+.calendar-availability-meeting-preview.dragging { cursor: grabbing; }
+.calendar-availability-meeting-preview:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.calendar-availability-meeting-preview > strong { overflow: hidden; color: var(--meeting-preview-color); text-overflow: ellipsis; white-space: nowrap; }
+.calendar-availability-meeting-preview > span { overflow: hidden; color: #475467; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
 .calendar-availability-all-open { position: absolute; inset: 12px 6px auto; margin: 0; color: #398065; font-size: 10px; text-align: center; }
 .calendar-create-error { margin: 0; color: #b42318; font-size: 12px; }
 .calendar-create-actions { display: flex; justify-content: flex-end; gap: 8px; }
