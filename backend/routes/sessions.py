@@ -1,217 +1,284 @@
-from datetime import datetime, timedelta
-from typing import Literal
+from datetime import datetime
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from auth.security import get_current_user, require_student_access
 from database.supabase_client import (
-    create_calendar_event,
-    create_session,
-    delete_calendar_event,
-    fetch_calendar_event_by_id,
-    fetch_session,
-    fetch_sessions_for_student,
-    fetch_student_ownership,
-    update_calendar_event,
+    fetch_calendar_event,
+    fetch_calendar_events_by_ids,
+    fetch_session_details,
+    fetch_session_details_created_by,
+    fetch_session_details_for_student,
+    fetch_session_group,
+    fetch_session_group_members,
+    fetch_session_groups,
+    fetch_user_role_and_school,
+    fetch_user_school_by_public_id,
     update_session_details,
-    update_session_status,
+    update_session_group,
+)
+from routes.calendar import (
+    _get_writable_event,
+    _validate_regarding_student,
+    _validate_timezone,
 )
 
 router = APIRouter()
 
 
-class SessionCreate(BaseModel):
+################################ SESSION DETAILS ###############################
+
+class SessionDetailsUpdate(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    student_id: int = Field(ge=1)
-    plan_type: str = Field(min_length=1, max_length=100)
-    focus: str = Field(default="", max_length=300)
-    duration_minutes: int = Field(ge=1, le=240)
-    scheduled_at: datetime
+    plan_type: str | None = None
+    focus: str | None = None
+    student_id: int | None = Field(default=None, ge=1)
+    duration: int | None = Field(default=None, ge=1)
+    scheduled_time: datetime | None = None
+    status: str | None = None
 
-    @field_validator("scheduled_at")
+    @field_validator("scheduled_time")
     @classmethod
-    def require_timezone(cls, value: datetime) -> datetime:
-        if value.tzinfo is None or value.utcoffset() is None:
-            raise ValueError("Session start time must include a timezone.")
+    def require_timezone(cls, value: datetime | None) -> datetime | None:
+        if value is not None:
+            return _validate_timezone(value)
         return value
 
 
-class SessionStatusUpdate(BaseModel):
-    status: Literal["completed", "cancelled"]
+def _event_summary(event: dict | None) -> dict | None:
+    if event is None:
+        return None
+    return {
+        "public_id": event.get("public_id"),
+        "school": event.get("school"),
+        "organizer": event.get("organizer"),
+        "title": event.get("title"),
+        "event_type": event.get("event_type"),
+        "starts_at": event.get("starts_at"),
+        "ends_at": event.get("ends_at"),
+    }
 
 
-class SessionUpdate(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True)
-
-    plan_type: str = Field(min_length=1, max_length=100)
-    focus: str = Field(default="", max_length=300)
-    duration_minutes: int = Field(ge=1, le=240)
-    scheduled_at: datetime
-
-    @field_validator("scheduled_at")
-    @classmethod
-    def require_timezone(cls, value: datetime) -> datetime:
-        if value.tzinfo is None or value.utcoffset() is None:
-            raise ValueError("Session start time must include a timezone.")
-        return value
+def _with_events(sessions: list[dict]) -> list[dict]:
+    event_ids = list({row["event_id"] for row in sessions})
+    events = {e["id"]: e for e in fetch_calendar_events_by_ids(event_ids)}
+    return [
+        {**row, "event": _event_summary(events.get(row["event_id"]))}
+        for row in sessions
+    ]
 
 
-@router.get("/sessions-fetchForStudent/{student_id}")
-def get_sessions_for_student(
-    student_id: int,
-    user: dict = Depends(get_current_user),
-):
+#admins see every session. Otherwise the caller must be the event's organizer
+#at the same school, or have access to the session's student. Anything else is
+#a 404 so event ids can't be probed.
+def _get_readable_event(event_id: UUID, user: dict) -> dict:
+    try:
+        return _get_writable_event(event_id, user)
+    except HTTPException as e:
+        if e.status_code != 404:
+            raise
+    event = fetch_calendar_event(str(event_id))
+    session = fetch_session_details(event["id"]) if event else None
+    student_id = session.get("student_id") if session else None
+    if student_id is None:
+        raise HTTPException(status_code=404, detail="Session not found.")
     try:
         require_student_access(user, student_id)
-        sessions = fetch_sessions_for_student(student_id)
-    except HTTPException:
-        raise
-    except Exception as error:
-        raise HTTPException(status_code=500, detail=str(error)) from error
-    return {"sessions": sessions}
+    except HTTPException as e:
+        raise HTTPException(status_code=404, detail="Session not found.") from e
+    return event
 
 
-@router.post("/sessions-create")
-def add_session(
-    payload: SessionCreate,
+#lists sessions for one student (needs access to that student), or, with no
+#student_id, the sessions the caller created.
+@router.get("/sessions")
+def list_sessions(
+    student_id: int | None = Query(default=None, ge=1),
     user: dict = Depends(get_current_user),
 ):
     try:
-        require_student_access(user, payload.student_id)
-        ownership = fetch_student_ownership(payload.student_id)
-        if ownership is None or ownership.get("school") is None:
-            raise HTTPException(status_code=404, detail="Student school not found")
-
-        starts_at = payload.scheduled_at
-        ends_at = starts_at + timedelta(minutes=payload.duration_minutes)
-        calendar_event = create_calendar_event({
-            "school": ownership["school"],
-            "event_type": "intervention_session",
-            "title": payload.plan_type,
-            "starts_at": starts_at.isoformat(),
-            "ends_at": ends_at.isoformat(),
-            "regarding_student": payload.student_id,
-            "organizer": user["public_id"],
-        })
-        if not calendar_event:
-            raise HTTPException(status_code=500, detail="Calendar event creation failed")
-
-        session_data = payload.model_dump()
-        session_data["scheduled_at"] = starts_at.isoformat()
-        session_data["status"] = "planned"
-        session_data["created_by"] = user["public_id"]
-        session_data["event_id"] = calendar_event["id"]
-        try:
-            session = create_session(session_data)
-            if not session:
-                raise RuntimeError("Session creation failed")
-        except Exception:
-            try:
-                delete_calendar_event(
-                    calendar_event["public_id"],
-                    ownership["school"],
-                    user["public_id"],
-                )
-            except Exception:
-                pass
-            raise
+        if student_id is not None:
+            require_student_access(user, student_id)
+            sessions = fetch_session_details_for_student(student_id)
+        else:
+            sessions = fetch_session_details_created_by(user["public_id"])
+        return {"sessions": _with_events(sessions)}
     except HTTPException:
         raise
-    except Exception as error:
-        raise HTTPException(status_code=500, detail=str(error)) from error
-    return {"session": session}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@router.patch("/sessions-updateStatus/{session_id}")
-def edit_session_status(
-    session_id: int,
-    payload: SessionStatusUpdate,
+#event_id is the calendar event's public_id.
+@router.get("/sessions/{event_id}")
+def get_session(
+    event_id: UUID,
     user: dict = Depends(get_current_user),
 ):
     try:
-        session = fetch_session(str(session_id))
-        if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
-        require_student_access(user, session["student_id"])
-        updated_session = update_session_status(str(session_id), payload.status)
+        event = _get_readable_event(event_id, user)
+        session = fetch_session_details(event["id"])
     except HTTPException:
         raise
-    except Exception as error:
-        raise HTTPException(status_code=500, detail=str(error)) from error
-    if not updated_session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    return {"session": updated_session}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found.")
+    return {"session": {**session, "event": _event_summary(event)}}
 
 
-@router.put("/sessions-update/{session_id}")
-def edit_planned_session(
-    session_id: int,
-    payload: SessionUpdate,
+#same write rules as calendar events: admins, or the organizer at their school.
+@router.put("/sessions/{event_id}")
+def edit_session(
+    event_id: UUID,
+    payload: SessionDetailsUpdate,
     user: dict = Depends(get_current_user),
 ):
+    updates = payload.model_dump(mode="json", exclude_unset=True)
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update.")
     try:
-        session = fetch_session(session_id)
-        if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
-        if session["status"] != "planned":
-            raise HTTPException(status_code=409, detail="Only planned sessions can be edited")
-        require_student_access(user, session["student_id"])
+        event = _get_writable_event(event_id, user)
+        if "student_id" in updates:
+            _validate_regarding_student(updates["student_id"], event["school"], user)
+        updated = update_session_details(event["id"], updates)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Session not found.")
+    return {"session": {**updated, "event": _event_summary(event)}}
 
-        calendar_event = fetch_calendar_event_by_id(session_id)
-        if not calendar_event:
-            raise HTTPException(status_code=404, detail="Calendar event not found")
-        if (
-            user["role"] != "admin"
-            and str(calendar_event.get("organizer")) != str(user["public_id"])
-        ):
-            raise HTTPException(status_code=404, detail="Session not found")
 
-        starts_at = payload.scheduled_at
-        ends_at = starts_at + timedelta(minutes=payload.duration_minutes)
-        event_updates = {
-            "title": payload.plan_type,
-            "starts_at": starts_at.isoformat(),
-            "ends_at": ends_at.isoformat(),
-        }
-        organizer_id = None if user["role"] == "admin" else user["public_id"]
-        updated_event = update_calendar_event(
-            calendar_event["public_id"],
-            calendar_event["school"],
-            event_updates,
-            organizer_id,
+################################ SESSION GROUPS ################################
+
+class SessionGroupUpdate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    name: str | None = Field(default=None, min_length=1)
+    purpose: str | None = None
+    interventionist: UUID | None = None
+
+    @field_validator("name", "purpose", mode="before")
+    @classmethod
+    def reject_null_required_updates(cls, value):
+        if value is None:
+            raise ValueError("This field cannot be null.")
+        return value
+
+
+def _caller_school(user: dict) -> int:
+    school_id = fetch_user_school_by_public_id(user["public_id"])
+    if school_id is None:
+        raise HTTPException(
+            status_code=403,
+            detail="The signed-in user does not have a school assigned.",
         )
-        if not updated_event:
-            raise HTTPException(status_code=404, detail="Calendar event not found")
+    return school_id
 
-        session_updates = {
-            "plan_type": payload.plan_type,
-            "focus": payload.focus,
-            "duration_minutes": payload.duration_minutes,
-            "scheduled_at": starts_at.isoformat(),
-        }
-        try:
-            updated_session = update_session_details(session_id, session_updates)
-            if not updated_session:
-                raise RuntimeError("Session update failed")
-        except Exception:
-            try:
-                update_calendar_event(
-                    calendar_event["public_id"],
-                    calendar_event["school"],
-                    {
-                        "title": calendar_event.get("title"),
-                        "starts_at": calendar_event["starts_at"],
-                        "ends_at": calendar_event["ends_at"],
-                    },
-                    organizer_id,
-                )
-            except Exception:
-                pass
-            raise
+
+#admins see every group; everyone else only groups at their own school.
+def _get_readable_group(group_id: UUID, user: dict) -> dict:
+    group = fetch_session_group(str(group_id))
+    if group is None:
+        raise HTTPException(status_code=404, detail="Session group not found.")
+    if user["role"] == "admin":
+        return group
+    school_id = fetch_user_school_by_public_id(user["public_id"])
+    if school_id is None or str(group["school"]) != str(school_id):
+        raise HTTPException(status_code=404, detail="Session group not found.")
+    return group
+
+
+#admins, or the group's interventionist at the same school.
+def _get_writable_group(group_id: UUID, user: dict) -> dict:
+    group = _get_readable_group(group_id, user)
+    if user["role"] == "admin":
+        return group
+    if str(group.get("interventionist")) != str(user["public_id"]):
+        raise HTTPException(status_code=404, detail="Session group not found.")
+    return group
+
+
+def _validate_group_interventionist(interventionist_id: str | None, school_id: int) -> None:
+    if interventionist_id is None:
+        return
+    target = fetch_user_role_and_school(interventionist_id)
+    if (
+        target is None
+        or target.get("role") != "interventionist"
+        or str(target.get("school")) != str(school_id)
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Interventionist must be an interventionist at the group's school.",
+        )
+
+
+#admins may filter by school (or get all); everyone else gets their own school.
+@router.get("/session-groups")
+def list_session_groups(
+    school: int | None = Query(default=None, ge=1),
+    user: dict = Depends(get_current_user),
+):
+    try:
+        school_id = school if user["role"] == "admin" else _caller_school(user)
+        return {"groups": fetch_session_groups(school_id)}
     except HTTPException:
         raise
-    except Exception as error:
-        raise HTTPException(status_code=500, detail=str(error)) from error
-    return {"session": updated_session}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.get("/session-groups/{group_id}")
+def get_session_group(
+    group_id: UUID,
+    user: dict = Depends(get_current_user),
+):
+    try:
+        group = _get_readable_group(group_id, user)
+        members = fetch_session_group_members(group["id"])
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    return {"group": {**group, "members": members}}
+
+
+#only admins may reassign a group's interventionist.
+@router.put("/session-groups/{group_id}")
+def edit_session_group(
+    group_id: UUID,
+    payload: SessionGroupUpdate,
+    user: dict = Depends(get_current_user),
+):
+    updates = payload.model_dump(mode="json", exclude_unset=True)
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update.")
+    try:
+        group = _get_writable_group(group_id, user)
+        if "interventionist" in updates:
+            if user["role"] != "admin":
+                raise HTTPException(
+                    status_code=403,
+                    detail="Only admins can reassign a session group.",
+                )
+            _validate_group_interventionist(updates["interventionist"], group["school"])
+        interventionist_id = None if user["role"] == "admin" else user["public_id"]
+        updated = update_session_group(
+            str(group_id),
+            group["school"],
+            updates,
+            interventionist_id,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Session group not found.")
+    return {"group": updated}
