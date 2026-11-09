@@ -44,16 +44,18 @@ def test_create_note(client, monkeypatch):
         }
 
     # Sets up a fake note creation call, without using the actual database
-    def fake_create_note(student_id, created_by, text, is_private=False):
+    def fake_create_note(student_id, created_by, text, is_private=False, session_id=None):
         saved.update(
             student_id=student_id,
             created_by=created_by,
             text=text,
             is_private=is_private,
+            session_id=session_id,
         )
         return {
             "id": 7,
             "student_id": student_id,
+            "session_id": session_id,
             "created_by": created_by,
             "text": text,
             "privateNote": is_private,
@@ -81,6 +83,52 @@ def test_create_note(client, monkeypatch):
         "created_by": "user-123",
         "text": "Met with student today",
         "is_private": True,
+        "session_id": None,
     }
     assert response.json()["note"]["id"] == 7
     assert response.json()["note"]["privateNote"] is True
+
+
+def test_create_session_note(client, monkeypatch):
+    saved = {}
+
+    def fake_fetch_session(session_id):
+        if str(session_id) != "99":
+            return None
+        return {"id": 99, "student_id": 42}
+
+    def fake_create_note(student_id, created_by, text, is_private=False, session_id=None):
+        saved.update(
+            student_id=student_id,
+            created_by=created_by,
+            text=text,
+            is_private=is_private,
+            session_id=session_id,
+        )
+        return {
+            "id": 8,
+            "student_id": student_id,
+            "session_id": session_id,
+            "created_by": created_by,
+            "text": text,
+            "privateNote": is_private,
+        }
+
+    monkeypatch.setattr(notes, "fetch_session", fake_fetch_session)
+    monkeypatch.setattr(notes, "create_note", fake_create_note)
+    monkeypatch.setattr(notes, "require_student_access", lambda *_args, **_kwargs: None)
+
+    response = client.post(
+        "/notes-create",
+        json={
+            "student_id": 42,
+            "session_id": 99,
+            "created_by": "user-123",
+            "text": "Session follow-up note",
+            "is_private": False,
+        },
+    )
+
+    assert response.status_code == 200
+    assert saved["session_id"] == 99
+    assert response.json()["note"]["session_id"] == 99
