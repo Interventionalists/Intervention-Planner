@@ -1823,6 +1823,11 @@ nav { display: grid; gap: 6px; }
 .groups-create-form .primary-button:hover:not(:disabled),
 .group-edit-form .primary-button:hover:not(:disabled),
 .group-schedule-form .primary-button:hover:not(:disabled) { filter: brightness(.92); }
+.group-edit-form .group-edit-save-button {
+  min-height: 32px;
+  padding: 0 11px;
+  font-size: 12px;
+}
 .groups-create-form .primary-button:disabled,
 .group-edit-form .primary-button:disabled,
 .group-schedule-form .primary-button:disabled { cursor: not-allowed; opacity: .55; }
@@ -1889,6 +1894,9 @@ nav { display: grid; gap: 6px; }
 .group-card-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .group-card .ghost-button { margin: 0; }
 .group-card .ghost-button:hover:not(:disabled) { background: #f7f9fc; color: var(--primary); }
+.group-card .group-delete-button { color: #b42318; }
+.group-card .group-delete-button:hover:not(:disabled) { background: #fef3f2; color: #912018; }
+.group-card .group-delete-error { flex-basis: 100%; margin: 0; }
 .group-card .ghost-button:disabled { cursor: not-allowed; opacity: .55; }
 .group-card h3 { margin: 0; color: #202a3a; font-size: 16px; }
 .group-card p { margin: 8px 0 0; color: #667085; white-space: pre-wrap; }

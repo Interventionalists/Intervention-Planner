@@ -329,3 +329,50 @@ def test_edit_group_rejects_students_not_assigned_to_interventionist(
     )
 
     assert response.status_code == 400
+
+
+def test_delete_group_deletes_from_callers_school(client, monkeypatch):
+    monkeypatch.setattr(
+        groups, "fetch_user_school_by_public_id", lambda _public_id: 7
+    )
+    deleted = {}
+
+    def fake_delete_group(group_id, school_id):
+        deleted.update(group_id=group_id, school_id=school_id)
+        return True
+
+    monkeypatch.setattr(groups, "delete_group_record", fake_delete_group)
+
+    response = client.delete("/groups-delete/3")
+
+    assert response.status_code == 200
+    assert deleted == {"group_id": 3, "school_id": 7}
+    assert response.json() == {"deleted": True}
+
+
+def test_delete_group_returns_not_found(client, monkeypatch):
+    monkeypatch.setattr(
+        groups, "fetch_user_school_by_public_id", lambda _public_id: 7
+    )
+    monkeypatch.setattr(groups, "delete_group_record", lambda *_args: False)
+
+    response = client.delete("/groups-delete/999")
+
+    assert response.status_code == 404
+
+
+def test_delete_group_rejects_teacher(client, monkeypatch):
+    client.app.dependency_overrides[groups.get_current_user] = lambda: {
+        "id": 2,
+        "public_id": "teacher-123",
+        "role": "teacher",
+    }
+    monkeypatch.setattr(
+        groups,
+        "delete_group_record",
+        lambda *_args: pytest.fail("Unauthorized group deletion reached database"),
+    )
+
+    response = client.delete("/groups-delete/3")
+
+    assert response.status_code == 403

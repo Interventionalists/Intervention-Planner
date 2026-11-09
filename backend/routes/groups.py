@@ -12,6 +12,7 @@ from database.supabase_client import (
     fetch_students,
     fetch_user_school_by_public_id,
     edit_group as update_group_record,
+    delete_group as delete_group_record,
     replace_group_students,
 )
 
@@ -189,3 +190,30 @@ def update_group(
     if group is None:
         raise HTTPException(status_code=404, detail="Group not found.")
     return {"group": group}
+
+
+@router.delete("/groups-delete/{group_id}")
+def remove_group(
+    group_id: int,
+    user: dict = Depends(get_current_user),
+):
+    if user["role"] not in ("admin", "interventionist"):
+        raise HTTPException(
+            status_code=403,
+            detail="Only admins and interventionists can delete groups.",
+        )
+    try:
+        school_id = fetch_user_school_by_public_id(user["public_id"])
+        if school_id is None:
+            raise HTTPException(
+                status_code=403,
+                detail="The signed-in user does not have a school assigned.",
+            )
+        deleted = delete_group_record(group_id, school_id)
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=str(error)) from error
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Group not found.")
+    return {"deleted": True}

@@ -1344,3 +1344,38 @@ def edit_group(group_id: int, school_id: int, updates: dict):
         .execute()
     )
     return response.data[0] if response.data else None
+
+def delete_group(group_id: int, school_id: int) -> bool:
+    group = (
+        supabase.table("session_groups")
+        .select("id")
+        .eq("id", group_id)
+        .eq("school", school_id)
+        .limit(1)
+        .execute()
+    )
+    if not group.data:
+        return False
+
+    (
+        supabase.table("calendar_events")
+        .update({"session_group_id": None})
+        .eq("session_group_id", group_id)
+        .eq("school", school_id)
+        .execute()
+    )
+    (
+        supabase.table("session_group_members")
+        .delete()
+        .eq("group_id", group_id)
+        .execute()
+    )
+    response = (
+        supabase.table("session_groups")
+        .delete()
+        .eq("id", group_id)
+        .eq("school", school_id)
+        .select("id")
+        .execute()
+    )
+    return bool(response.data)
