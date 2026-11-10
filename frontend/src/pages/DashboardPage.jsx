@@ -13,7 +13,6 @@ import EditSessionPlansTile from "../dashtiles/EditSessionPlansTile";
 import EditSessionTile from "../dashtiles/EditSessionTile";
 import PersonalMeetingsTile from "../dashtiles/PersonalMeetingsTile";
 import PersonalTodoTile from "../dashtiles/PersonalTodoTile";
-import SelectedStudentTile from "../dashtiles/SelectedStudentTile";
 import ClassStudentsTile from "../dashtiles/ClassStudentsTile";
 import StudentsNeedingAttentionTile from "../dashtiles/StudentsNeedingAttentionTile";
 import ViewSessionPlanTile from "../dashtiles/ViewSessionPlanTile";
@@ -61,18 +60,6 @@ function DashboardPage({
   };
 
   const dashboardTiles = [
-    {
-      id: "selectedStudent",
-      title: "Selected student",
-      content: (
-        <SelectedStudentTile
-          student={student}
-          students={students}
-          onStudentChange={onStudentChange}
-          onStudents={onStudents}
-        />
-      ),
-    },
     canShowModule("classStudents", "dashboard", role) && {
       id: "classStudents",
       title: "Students",
@@ -189,7 +176,9 @@ function DashboardPage({
 
       <TileWorkspace
         className="dashboard-grid"
+        gridSizing
         key={`dashboard-${userId ?? role ?? "default"}`}
+        pageKey="dashboard"
         storageKey={`tile-layout-dashboard-${userId ?? role ?? "default"}`}
         tiles={dashboardTiles}
       />

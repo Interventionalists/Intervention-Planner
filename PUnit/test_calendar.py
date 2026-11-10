@@ -95,7 +95,11 @@ def test_list_calendar_events_rejects_reversed_range(client, monkeypatch):
 def test_list_calendar_invitees_uses_signed_in_school(client, monkeypatch):
     invitees = {
         "users": [{"public_id": "staff-123", "first_name": "Staff"}],
-        "students": [{"id": 42, "first_name": "Student"}],
+        "students": [{
+            "id": 42,
+            "first_name": "Student",
+            "profile_api_link": "https://example.test/student-avatar.png",
+        }],
     }
     requested = {}
 
@@ -116,6 +120,127 @@ def test_list_calendar_invitees_uses_signed_in_school(client, monkeypatch):
     assert response.status_code == 200
     assert response.json() == invitees
     assert requested["school_id"] == 7
+
+
+def test_calendar_availability_returns_busy_times_for_all_school_invitees(
+    client, monkeypatch
+):
+    invitee_id = "123e4567-e89b-12d3-a456-426614174000"
+    second_invitee_id = "223e4567-e89b-12d3-a456-426614174000"
+    requested = {}
+    monkeypatch.setattr(calendar, "fetch_user_school_by_public_id", lambda _id: 7)
+    monkeypatch.setattr(
+        calendar,
+        "fetch_calendar_invitees",
+        lambda _school_id: {
+            "users": [
+                {"public_id": invitee_id},
+                {"public_id": second_invitee_id},
+            ],
+            "students": [{"id": 42}],
+        },
+    )
+
+    def fake_fetch_events(
+        school_id,
+        range_start,
+        range_end,
+        user_public_id,
+        attendee_user_id=None,
+        attendee_student_id=None,
+        attendee_user_ids=None,
+        attendee_student_ids=None,
+    ):
+        requested.update(
+            school_id=school_id,
+            range_start=range_start,
+            range_end=range_end,
+            user_public_id=user_public_id,
+            attendee_user_id=attendee_user_id,
+            attendee_student_id=attendee_student_id,
+            attendee_user_ids=attendee_user_ids,
+            attendee_student_ids=attendee_student_ids,
+        )
+        return [
+            {
+                "id": 1,
+                "title": "Private event",
+                "organizer": invitee_id,
+                "starts_at": "2026-11-09T09:00:00-06:00",
+                "ends_at": "2026-11-09T09:30:00-06:00",
+                "participants": [
+                    {"user_id": second_invitee_id, "student_id": None},
+                    {"user_id": None, "student_id": 42},
+                ],
+            }
+        ]
+
+    monkeypatch.setattr(calendar, "fetch_calendar_events", fake_fetch_events)
+
+    response = client.get(
+        "/calendar-availability",
+        params={
+            "user_ids": [invitee_id, second_invitee_id],
+            "student_ids": [42],
+            "starts_at": "2026-11-09T00:00:00-06:00",
+            "ends_at": "2026-11-16T00:00:00-06:00",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "busy": [
+            {
+                "event_id": 1,
+                "user_id": invitee_id,
+                "student_id": None,
+                "starts_at": "2026-11-09T09:00:00-06:00",
+                "ends_at": "2026-11-09T09:30:00-06:00",
+            },
+            {
+                "event_id": 1,
+                "user_id": second_invitee_id,
+                "student_id": None,
+                "starts_at": "2026-11-09T09:00:00-06:00",
+                "ends_at": "2026-11-09T09:30:00-06:00",
+            },
+            {
+                "event_id": 1,
+                "user_id": None,
+                "student_id": 42,
+                "starts_at": "2026-11-09T09:00:00-06:00",
+                "ends_at": "2026-11-09T09:30:00-06:00",
+            }
+        ]
+    }
+    assert requested["school_id"] == 7
+    assert requested["attendee_user_ids"] == {invitee_id, second_invitee_id}
+    assert requested["attendee_student_ids"] == {42}
+
+
+def test_calendar_availability_rejects_non_school_invitee(client, monkeypatch):
+    monkeypatch.setattr(calendar, "fetch_user_school_by_public_id", lambda _id: 7)
+    monkeypatch.setattr(
+        calendar,
+        "fetch_calendar_invitees",
+        lambda _school_id: {"users": [], "students": []},
+    )
+    monkeypatch.setattr(
+        calendar,
+        "fetch_calendar_events",
+        lambda *_args, **_kwargs: pytest.fail("Unknown invitee reached event lookup"),
+    )
+
+    response = client.get(
+        "/calendar-availability",
+        params={
+            "user_id": "123e4567-e89b-12d3-a456-426614174000",
+            "starts_at": "2026-11-09T00:00:00-06:00",
+            "ends_at": "2026-11-16T00:00:00-06:00",
+        },
+    )
+
+    assert response.status_code == 404
 
 
 def test_create_calendar_meeting_saves_invitees_and_recurrence(client, monkeypatch):
@@ -198,6 +323,75 @@ def test_create_calendar_meeting_saves_invitees_and_recurrence(client, monkeypat
             "attendance": "invited",
         },
     ]
+
+
+def test_create_calendar_event_for_group(client, monkeypatch):
+    saved = {}
+    monkeypatch.setattr(
+        calendar,
+        "fetch_user_school_by_public_id",
+        lambda _public_id: 7,
+    )
+    monkeypatch.setattr(
+        calendar,
+        "fetch_groups",
+        lambda school_id: [{"id": 3, "school": school_id}],
+    )
+
+    def fake_create_calendar_event(event_data):
+        saved.update(event_data)
+        return {"public_id": "event-123", **event_data}
+
+    monkeypatch.setattr(calendar, "create_calendar_event", fake_create_calendar_event)
+
+    response = client.post(
+        "/calendar-events",
+        json={
+            "school": 7,
+            "event_type": "Group session",
+            "title": "Reading group",
+            "starts_at": "2026-11-10T09:00:00-06:00",
+            "ends_at": "2026-11-10T09:30:00-06:00",
+            "location": "Room 12",
+            "session_group_id": 3,
+        },
+    )
+
+    assert response.status_code == 200
+    assert saved["school"] == 7
+    assert saved["session_group_id"] == 3
+    assert saved["organizer"] == "user-123"
+    assert response.json()["event"]["public_id"] == "event-123"
+
+
+def test_create_calendar_event_rejects_group_from_another_school(
+    client, monkeypatch
+):
+    monkeypatch.setattr(
+        calendar,
+        "fetch_user_school_by_public_id",
+        lambda _public_id: 7,
+    )
+    monkeypatch.setattr(calendar, "fetch_groups", lambda _school_id: [])
+    monkeypatch.setattr(
+        calendar,
+        "create_calendar_event",
+        lambda *_args: pytest.fail("Unknown group reached event creation"),
+    )
+
+    response = client.post(
+        "/calendar-events",
+        json={
+            "school": 7,
+            "event_type": "Group session",
+            "title": "Reading group",
+            "starts_at": "2026-11-10T09:00:00-06:00",
+            "ends_at": "2026-11-10T09:30:00-06:00",
+            "session_group_id": 3,
+        },
+    )
+
+    assert response.status_code == 404
 
 
 def test_update_calendar_event_accepts_hex_color_for_organizer(client, monkeypatch):
@@ -594,6 +788,8 @@ def test_fetch_calendar_events_resolves_school_participants(monkeypatch):
         "every_n_weeks": 1,
         "ends_on": "2026-12-31",
     }
+    assert result[0]["series_starts_at"] == "2026-11-04T09:00:00-06:00"
+    assert result[0]["series_ends_at"] == "2026-11-04T09:30:00-06:00"
     next_occurrences = supabase_client.fetch_calendar_events(
         7,
         "2026-11-09T00:00:00-06:00",
@@ -603,3 +799,4 @@ def test_fetch_calendar_events_resolves_school_participants(monkeypatch):
     assert [(event["id"], event["starts_at"]) for event in next_occurrences] == [
         (9, "2026-11-11T09:00:00-06:00")
     ]
+    assert next_occurrences[0]["series_starts_at"] == "2026-11-04T09:00:00-06:00"

@@ -911,6 +911,7 @@ def update_session_status(session_id: int, status: str):
         .execute()
     )
     return _from_session_row(response.data[0]) if response.data else None
+
 ######################################## CALENDAR ENDPOINTS ########################################
 
 def fetch_calendar_invitees(school_id: int):
@@ -923,7 +924,7 @@ def fetch_calendar_invitees(school_id: int):
     )
     students_response = (
         supabase.table("students")
-        .select("id, first_name, last_name, grade_level")
+        .select("id, first_name, last_name, grade_level, profile_api_link")
         .eq("school", school_id)
         .order("first_name")
         .execute()
@@ -939,6 +940,10 @@ def fetch_calendar_events(
     range_start: str,
     range_end: str,
     user_public_id: str,
+    attendee_user_id: str | None = None,
+    attendee_student_id: int | None = None,
+    attendee_user_ids: set[str] | None = None,
+    attendee_student_ids: set[int] | None = None,
 ):
     single_events_response = (
         supabase.table("calendar_events")
@@ -973,17 +978,46 @@ def fetch_calendar_events(
         .execute()
     )
     participant_rows = participants_response.data
-    attending_event_ids = {
-        row["event_id"]
-        for row in participant_rows
-        if str(row.get("user_id")) == str(user_public_id)
-    }
-    events = [
-        event
-        for event in events
-        if str(event.get("organizer")) == str(user_public_id)
-        or event["id"] in attending_event_ids
-    ]
+    target_user_ids = set(attendee_user_ids or ())
+    target_student_ids = set(attendee_student_ids or ())
+    if attendee_user_id is not None:
+        target_user_ids.add(str(attendee_user_id))
+    if attendee_student_id is not None:
+        target_student_ids.add(attendee_student_id)
+    if target_user_ids or target_student_ids:
+        attending_event_ids = {
+            row["event_id"]
+            for row in participant_rows
+            if (
+                row.get("user_id") is not None
+                and str(row["user_id"]) in target_user_ids
+            )
+            or (
+                row.get("student_id") is not None
+                and row["student_id"] in target_student_ids
+            )
+        }
+        events = [
+            event
+            for event in events
+            if (
+                event.get("organizer") is not None
+                and str(event["organizer"]) in target_user_ids
+            )
+            or event["id"] in attending_event_ids
+        ]
+    else:
+        attending_event_ids = {
+            row["event_id"]
+            for row in participant_rows
+            if str(row.get("user_id")) == str(user_public_id)
+        }
+        events = [
+            event
+            for event in events
+            if str(event.get("organizer")) == str(user_public_id)
+            or event["id"] in attending_event_ids
+        ]
     if not events:
         return []
 
@@ -1112,6 +1146,8 @@ def fetch_calendar_events(
                 if occurrence_end > requested_start:
                     result.append({
                         **event_record,
+                        "series_starts_at": starts_at.isoformat(),
+                        "series_ends_at": ends_at.isoformat(),
                         "starts_at": occurrence_start.isoformat(),
                         "ends_at": occurrence_end.isoformat(),
                     })
@@ -1260,4 +1296,180 @@ def delete_calendar_event(
     if organizer_id is not None:
         query = query.eq("organizer", organizer_id)
     response = query.select("public_id").execute()
+    return bool(response.data)
+
+
+
+################################ GROUPS FUNCTIONS #####################################
+
+def fetch_groups(school_id: int | None = None):
+    query = supabase.table("session_groups").select("*")
+    if school_id is not None:
+        query = query.eq("school", school_id)
+    response = query.execute()
+    return response.data
+
+def fetch_group_student_ids(group_ids: list[int]) -> dict[int, list[int]]:
+    if not group_ids:
+        return {}
+    response = (
+        supabase.table("session_group_members")
+        .select("group_id, student_id")
+        .in_("group_id", group_ids)
+        .execute()
+    )
+    student_ids_by_group: dict[int, list[int]] = {
+        group_id: [] for group_id in group_ids
+    }
+    for membership in response.data:
+        student_ids_by_group.setdefault(membership["group_id"], []).append(
+            membership["student_id"]
+        )
+    return student_ids_by_group
+
+def create_groups(
+    school_id: int,
+    name: str,
+    purpose: str,
+    interventionist_id: str | None = None,
+):
+    group_data = {
+        "school": school_id,
+        "name": name,
+        "purpose": purpose,
+        "interventionist": interventionist_id,
+    }
+    response = (
+        supabase.table("session_groups")
+        .insert(group_data)
+        .select("*")
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+def add_students_to_group( group_id: int, student_ids: list[int], added_by: str | None = None):
+    if not student_ids:
+        return []
+    response = (
+        supabase.table("session_group_members")
+        .insert([{"group_id": group_id, "student_id": student_id, "added_by": added_by} for student_id in student_ids])
+        .select("*")
+        .execute()
+    )
+    return response.data if response.data else None
+
+def replace_group_students(
+    group_id: int,
+    student_ids: list[int],
+    added_by: str | None = None,
+):
+    existing_ids = fetch_group_student_ids([group_id]).get(group_id, [])
+    existing_set = set(existing_ids)
+    desired_set = set(student_ids)
+
+    added_ids = desired_set - existing_set
+    if added_ids:
+        if not add_students_to_group(group_id, sorted(added_ids), added_by):
+            raise RuntimeError("Unable to add students to the group.")
+
+    removed_ids = existing_set - desired_set
+    if removed_ids:
+        (
+            supabase.table("session_group_members")
+            .delete()
+            .eq("group_id", group_id)
+            .in_("student_id", list(removed_ids))
+            .execute()
+        )
+
+    return student_ids
+
+def edit_group(group_id: int, school_id: int, updates: dict):
+    response = (
+        supabase.table("session_groups")
+        .update(updates)
+        .eq("id", group_id)
+        .eq("school", school_id)
+        .select("*")
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+def delete_group(group_id: int, school_id: int) -> bool:
+    group = (
+        supabase.table("session_groups")
+        .select("id")
+        .eq("id", group_id)
+        .eq("school", school_id)
+        .limit(1)
+        .execute()
+    )
+    if not group.data:
+        return False
+
+    (
+        supabase.table("calendar_events")
+        .update({"session_group_id": None})
+        .eq("session_group_id", group_id)
+        .eq("school", school_id)
+        .execute()
+    )
+    (
+        supabase.table("session_group_members")
+        .delete()
+        .eq("group_id", group_id)
+        .execute()
+    )
+    response = (
+        supabase.table("session_groups")
+        .delete()
+        .eq("id", group_id)
+        .eq("school", school_id)
+        .select("id")
+        .execute()
+    )
+    return bool(response.data)
+
+################################## LAYOUT FUNCTIONS ########################################
+
+#returns the saved layout json for one user on one page, or None if they
+#have never customized that page.
+def fetch_user_layout(user_id: str, page_key: str):
+    response = (
+        supabase.table("user_layouts")
+        .select("layout, updated_at")
+        .eq("user_id", user_id)
+        .eq("page_key", page_key)
+        .limit(1)
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+#creates or replaces the layout for (user_id, page_key); relies on the
+#unique (user_id, page_key) constraint so each page has one row per user.
+def upsert_user_layout(user_id: str, page_key: str, layout: dict):
+    response = (
+        supabase.table("user_layouts")
+        .upsert(
+            {
+                "user_id": user_id,
+                "page_key": page_key,
+                "layout": layout,
+                "updated_at": datetime.now().astimezone().isoformat(),
+            },
+            on_conflict="user_id,page_key",
+        )
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+#clears a saved layout so the page falls back to its defaults.
+def delete_user_layout(user_id: str, page_key: str) -> bool:
+    response = (
+        supabase.table("user_layouts")
+        .delete()
+        .eq("user_id", user_id)
+        .eq("page_key", page_key)
+        .execute()
+    )
     return bool(response.data)
