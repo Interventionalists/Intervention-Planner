@@ -644,13 +644,28 @@ def fetch_notes_for_student(student_id):
     response = (supabase.table("notes").select("*").eq("student_id", student_id).order("date", desc=True).execute())
     return response.data
 
-def create_note(student_id, created_by, text, is_private=False):
-    response = supabase.table("notes").insert({
+
+def fetch_notes_for_session(session_id):
+    response = (
+        supabase.table("notes")
+        .select("*")
+        .eq("session_id", session_id)
+        .order("date", desc=True)
+        .execute()
+    )
+    return response.data
+
+
+def create_note(student_id, created_by, text, is_private=False, session_id=None):
+    payload = {
         "student_id": student_id,
         "created_by": created_by,
         "text": text,
         "privateNote": is_private,
-    }).execute()
+    }
+    if session_id is not None:
+        payload["session_id"] = session_id
+    response = supabase.table("notes").insert(payload).execute()
     return response.data[0] if response.data else None
 
 def edit_text(note_id, new_text, user_id):

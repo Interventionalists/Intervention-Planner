@@ -41,6 +41,7 @@ export default function SessionPlanningTile({
   setSessions,
   sessionsError = "",
   canManage = true,
+  userId,
 }) {
   const [selectedPlanId, setSelectedPlanId] = useState(starterPlans[0].id);
   const [selectedDuration, setSelectedDuration] = useState(starterPlans[0].duration);

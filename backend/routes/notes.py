@@ -5,9 +5,11 @@ from database.supabase_client import (
     create_note,
     delete_note,
     edit_text,
+    fetch_notes_for_session,
     fetch_notes_for_student,
     fetch_notes_from_date,
     fetch_notes_from_user,
+    fetch_session,
 )
 
 router = APIRouter()
@@ -27,6 +29,7 @@ def _visible_notes(notes: list[dict], user: dict) -> list[dict]:
 
 class NoteCreate(BaseModel):
     student_id: int | None
+    session_id: int | None = None
     created_by: str
     text: str
     is_private: bool = False
@@ -60,6 +63,23 @@ def get_notes_for_student(user_id: str, student_id: str, user: dict = Depends(ge
         raise HTTPException(status_code=500, detail=str(e))
     return {"notes": _visible_notes(notes, user)}
 
+
+@router.get("/notes-fetchForSession")
+def get_notes_for_session(session_id: int, user_id: str, user: dict = Depends(get_current_user)):
+    require_self_or_admin(user, user_id)
+    try:
+        session = fetch_session(str(session_id))
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        require_student_access(user, session["student_id"])
+        notes = fetch_notes_for_session(session_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"notes": _visible_notes(notes, user)}
+
+
 @router.put("/notes-editText")
 def update_note_text(note_id: str, new_text: str, user: dict = Depends(get_current_user)):
     try:
@@ -75,14 +95,25 @@ def update_note_text(note_id: str, new_text: str, user: dict = Depends(get_curre
 @router.post("/notes-create")
 def add_note(payload: NoteCreate, user: dict = Depends(get_current_user)):
     require_self_or_admin(user, payload.created_by)
-    if payload.student_id is not None:
+
+    if payload.session_id is not None:
+        session = fetch_session(str(payload.session_id))
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        if payload.student_id is not None and payload.student_id != session["student_id"]:
+            raise HTTPException(status_code=400, detail="Note student does not match the selected session")
+        payload.student_id = session["student_id"]
         require_student_access(user, payload.student_id)
+    elif payload.student_id is not None:
+        require_student_access(user, payload.student_id)
+
     try:
         note = create_note(
             payload.student_id,
             payload.created_by,
             payload.text,
             payload.is_private,
+            payload.session_id,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

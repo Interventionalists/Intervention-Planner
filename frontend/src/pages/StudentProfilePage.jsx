@@ -13,6 +13,7 @@ import InputStateTestingTile from "../studtiles/InputStateTestingTile";
 import NotesTile from "../studtiles/NotesTile";
 import StudentGoalsTile from "../studtiles/StudentGoalsTile";
 import SessionPlanningTile from "../studtiles/SessionPlanningTile";
+import SessionNotesTile from "../studtiles/SessionNotesTile";
 import EditPlannedSessionTile from "../studtiles/EditPlannedSessionTile";
 import { useStudentSessions } from "../hooks/useStudentSessions";
 import ViewStateTestingTile from "../studtiles/ViewStateTestingTile";
@@ -283,6 +284,18 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
           sessions={sessions}
           setSessions={setSessions}
           sessionsError={sessionsError}
+          userId={userId}
+        />
+      ),
+    },
+    canShowModule("editSession", "studentProfile", role) && {
+      id: "sessionNotes",
+      title: "Session notes",
+      content: (
+        <SessionNotesTile
+          studentId={student.id}
+          userId={userId}
+          sessions={sessions}
         />
       ),
     },
