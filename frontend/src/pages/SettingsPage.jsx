@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { themePresets } from "../data";
 import { CardTitle, PageHeading } from "../components/PageElements";
 
@@ -10,13 +10,36 @@ function SettingsPage({
   hasSavedTheme,
   setTheme,
   onSaveTheme,
+  schoolLogo,
+  onSaveLogo,
   canManageTheme,
   loadError,
 }) {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [savedNotice, setSavedNotice] = useState("");
+  const [logoUrl, setLogoUrl] = useState(schoolLogo || "");
+  const [savingLogo, setSavingLogo] = useState(false);
+  const [logoSaveError, setLogoSaveError] = useState("");
+  const [logoSavedNotice, setLogoSavedNotice] = useState("");
+  const [logoPreviewError, setLogoPreviewError] = useState(false);
   const hasChanges = JSON.stringify(theme) !== JSON.stringify(savedTheme);
+  const hasLogoChanges = logoUrl.trim() !== (schoolLogo || "");
+  const normalizedLogoUrl = logoUrl.trim();
+  const isLogoUrlValid = (() => {
+    if (!normalizedLogoUrl) return true;
+    try {
+      const url = new URL(normalizedLogoUrl);
+      return ["http:", "https:"].includes(url.protocol);
+    } catch {
+      return false;
+    }
+  })();
+
+  useEffect(() => {
+    setLogoUrl(schoolLogo || "");
+    setLogoPreviewError(false);
+  }, [schoolLogo]);
 
   const updateColor = (index, color) => {
     setTheme(theme.map((currentColor, colorIndex) =>
@@ -40,10 +63,31 @@ function SettingsPage({
     }
   };
 
+  const saveLogo = async () => {
+    setSavingLogo(true);
+    setLogoSaveError("");
+    setLogoSavedNotice("");
+    try {
+      await onSaveLogo(normalizedLogoUrl);
+      setLogoSavedNotice("School logo saved.");
+    } catch (error) {
+      setLogoSaveError(error.message || "Unable to save the school logo.");
+    } finally {
+      setSavingLogo(false);
+    }
+  };
+
   const revertTheme = () => {
     setTheme(savedTheme);
     setSaveError("");
     setSavedNotice("");
+  };
+
+  const revertLogo = () => {
+    setLogoUrl(schoolLogo || "");
+    setLogoPreviewError(false);
+    setLogoSaveError("");
+    setLogoSavedNotice("");
   };
 
   return (
@@ -137,6 +181,73 @@ function SettingsPage({
             </div>
           </div>
         </div>
+        {canManageTheme && (
+          <>
+            <div className="card school-logo-settings">
+              <CardTitle title="School logo" />
+              <label className="school-logo-url-field">
+                <span>Logo image URL</span>
+                <input
+                  type="url"
+                  value={logoUrl}
+                  onChange={(event) => {
+                    setLogoUrl(event.target.value);
+                    setLogoPreviewError(false);
+                    setLogoSaveError("");
+                    setLogoSavedNotice("");
+                  }}
+                  placeholder="https://example.com/school-logo.png"
+                  maxLength={2048}
+                  aria-invalid={!isLogoUrlValid}
+                />
+              </label>
+              <p className="muted">
+                Paste a public image URL. Leave it blank to remove the current logo.
+              </p>
+              {logoSaveError && (
+                <p className="theme-message error-state" role="alert">{logoSaveError}</p>
+              )}
+              {logoSavedNotice && (
+                <p className="theme-message" role="status">{logoSavedNotice}</p>
+              )}
+              <div className="theme-actions">
+                <button
+                  className="theme-revert-button"
+                  type="button"
+                  onClick={revertLogo}
+                  disabled={!hasLogoChanges || savingLogo}
+                >
+                  Revert logo
+                </button>
+                <button
+                  className="theme-save-button"
+                  type="button"
+                  onClick={saveLogo}
+                  disabled={!hasLogoChanges || !isLogoUrlValid || savingLogo}
+                >
+                  {savingLogo ? "Saving..." : "Save logo"}
+                </button>
+              </div>
+            </div>
+            <div className="card school-logo-preview-card">
+              <CardTitle title="Logo preview" />
+              <div className="school-logo-preview" aria-live="polite">
+                {normalizedLogoUrl && isLogoUrlValid && !logoPreviewError ? (
+                  <img
+                    key={normalizedLogoUrl}
+                    src={normalizedLogoUrl}
+                    alt="Preview of the school logo"
+                    onError={() => setLogoPreviewError(true)}
+                  />
+                ) : logoPreviewError ? (
+                  <span role="status">Could not load this logo. Check the URL.</span>
+                ) : (
+                  <span>{normalizedLogoUrl ? "Enter a valid image URL." : "No logo selected."}</span>
+                )}
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </>
   );

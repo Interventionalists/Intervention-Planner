@@ -5,7 +5,7 @@ import { Header, Sidebar } from "./components/AppNavigation";
 import AccountPage from "./pages/AccountPage";
 import CalendarPage from "./pages/CalendarPage";
 import DashboardPage from "./pages/DashboardPage";
-import ReportsPage from "./pages/ReportsPage";
+import GroupsPage from "./pages/GroupsPage";
 import SettingsPage from "./pages/SettingsPage";
 import StudentProfilePage from "./pages/StudentProfilePage";
 import StudentsPage from "./pages/StudentsPage";
@@ -261,6 +261,27 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
     setThemeLoadError("");
   };
 
+  const saveSchoolLogo = async (logoUrl) => {
+    const response = await apiFetch(`${API_BASE_URL}/schools-logo`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ school_logo_api: logoUrl.trim() || null }),
+    });
+    const result = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(
+        result?.detail || `Unable to save the school logo (${response.status}).`
+      );
+    }
+    if (
+      result?.school_logo_api != null &&
+      typeof result.school_logo_api !== "string"
+    ) {
+      throw new Error("The saved school logo response has an unexpected format.");
+    }
+    setSchoolLogo(result.school_logo_api || null);
+  };
+
   const filteredStudents = useMemo(
     () =>
       studentsData.filter((student) =>
@@ -339,6 +360,8 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
                 <SystemHealthPage role={user.role} />
               </Suspense>
             )
+          ) : page === "groups" ? (
+            <GroupsPage user={user} />
           ) : studentsLoading ? (
             <div className="data-state" role="status">Loading students...</div>
           ) : studentsError ? (
@@ -358,6 +381,7 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
                   onStudents={() => selectPage("students")}
                   userName={userName}
                   userId={user?.public_id}
+                  user={user}
                   role={user?.role}
                 />
               )}
@@ -385,8 +409,7 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
                   onUserUpdated={onUserUpdated}
                 />
               )}
-              {page === "calendar" && <CalendarPage />}
-              {page === "reports" && <ReportsPage students={studentsData} />}
+              {page === "calendar" && <CalendarPage user={user} />}
               {page === "settings" && (
                 <SettingsPage
                   theme={theme}
@@ -394,6 +417,8 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
                   hasSavedTheme={hasSavedTheme}
                   setTheme={updateTheme}
                   onSaveTheme={saveTheme}
+                  schoolLogo={schoolLogo}
+                  onSaveLogo={saveSchoolLogo}
                   canManageTheme={user?.role === "admin"}
                   loadError={themeLoadError}
                 />

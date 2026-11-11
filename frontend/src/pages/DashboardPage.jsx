@@ -1,14 +1,18 @@
 import { useState } from "react";
-import { events } from "../data";
 import { PageHeading } from "../components/PageElements";
 import { canShowModule } from "../components/ModuleTile";
 import TileWorkspace from "../components/TileWorkspace";
+import {
+  DashboardDayViewTile,
+  DashboardWeekViewTile,
+  QuickNewEventTile,
+  UpcomingEventsTile,
+} from "../dashtiles/CalendarDashboardTiles";
 import DailyCalendarTile from "../dashtiles/DailyCalendarTile";
 import EditSessionPlansTile from "../dashtiles/EditSessionPlansTile";
 import EditSessionTile from "../dashtiles/EditSessionTile";
 import PersonalMeetingsTile from "../dashtiles/PersonalMeetingsTile";
 import PersonalTodoTile from "../dashtiles/PersonalTodoTile";
-import SelectedStudentTile from "../dashtiles/SelectedStudentTile";
 import ClassStudentsTile from "../dashtiles/ClassStudentsTile";
 import StudentsNeedingAttentionTile from "../dashtiles/StudentsNeedingAttentionTile";
 import ViewSessionPlanTile from "../dashtiles/ViewSessionPlanTile";
@@ -30,10 +34,12 @@ function DashboardPage({
   onStudents,
   userName = "User",
   userId,
+  user,
   role,
 }) {
   const [calendarDate, setCalendarDate] = useState(() => getDateKey(new Date()));
   const [calendarMeetings, setCalendarMeetings] = useState([]);
+  const [calendarRefreshKey, setCalendarRefreshKey] = useState(0);
 
   const addMeetingToCalendar = (meeting) => {
     setCalendarMeetings((currentMeetings) =>
@@ -54,18 +60,6 @@ function DashboardPage({
   };
 
   const dashboardTiles = [
-    {
-      id: "selectedStudent",
-      title: "Selected student",
-      content: (
-        <SelectedStudentTile
-          student={student}
-          students={students}
-          onStudentChange={onStudentChange}
-          onStudents={onStudents}
-        />
-      ),
-    },
     canShowModule("classStudents", "dashboard", role) && {
       id: "classStudents",
       title: "Students",
@@ -139,6 +133,37 @@ function DashboardPage({
         />
       ),
     },
+    canShowModule("calendarDayView", "dashboard", role) && {
+      id: "calendarDayView",
+      title: "Day view",
+      defaultVisible: false,
+      content: <DashboardDayViewTile refreshKey={calendarRefreshKey} />,
+    },
+    canShowModule("calendarWeekView", "dashboard", role) && {
+      id: "calendarWeekView",
+      title: "Week view",
+      defaultVisible: false,
+      content: <DashboardWeekViewTile refreshKey={calendarRefreshKey} />,
+    },
+    canShowModule("upcomingEvents", "dashboard", role) && {
+      id: "upcomingEvents",
+      title: "Upcoming events",
+      defaultVisible: false,
+      content: <UpcomingEventsTile refreshKey={calendarRefreshKey} />,
+    },
+    canShowModule("quickNewEvent", "dashboard", role) && {
+      id: "quickNewEvent",
+      title: "Quick new event",
+      defaultVisible: false,
+      content: (
+        <QuickNewEventTile
+          user={user}
+          onEventCreated={() =>
+            setCalendarRefreshKey((current) => current + 1)
+          }
+        />
+      ),
+    },
   ].filter(Boolean);
 
   return (
@@ -151,7 +176,9 @@ function DashboardPage({
 
       <TileWorkspace
         className="dashboard-grid"
+        gridSizing
         key={`dashboard-${userId ?? role ?? "default"}`}
+        pageKey="dashboard"
         storageKey={`tile-layout-dashboard-${userId ?? role ?? "default"}`}
         tiles={dashboardTiles}
       />

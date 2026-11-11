@@ -43,7 +43,7 @@ function StudentGoalsTile({
       return <span className="student-goal-current muted">Loading...</span>;
     }
 
-    const grade = gradesBySubject[subject];
+    const grade = gradesBySubject[normalizeAssignmentSubject(subject)];
     if (!Number.isFinite(grade)) {
       return <span className="student-goal-current">N/A</span>;
     }

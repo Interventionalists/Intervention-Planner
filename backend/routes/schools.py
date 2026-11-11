@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl
 from auth.security import get_current_user, require_admin
 from database.supabase_client import (
     fetch_school_logo_api,
@@ -7,6 +7,7 @@ from database.supabase_client import (
     fetch_school_theme,
     fetch_schools,
     fetch_user_school,
+    save_school_logo_api,
     save_school_theme,
     update_user_school,
 )
@@ -20,6 +21,10 @@ class ThemeUpdate(BaseModel):
     color_primary: str = Field(pattern=r"^[0-9a-fA-F]{6}$")
     color_secondary: str = Field(pattern=r"^[0-9a-fA-F]{6}$")
     color_tertiary: str = Field(pattern=r"^[0-9a-fA-F]{6}$")
+
+
+class SchoolLogoUpdate(BaseModel):
+    school_logo_api: HttpUrl | None
 
 
 def format_theme_color(color: str) -> str:
@@ -84,6 +89,27 @@ def get_school_logo(user: dict = Depends(get_current_user)):
         if school_id is None:
             raise HTTPException(status_code=400, detail="Your user account is not assigned to a school.")
         logo_api = fetch_school_logo_api(school_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+    return {"school_logo_api": logo_api}
+
+
+@router.put("/schools-logo")
+def update_school_logo(
+    payload: SchoolLogoUpdate,
+    user: dict = Depends(require_admin),
+):
+    try:
+        school_id = fetch_user_school(user["id"])
+        if school_id is None:
+            raise HTTPException(status_code=400, detail="Your user account is not assigned to a school.")
+        logo_api = save_school_logo_api(
+            school_id,
+            str(payload.school_logo_api) if payload.school_logo_api else None,
+        )
     except HTTPException:
         raise
     except Exception as e:

@@ -1,5 +1,7 @@
+from datetime import date, datetime, timedelta
 import math
 import os
+
 import bcrypt
 from supabase import create_client, Client
 from dotenv import load_dotenv
@@ -577,6 +579,19 @@ def fetch_school_logo_api(school_id):
     return response.data[0]["school_logo_api"] if response.data else None
 
 
+def save_school_logo_api(school_id, logo_api):
+    response = (
+        supabase.table("schools")
+        .update({"school_logo_api": logo_api})
+        .eq("school_id", school_id)
+        .select("school_logo_api")
+        .execute()
+    )
+    if not response.data:
+        raise RuntimeError("The school logo could not be saved.")
+    return response.data[0]["school_logo_api"]
+
+
 def fetch_school_theme(school_id):
     response = (
         supabase.table("themes")
@@ -629,13 +644,28 @@ def fetch_notes_for_student(student_id):
     response = (supabase.table("notes").select("*").eq("student_id", student_id).order("date", desc=True).execute())
     return response.data
 
-def create_note(student_id, created_by, text, is_private=False):
-    response = supabase.table("notes").insert({
+
+def fetch_notes_for_session(session_id):
+    response = (
+        supabase.table("notes")
+        .select("*")
+        .eq("session_id", session_id)
+        .order("date", desc=True)
+        .execute()
+    )
+    return response.data
+
+
+def create_note(student_id, created_by, text, is_private=False, session_id=None):
+    payload = {
         "student_id": student_id,
         "created_by": created_by,
         "text": text,
         "privateNote": is_private,
-    }).execute()
+    }
+    if session_id is not None:
+        payload["session_id"] = session_id
+    response = supabase.table("notes").insert(payload).execute()
     return response.data[0] if response.data else None
 
 def edit_text(note_id, new_text, user_id):
@@ -797,3 +827,649 @@ def fetch_student_ownership(student_id: int):
         .execute()
     )
     return response.data[0] if response.data else None
+
+############################### SESSION FUNCTIONS ######################################
+
+def _to_session_row(data: dict):
+    row = dict(data)
+    if "id" in row:
+        row["event_id"] = row.pop("id")
+    if "event_id" not in row:
+        raise ValueError("A calendar event ID is required to create a session.")
+    if "focus" in row:
+        row["session_details"] = row.pop("focus")
+    if "duration_minutes" in row:
+        row["duration"] = row.pop("duration_minutes")
+    if "scheduled_at" in row:
+        row["scheduled_time"] = row.pop("scheduled_at")
+    return row
+
+
+def _from_session_row(row: dict):
+    session = dict(row)
+    if "event_id" in session:
+        session["id"] = session.pop("event_id")
+    if "session_details" in session:
+        session["focus"] = session.pop("session_details")
+    if "duration" in session:
+        session["duration_minutes"] = session.pop("duration")
+    if "scheduled_time" in session:
+        session["scheduled_at"] = session.pop("scheduled_time")
+    return session
+
+
+def fetch_sessions_for_student(student_id: int):
+    response = (
+        supabase.table("session_details")
+        .select("*")
+        .eq("student_id", student_id)
+        .execute()
+    )
+    return [_from_session_row(row) for row in (response.data or [])]
+
+
+def create_session(session_data: dict):
+    response = (
+        supabase.table("session_details")
+        .insert(_to_session_row(session_data))
+        .select("*")
+        .execute()
+    )
+    return _from_session_row(response.data[0]) if response.data else None
+
+
+def fetch_session(session_id: int):
+    response = (
+        supabase.table("session_details")
+        .select("*")
+        .eq("event_id", session_id)
+        .limit(1)
+        .execute()
+    )
+    return _from_session_row(response.data[0]) if response.data else None
+
+
+def update_session_details(session_id: int, updates: dict):
+    row_updates = _to_session_row({"event_id": session_id, **updates})
+    row_updates.pop("event_id")
+    response = (
+        supabase.table("session_details")
+        .update(row_updates)
+        .eq("event_id", session_id)
+        .select("*")
+        .execute()
+    )
+    return _from_session_row(response.data[0]) if response.data else None
+
+
+def update_session_status(session_id: int, status: str):
+    response = (
+        supabase.table("session_details")
+        .update({"status": status})
+        .eq("event_id", session_id)
+        .select("*")
+        .execute()
+    )
+    return _from_session_row(response.data[0]) if response.data else None
+
+######################################## CALENDAR ENDPOINTS ########################################
+
+def fetch_calendar_invitees(school_id: int):
+    users_response = (
+        supabase.table("users")
+        .select("public_id, first_name, last_name, role")
+        .eq("school", school_id)
+        .order("first_name")
+        .execute()
+    )
+    students_response = (
+        supabase.table("students")
+        .select("id, first_name, last_name, grade_level, profile_api_link")
+        .eq("school", school_id)
+        .order("first_name")
+        .execute()
+    )
+    return {
+        "users": users_response.data,
+        "students": students_response.data,
+    }
+
+
+def fetch_calendar_events(
+    school_id: int,
+    range_start: str,
+    range_end: str,
+    user_public_id: str,
+    attendee_user_id: str | None = None,
+    attendee_student_id: int | None = None,
+    attendee_user_ids: set[str] | None = None,
+    attendee_student_ids: set[int] | None = None,
+):
+    single_events_response = (
+        supabase.table("calendar_events")
+        .select("*")
+        .eq("school", school_id)
+        .is_("recurrence_id", "null")
+        .lt("starts_at", range_end)
+        .gt("ends_at", range_start)
+        .order("starts_at")
+        .execute()
+    )
+    recurring_events_response = (
+        supabase.table("calendar_events")
+        .select("*")
+        .eq("school", school_id)
+        .not_.is_("recurrence_id", "null")
+        .lt("starts_at", range_end)
+        .order("starts_at")
+        .execute()
+    )
+    requested_start = datetime.fromisoformat(range_start)
+    requested_end = datetime.fromisoformat(range_end)
+    events = [*single_events_response.data, *recurring_events_response.data]
+    if not events:
+        return []
+
+    event_ids = [event["id"] for event in events]
+    participants_response = (
+        supabase.table("event_participants")
+        .select("event_id, user_id, student_id, attendance")
+        .in_("event_id", event_ids)
+        .execute()
+    )
+    participant_rows = participants_response.data
+    target_user_ids = set(attendee_user_ids or ())
+    target_student_ids = set(attendee_student_ids or ())
+    if attendee_user_id is not None:
+        target_user_ids.add(str(attendee_user_id))
+    if attendee_student_id is not None:
+        target_student_ids.add(attendee_student_id)
+    if target_user_ids or target_student_ids:
+        attending_event_ids = {
+            row["event_id"]
+            for row in participant_rows
+            if (
+                row.get("user_id") is not None
+                and str(row["user_id"]) in target_user_ids
+            )
+            or (
+                row.get("student_id") is not None
+                and row["student_id"] in target_student_ids
+            )
+        }
+        events = [
+            event
+            for event in events
+            if (
+                event.get("organizer") is not None
+                and str(event["organizer"]) in target_user_ids
+            )
+            or event["id"] in attending_event_ids
+        ]
+    else:
+        attending_event_ids = {
+            row["event_id"]
+            for row in participant_rows
+            if str(row.get("user_id")) == str(user_public_id)
+        }
+        events = [
+            event
+            for event in events
+            if str(event.get("organizer")) == str(user_public_id)
+            or event["id"] in attending_event_ids
+        ]
+    if not events:
+        return []
+
+    event_ids = [event["id"] for event in events]
+    relevant_event_ids = set(event_ids)
+    participant_rows = [
+        row for row in participant_rows if row["event_id"] in relevant_event_ids
+    ]
+    user_ids = list({
+        str(row["user_id"])
+        for row in participant_rows
+        if row.get("user_id")
+    } | {
+        str(event["organizer"])
+        for event in events
+        if event.get("organizer")
+    })
+    student_ids = list({
+        row["student_id"]
+        for row in participant_rows
+        if row.get("student_id") is not None
+    } | {
+        event["regarding_student"]
+        for event in events
+        if event.get("regarding_student") is not None
+    })
+    users_response = (
+        supabase.table("users")
+        .select("public_id, first_name, last_name")
+        .eq("school", school_id)
+        .in_("public_id", user_ids)
+        .execute()
+    ) if user_ids else None
+    students_response = (
+        supabase.table("students")
+        .select("id, first_name, last_name")
+        .eq("school", school_id)
+        .in_("id", student_ids)
+        .execute()
+    ) if student_ids else None
+    user_names = {
+        str(user["public_id"]): " ".join(
+            part for part in (user.get("first_name"), user.get("last_name")) if part
+        )
+        for user in (users_response.data if users_response else [])
+    }
+    student_names = {
+        student["id"]: " ".join(
+            part for part in (student.get("first_name"), student.get("last_name")) if part
+        )
+        for student in (students_response.data if students_response else [])
+    }
+    recurrence_ids = list({
+        event["recurrence_id"]
+        for event in events
+        if event.get("recurrence_id") is not None
+    })
+    recurrences_response = (
+        supabase.table("event_recurrence")
+        .select("id, weekdays, every_n_weeks, ends_on")
+        .in_("id", recurrence_ids)
+        .execute()
+    ) if recurrence_ids else None
+    recurrences = {
+        recurrence["id"]: recurrence
+        for recurrence in (recurrences_response.data if recurrences_response else [])
+    }
+
+    participants_by_event = {}
+    for participant in participant_rows:
+        user_id = participant.get("user_id")
+        student_id = participant.get("student_id")
+        name = user_names.get(str(user_id)) if user_id else student_names.get(student_id)
+        if not name:
+            continue
+        participants_by_event.setdefault(participant["event_id"], []).append({
+            "user_id": user_id,
+            "student_id": student_id,
+            "name": name,
+            "attendance": participant.get("attendance"),
+        })
+
+    result = []
+    for event in events:
+        event_record = {
+            **event,
+            "participants": participants_by_event.get(event["id"], []),
+            "organizer_name": user_names.get(str(event.get("organizer"))),
+            "regarding_student_name": student_names.get(event.get("regarding_student")),
+            "recurrence": recurrences.get(event.get("recurrence_id")),
+        }
+        recurrence = event_record["recurrence"]
+        if recurrence is None:
+            result.append(event_record)
+            continue
+
+        starts_at = datetime.fromisoformat(event["starts_at"])
+        ends_at = datetime.fromisoformat(event["ends_at"])
+        duration = ends_at - starts_at
+        local_range_start = requested_start.astimezone(starts_at.tzinfo).date()
+        local_range_end = requested_end.astimezone(starts_at.tzinfo).date()
+        first_date = max(starts_at.date(), local_range_start)
+        last_date = min(
+            local_range_end,
+            date.fromisoformat(recurrence["ends_on"]) + timedelta(days=1)
+            if recurrence.get("ends_on")
+            else local_range_end,
+        )
+        weekdays = set(recurrence.get("weekdays") or [])
+        every_n_weeks = max(1, recurrence.get("every_n_weeks") or 1)
+        first_week = starts_at.date() - timedelta(days=starts_at.weekday())
+        occurrence_date = first_date
+        while occurrence_date < last_date:
+            week_number = (occurrence_date - first_week).days // 7
+            if (
+                occurrence_date.weekday() in weekdays
+                and week_number >= 0
+                and week_number % every_n_weeks == 0
+            ):
+                occurrence_start = datetime.combine(
+                    occurrence_date,
+                    starts_at.timetz().replace(tzinfo=None),
+                    tzinfo=starts_at.tzinfo,
+                )
+                occurrence_end = occurrence_start + duration
+                if occurrence_end > requested_start:
+                    result.append({
+                        **event_record,
+                        "series_starts_at": starts_at.isoformat(),
+                        "series_ends_at": ends_at.isoformat(),
+                        "starts_at": occurrence_start.isoformat(),
+                        "ends_at": occurrence_end.isoformat(),
+                    })
+            occurrence_date += timedelta(days=1)
+
+    return sorted(result, key=lambda event: event["starts_at"])
+
+
+def create_calendar_event(event_data: dict):
+    response = (
+        supabase.table("calendar_events")
+        .insert(event_data)
+        .select("*")
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+
+def create_calendar_recurrence(recurrence_data: dict):
+    response = (
+        supabase.table("event_recurrence")
+        .insert(recurrence_data)
+        .select("*")
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+
+def delete_calendar_recurrence(recurrence_id: int):
+    response = (
+        supabase.table("event_recurrence")
+        .delete()
+        .eq("id", recurrence_id)
+        .select("id")
+        .execute()
+    )
+    return bool(response.data)
+
+
+def fetch_calendar_recurrence(recurrence_id: int):
+    response = (
+        supabase.table("event_recurrence")
+        .select("*")
+        .eq("id", recurrence_id)
+        .limit(1)
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+
+def update_calendar_recurrence(recurrence_id: int, updates: dict):
+    response = (
+        supabase.table("event_recurrence")
+        .update(updates)
+        .eq("id", recurrence_id)
+        .select("*")
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+
+def create_calendar_event_participants(participants: list[dict]):
+    if not participants:
+        return []
+    response = (
+        supabase.table("event_participants")
+        .insert(participants)
+        .select("event_id, user_id, student_id, attendance")
+        .execute()
+    )
+    return response.data
+
+
+def fetch_calendar_event_participants(event_id: int):
+    response = (
+        supabase.table("event_participants")
+        .select("event_id, user_id, student_id, attendance")
+        .eq("event_id", event_id)
+        .execute()
+    )
+    return response.data
+
+
+def delete_calendar_event_participants(event_id: int):
+    response = (
+        supabase.table("event_participants")
+        .delete()
+        .eq("event_id", event_id)
+        .select("event_id")
+        .execute()
+    )
+    return len(response.data)
+
+
+def fetch_calendar_event_by_id(event_id: int):
+    response = (
+        supabase.table("calendar_events")
+        .select("*")
+        .eq("id", event_id)
+        .limit(1)
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+
+def fetch_calendar_event(public_id: str):
+    response = (
+        supabase.table("calendar_events")
+        .select("*")
+        .eq("public_id", public_id)
+        .limit(1)
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+
+def update_calendar_event(
+    public_id: str,
+    school_id: int,
+    updates: dict,
+    organizer_id: str | None = None,
+):
+    query = (
+        supabase.table("calendar_events")
+        .update(updates)
+        .eq("public_id", public_id)
+        .eq("school", school_id)
+    )
+    if organizer_id is not None:
+        query = query.eq("organizer", organizer_id)
+    response = query.select("*").execute()
+    return response.data[0] if response.data else None
+
+
+def delete_calendar_event(
+    public_id: str,
+    school_id: int,
+    organizer_id: str | None = None,
+):
+    query = (
+        supabase.table("calendar_events")
+        .delete()
+        .eq("public_id", public_id)
+        .eq("school", school_id)
+    )
+    if organizer_id is not None:
+        query = query.eq("organizer", organizer_id)
+    response = query.select("public_id").execute()
+    return bool(response.data)
+
+
+
+################################ GROUPS FUNCTIONS #####################################
+
+def fetch_groups(school_id: int | None = None):
+    query = supabase.table("session_groups").select("*")
+    if school_id is not None:
+        query = query.eq("school", school_id)
+    response = query.execute()
+    return response.data
+
+def fetch_group_student_ids(group_ids: list[int]) -> dict[int, list[int]]:
+    if not group_ids:
+        return {}
+    response = (
+        supabase.table("session_group_members")
+        .select("group_id, student_id")
+        .in_("group_id", group_ids)
+        .execute()
+    )
+    student_ids_by_group: dict[int, list[int]] = {
+        group_id: [] for group_id in group_ids
+    }
+    for membership in response.data:
+        student_ids_by_group.setdefault(membership["group_id"], []).append(
+            membership["student_id"]
+        )
+    return student_ids_by_group
+
+def create_groups(
+    school_id: int,
+    name: str,
+    purpose: str,
+    interventionist_id: str | None = None,
+):
+    group_data = {
+        "school": school_id,
+        "name": name,
+        "purpose": purpose,
+        "interventionist": interventionist_id,
+    }
+    response = (
+        supabase.table("session_groups")
+        .insert(group_data)
+        .select("*")
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+def add_students_to_group( group_id: int, student_ids: list[int], added_by: str | None = None):
+    if not student_ids:
+        return []
+    response = (
+        supabase.table("session_group_members")
+        .insert([{"group_id": group_id, "student_id": student_id, "added_by": added_by} for student_id in student_ids])
+        .select("*")
+        .execute()
+    )
+    return response.data if response.data else None
+
+def replace_group_students(
+    group_id: int,
+    student_ids: list[int],
+    added_by: str | None = None,
+):
+    existing_ids = fetch_group_student_ids([group_id]).get(group_id, [])
+    existing_set = set(existing_ids)
+    desired_set = set(student_ids)
+
+    added_ids = desired_set - existing_set
+    if added_ids:
+        if not add_students_to_group(group_id, sorted(added_ids), added_by):
+            raise RuntimeError("Unable to add students to the group.")
+
+    removed_ids = existing_set - desired_set
+    if removed_ids:
+        (
+            supabase.table("session_group_members")
+            .delete()
+            .eq("group_id", group_id)
+            .in_("student_id", list(removed_ids))
+            .execute()
+        )
+
+    return student_ids
+
+def edit_group(group_id: int, school_id: int, updates: dict):
+    response = (
+        supabase.table("session_groups")
+        .update(updates)
+        .eq("id", group_id)
+        .eq("school", school_id)
+        .select("*")
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+def delete_group(group_id: int, school_id: int) -> bool:
+    group = (
+        supabase.table("session_groups")
+        .select("id")
+        .eq("id", group_id)
+        .eq("school", school_id)
+        .limit(1)
+        .execute()
+    )
+    if not group.data:
+        return False
+
+    (
+        supabase.table("calendar_events")
+        .update({"session_group_id": None})
+        .eq("session_group_id", group_id)
+        .eq("school", school_id)
+        .execute()
+    )
+    (
+        supabase.table("session_group_members")
+        .delete()
+        .eq("group_id", group_id)
+        .execute()
+    )
+    response = (
+        supabase.table("session_groups")
+        .delete()
+        .eq("id", group_id)
+        .eq("school", school_id)
+        .select("id")
+        .execute()
+    )
+    return bool(response.data)
+
+################################## LAYOUT FUNCTIONS ########################################
+
+#returns the saved layout json for one user on one page, or None if they
+#have never customized that page.
+def fetch_user_layout(user_id: str, page_key: str):
+    response = (
+        supabase.table("user_layouts")
+        .select("layout, updated_at")
+        .eq("user_id", user_id)
+        .eq("page_key", page_key)
+        .limit(1)
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+#creates or replaces the layout for (user_id, page_key); relies on the
+#unique (user_id, page_key) constraint so each page has one row per user.
+def upsert_user_layout(user_id: str, page_key: str, layout: dict):
+    response = (
+        supabase.table("user_layouts")
+        .upsert(
+            {
+                "user_id": user_id,
+                "page_key": page_key,
+                "layout": layout,
+                "updated_at": datetime.now().astimezone().isoformat(),
+            },
+            on_conflict="user_id,page_key",
+        )
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+#clears a saved layout so the page falls back to its defaults.
+def delete_user_layout(user_id: str, page_key: str) -> bool:
+    response = (
+        supabase.table("user_layouts")
+        .delete()
+        .eq("user_id", user_id)
+        .eq("page_key", page_key)
+        .execute()
+    )
+    return bool(response.data)

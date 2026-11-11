@@ -8,14 +8,14 @@ import AddGradesTile from "../studtiles/AddGradesTile";
 import ChangeParentNameTile from "../studtiles/ChangeParentNameTile";
 import ChangeStudentGradeTile from "../studtiles/ChangeStudentGradeTile";
 import ChangeStudentNameTile from "../studtiles/ChangeStudentNameTile";
-import EditSessionTile from "../studtiles/EditSessionTile";
 import InputGradesTile from "../studtiles/InputGradesTile";
 import InputStateTestingTile from "../studtiles/InputStateTestingTile";
 import NotesTile from "../studtiles/NotesTile";
 import StudentGoalsTile from "../studtiles/StudentGoalsTile";
-import ViewGradesTile from "../studtiles/ViewGradesTile";
-import ViewSessionPlanTile from "../studtiles/ViewSessionPlanTile";
-import ViewSessionTile from "../studtiles/ViewSessionTile";
+import SessionPlanningTile from "../studtiles/SessionPlanningTile";
+import SessionNotesTile from "../studtiles/SessionNotesTile";
+import EditPlannedSessionTile from "../studtiles/EditPlannedSessionTile";
+import { useStudentSessions } from "../hooks/useStudentSessions";
 import ViewStateTestingTile from "../studtiles/ViewStateTestingTile";
 
 const API_BASE_URL = (
@@ -37,6 +37,12 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
     isLoading: assignmentsLoading,
     error: assignmentsError,
   } = useStudentAssignments(student.id);
+  const {
+    sessions,
+    setSessions,
+    isLoading: sessionsLoading,
+    error: sessionsError,
+  } = useStudentSessions(student.id);
   const [groupNumber, setGroupNumber] = useState(
     student.group_number == null ? "" : String(student.group_number)
   );
@@ -211,25 +217,10 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
         />
       ),
     },
-    canShowModule("viewGrades", "studentProfile", role) && {
-      id: "viewGrades",
-      title: "View grades",
-      content: <ViewGradesTile scores={student.scores} />,
-    },
     canShowModule("addGrades", "studentProfile", role) && {
       id: "addGrades",
       title: "Add grades",
       content: <AddGradesTile />,
-    },
-    canShowModule("editSession", "studentProfile", role) && {
-      id: "editSession",
-      title: "Edit session",
-      content: <EditSessionTile />,
-    },
-    canShowModule("viewSession", "studentProfile", role) && {
-      id: "viewSession",
-      title: "View session",
-      content: <ViewSessionTile />,
     },
     canShowModule("viewStateTesting", "studentProfile", role) && {
       id: "viewStateTesting",
@@ -260,19 +251,22 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
     },
     canShowModule("viewProgress", "studentProfile", role) && {
       id: "assignmentGrades",
-      title: "Assignment grades",
+      title: "Assignment history",
       content: (
         <Suspense
           fallback={
             <div className="card chart-card profile-progress-card">
-              <CardTitle title="Assignment grades" />
+              <CardTitle title="Assignment history" />
               <p className="muted" role="status">Loading grade graph...</p>
             </div>
           }
         >
           <AssignmentGradesTile
             assignments={assignments}
+            studentId={student.id}
+            onAssignmentsChange={setAssignments}
             subjectGoals={subjectGoals}
+            role={role}
             isLoading={assignmentsLoading}
             error={assignmentsError}
           />
@@ -280,16 +274,51 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
       ),
     },
     canShowModule("viewSessionPlan", "studentProfile", role) && {
-      id: "viewSessionPlan",
-      title: "View session plan",
-      content: <ViewSessionPlanTile />,
+      id: "sessionPlanning",
+      title: "Session planning",
+      content: (
+        <SessionPlanningTile
+          canManage={canShowModule("editSession", "studentProfile", role)}
+          studentId={student.id}
+          studentName={studentName}
+          sessions={sessions}
+          setSessions={setSessions}
+          sessionsError={sessionsError}
+          userId={userId}
+        />
+      ),
+    },
+    canShowModule("editSession", "studentProfile", role) && {
+      id: "sessionNotes",
+      title: "Session notes",
+      content: (
+        <SessionNotesTile
+          studentId={student.id}
+          userId={userId}
+          sessions={sessions}
+        />
+      ),
+    },
+    canShowModule("editSession", "studentProfile", role) && {
+      id: "editPlannedSession",
+      title: "Edit planned session",
+      content: (
+        <EditPlannedSessionTile
+          studentName={studentName}
+          sessions={sessions}
+          setSessions={setSessions}
+          isLoading={sessionsLoading}
+          sessionsError={sessionsError}
+        />
+      ),
     },
     canShowModule("viewGrades", "studentProfile", role) && {
       id: "scores",
-      title: "Scores",
+      title: "Subject averages",
       content: (
         <div className="card profile-scores-card">
-          <CardTitle title="Scores" />
+          <CardTitle title="Subject averages" />
+          <p className="muted">Current average in each subject, calculated from graded assignments.</p>
           <div className="score-list">
             {scores.slice(0, 6).map(([subject, score]) => (
               <div className="score-row" key={subject}>
@@ -345,7 +374,9 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
 
       <TileWorkspace
         className="student-profile-layout"
+        gridSizing
         key={`student-profile-${userId ?? "default"}-${student.id ?? "unknown"}`}
+        pageKey={`student-${student.id ?? "unknown"}`}
         storageKey={`tile-layout-student-${userId ?? "default"}-${student.id ?? "unknown"}`}
         tiles={studentTiles}
       />
