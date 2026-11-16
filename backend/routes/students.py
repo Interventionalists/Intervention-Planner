@@ -49,9 +49,14 @@ class StudentAssignmentRequest(BaseModel):
 
 
 class StudentProfileUpdateRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     requester_id: UUID
     interventionist: UUID | None = None
     group_number: int | None = Field(default=None, ge=1)
+    first_name: str | None = Field(default=None, min_length=1, max_length=100)
+    last_name: str | None = Field(default=None, min_length=1, max_length=100)
+    parent_name: str | None = Field(default=None, max_length=200)
 
 
 class StudentGoalsRequest(BaseModel):
@@ -185,6 +190,12 @@ def update_student(
             status_code=422,
             detail="Provide an interventionist or group number to update.",
         )
+    if user["role"] != "admin" and set(updates) & {
+        "first_name",
+        "last_name",
+        "parent_name",
+    }:
+        raise HTTPException(status_code=403, detail="Admin access required")
     if "interventionist" in updates and updates["interventionist"] is None:
         updates["group_number"] = None
 
