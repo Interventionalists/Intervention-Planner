@@ -14,6 +14,7 @@ from routes.groups import router as groups_router
 from routes.sessions import router as sessions_router
 from routes.schools import router as schools_router
 from routes.layouts import router as layouts_router
+from routes.todos import router as todos_router
 from routes.health import router as health_router
 from routes.system_health import router as system_health_router
 from auth.security import get_current_user, require_admin
@@ -62,5 +63,6 @@ app.include_router(groups_router, dependencies=protected)
 app.include_router(sessions_router, dependencies=protected)
 app.include_router(schools_router, dependencies=protected)
 app.include_router(layouts_router, dependencies=protected)
+app.include_router(todos_router, dependencies=protected)
 app.include_router(admins_router, dependencies=[Depends(require_admin)])
 app.include_router(system_health_router, dependencies=[Depends(require_admin)])

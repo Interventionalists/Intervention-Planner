@@ -1473,3 +1473,71 @@ def delete_user_layout(user_id: str, page_key: str) -> bool:
         .execute()
     )
     return bool(response.data)
+
+
+################################## TODO LIST FUNCTIONS ########################################
+
+#every todo query is filtered by user_id so a caller can only ever see or
+#change rows they own; user_id is the internal users.id (bigint), not public_id.
+
+#flips a user's incomplete todos whose due_date has passed to "late" in one
+#update. done todos are left alone, and todos with no due_date never match
+#(a null due_date fails the lt comparison). Returns the rows that changed.
+def mark_overdue_todos_late(user_id: int):
+    now = datetime.now().astimezone().isoformat()
+    response = (
+        supabase.table("todo_list")
+        .update({"status": "late"})
+        .eq("user_id", user_id)
+        .eq("status", "incomplete")
+        .lt("due_date", now)
+        .execute()
+    )
+    return response.data or []
+
+#returns a user's todos, soonest due first (undated items last), optionally
+#narrowed to one status. Overdue items are marked late first so the
+#returned statuses are always current.
+def fetch_todos_for_user(user_id: int, status: str | None = None):
+    mark_overdue_todos_late(user_id)
+    query = supabase.table("todo_list").select("*").eq("user_id", user_id)
+    if status is not None:
+        query = query.eq("status", status)
+    response = (
+        query.order("due_date", desc=False, nullsfirst=False)
+        .order("created_at", desc=False)
+        .execute()
+    )
+    return response.data or []
+
+def create_todo(user_id: int, description: str | None, due_date: str | None, status: str):
+    payload = {
+        "user_id": user_id,
+        "description": description,
+        "due_date": due_date,
+        "status": status,
+    }
+    response = supabase.table("todo_list").insert(payload).execute()
+    return response.data[0] if response.data else None
+
+#applies a partial update; returns None when the todo doesn't exist or
+#belongs to someone else.
+def update_todo(todo_id: int, user_id: int, fields: dict):
+    response = (
+        supabase.table("todo_list")
+        .update(fields)
+        .eq("id", todo_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+def delete_todo(todo_id: int, user_id: int) -> bool:
+    response = (
+        supabase.table("todo_list")
+        .delete()
+        .eq("id", todo_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    return bool(response.data)
