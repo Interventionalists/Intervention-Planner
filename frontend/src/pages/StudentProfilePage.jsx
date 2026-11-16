@@ -43,9 +43,6 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
     isLoading: sessionsLoading,
     error: sessionsError,
   } = useStudentSessions(student.id);
-  const [groupNumber, setGroupNumber] = useState(
-    student.group_number == null ? "" : String(student.group_number)
-  );
   const [subjectGoals, setSubjectGoals] = useState({});
   const [profileUpdateError, setProfileUpdateError] = useState("");
   const [profileUpdateMessage, setProfileUpdateMessage] = useState("");
@@ -84,12 +81,9 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
     "Not provided";
 
   useEffect(() => {
-    setGroupNumber(
-      student.group_number == null ? "" : String(student.group_number)
-    );
     setProfileUpdateError("");
     setProfileUpdateMessage("");
-  }, [student.id, student.group_number]);
+  }, [student.id]);
 
   useEffect(() => {
     setSubjectGoals({});
@@ -131,23 +125,6 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
     }
   };
 
-  const saveGroupNumber = (event) => {
-    event.preventDefault();
-    const parsedGroupNumber = groupNumber.trim() ? Number(groupNumber) : null;
-    if (
-      parsedGroupNumber !== null &&
-      (!Number.isInteger(parsedGroupNumber) || parsedGroupNumber < 1)
-    ) {
-      setProfileUpdateError("Enter a whole group number greater than zero.");
-      return;
-    }
-
-    updateStudentProfile(
-      { group_number: parsedGroupNumber },
-      "Group number saved."
-    );
-  };
-
   const unassignInterventionist = () =>
     updateStudentProfile(
       { interventionist: null },
@@ -169,7 +146,7 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
           </div>
           <dl className="profile-details">
             <div><dt>Teacher</dt><dd>{student.teacher}</dd></div>
-            <div><dt>Group</dt><dd>{student.group}</dd></div>
+            <div><dt>Groups</dt><dd>{student.group}</dd></div>
             <div>
               <dt>Intervention teacher</dt>
               <dd>{interventionTeacher || student.interventionTeacher || "Not assigned"}</dd>

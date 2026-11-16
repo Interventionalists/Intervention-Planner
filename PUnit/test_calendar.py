@@ -335,7 +335,9 @@ def test_create_calendar_event_for_group(client, monkeypatch):
     monkeypatch.setattr(
         calendar,
         "fetch_groups",
-        lambda school_id: [{"id": 3, "school": school_id}],
+        lambda school_id: [
+            {"id": 3, "school": school_id, "interventionist": "user-123"}
+        ],
     )
 
     def fake_create_calendar_event(event_data):
@@ -392,6 +394,42 @@ def test_create_calendar_event_rejects_group_from_another_school(
     )
 
     assert response.status_code == 404
+
+
+def test_create_calendar_event_rejects_group_owned_by_another_interventionist(
+    client, monkeypatch
+):
+    monkeypatch.setattr(
+        calendar,
+        "fetch_user_school_by_public_id",
+        lambda _public_id: 7,
+    )
+    monkeypatch.setattr(
+        calendar,
+        "fetch_groups",
+        lambda school_id: [
+            {"id": 3, "school": school_id, "interventionist": "other-user"}
+        ],
+    )
+    monkeypatch.setattr(
+        calendar,
+        "create_calendar_event",
+        lambda *_args: pytest.fail("Unauthorized group schedule reached event creation"),
+    )
+
+    response = client.post(
+        "/calendar-events",
+        json={
+            "school": 7,
+            "event_type": "Group session",
+            "title": "Reading group",
+            "starts_at": "2026-11-10T09:00:00-06:00",
+            "ends_at": "2026-11-10T09:30:00-06:00",
+            "session_group_id": 3,
+        },
+    )
+
+    assert response.status_code == 403
 
 
 def test_update_calendar_event_accepts_hex_color_for_organizer(client, monkeypatch):
@@ -551,6 +589,147 @@ def test_delete_calendar_current_occurrence_preserves_rest_of_series(client, mon
     ]
 
 
+def test_delete_calendar_series_removes_all_referencing_events_before_recurrences(
+    client, monkeypatch
+):
+    event_id = "123e4567-e89b-12d3-a456-426614174000"
+    event = {
+        "id": 9,
+        "public_id": event_id,
+        "school": 7,
+        "organizer": "user-123",
+        "series_id": "series-123",
+        "recurrence_id": 5,
+    }
+    sibling = {
+        "id": 10,
+        "public_id": "sibling-event",
+        "school": 7,
+        "organizer": "user-123",
+        "series_id": "series-123",
+        "recurrence_id": 6,
+    }
+    operations = []
+    queried_series = []
+
+    monkeypatch.setattr(calendar, "fetch_calendar_event", lambda _id: event)
+    monkeypatch.setattr(calendar, "fetch_user_school_by_public_id", lambda _id: 7)
+    monkeypatch.setattr(
+        calendar,
+        "fetch_calendar_recurrence",
+        lambda recurrence_id: {"id": recurrence_id},
+    )
+    monkeypatch.setattr(
+        calendar,
+        "fetch_calendar_events_for_series",
+        lambda *args: queried_series.append(args) or [event, sibling],
+    )
+    monkeypatch.setattr(
+        calendar,
+        "delete_calendar_event_participants",
+        lambda event_id: operations.append(("participants", event_id)),
+    )
+
+    def delete_event(public_id, school_id, organizer_id):
+        operations.append(("event", public_id, school_id, organizer_id))
+        return True
+
+    monkeypatch.setattr(calendar, "delete_calendar_event", delete_event)
+    monkeypatch.setattr(
+        calendar,
+        "delete_calendar_recurrence",
+        lambda recurrence_id: operations.append(("recurrence", recurrence_id)),
+    )
+
+    response = client.delete(f"/calendar-events/{event_id}")
+
+    assert response.status_code == 200
+    assert queried_series == [("series-123", 5, 7, "user-123")]
+    assert operations == [
+        ("participants", 9),
+        ("event", event_id, 7, "user-123"),
+        ("participants", 10),
+        ("event", "sibling-event", 7, "user-123"),
+        ("recurrence", 5),
+        ("recurrence", 6),
+    ]
+
+
+def test_delete_future_segment_does_not_delete_other_series_segments(
+    client, monkeypatch
+):
+    event_id = "123e4567-e89b-12d3-a456-426614174000"
+    event = {
+        "id": 9,
+        "public_id": event_id,
+        "school": 7,
+        "organizer": "user-123",
+        "series_id": "series-123",
+        "recurrence_id": 5,
+        "starts_at": "2026-11-04T09:00:00-06:00",
+        "ends_at": "2026-11-04T09:30:00-06:00",
+    }
+    sibling = {
+        "id": 10,
+        "public_id": "sibling-event",
+        "school": 7,
+        "organizer": "user-123",
+        "series_id": "series-123",
+        "recurrence_id": 6,
+    }
+    queried_series = []
+    deleted_events = []
+    deleted_recurrences = []
+
+    monkeypatch.setattr(calendar, "fetch_calendar_event", lambda _id: event)
+    monkeypatch.setattr(calendar, "fetch_user_school_by_public_id", lambda _id: 7)
+    monkeypatch.setattr(
+        calendar,
+        "fetch_calendar_recurrence",
+        lambda _id: {
+            "id": 5,
+            "weekdays": [2],
+            "every_n_weeks": 1,
+            "ends_on": "2026-11-04",
+        },
+    )
+    monkeypatch.setattr(calendar, "fetch_calendar_event_participants", lambda _id: [])
+
+    def fetch_series(series_id, recurrence_id, school_id, organizer_id):
+        queried_series.append(series_id)
+        return [event] if series_id is None else [event, sibling]
+
+    monkeypatch.setattr(calendar, "fetch_calendar_events_for_series", fetch_series)
+    monkeypatch.setattr(
+        calendar,
+        "delete_calendar_event_participants",
+        lambda _event_id: None,
+    )
+    monkeypatch.setattr(
+        calendar,
+        "delete_calendar_event",
+        lambda public_id, *_args: deleted_events.append(public_id) or True,
+    )
+    monkeypatch.setattr(
+        calendar,
+        "delete_calendar_recurrence",
+        lambda recurrence_id: deleted_recurrences.append(recurrence_id),
+    )
+
+    response = client.delete(
+        f"/calendar-events/{event_id}",
+        params={
+            "scope": "future",
+            "occurrence_at": "2026-11-04T09:00:00-06:00",
+        },
+    )
+
+    assert response.status_code == 200
+    assert queried_series == [None]
+    assert deleted_events == [event_id]
+    assert deleted_recurrences == [5]
+
+
 def test_edit_recurring_meeting_future_occurrences_splits_series(client, monkeypatch):
     event_id = "123e4567-e89b-12d3-a456-426614174000"
     event = {
@@ -648,6 +827,7 @@ def test_fetch_calendar_events_resolves_school_participants(monkeypatch):
                 "public_id": "not-attending-event",
                 "school": 7,
                 "organizer": "user-789",
+                "session_group_id": 3,
                 "starts_at": "2026-11-04T11:00:00-06:00",
                 "ends_at": "2026-11-04T11:30:00-06:00",
             },
@@ -800,3 +980,11 @@ def test_fetch_calendar_events_resolves_school_participants(monkeypatch):
         (9, "2026-11-11T09:00:00-06:00")
     ]
     assert next_occurrences[0]["series_starts_at"] == "2026-11-04T09:00:00-06:00"
+    group_sessions = supabase_client.fetch_calendar_events(
+        7,
+        "2026-11-02T00:00:00-06:00",
+        "2026-11-09T00:00:00-06:00",
+        "user-123",
+        session_group_ids={3},
+    )
+    assert [event["id"] for event in group_sessions] == [9, 11]

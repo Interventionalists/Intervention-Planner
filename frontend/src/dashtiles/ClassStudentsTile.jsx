@@ -23,6 +23,15 @@ function getLowestGrade(scores) {
   );
 }
 
+function getStudentGroups(student) {
+  if (Array.isArray(student.group_names)) {
+    return student.group_names.filter(
+      (groupName) => typeof groupName === "string" && groupName.trim()
+    );
+  }
+  return [];
+}
+
 function ClassStudentsTile({ students, userId, role, onStudentSelect }) {
   const isTeacher = String(role ?? "").toLowerCase() === "teacher";
   const assignedStudents = useMemo(
@@ -39,9 +48,10 @@ function ClassStudentsTile({ students, userId, role, onStudentSelect }) {
   const groups = useMemo(
     () =>
       [...new Set(
-        assignedStudents.map((student) =>
-          student.group === "—" ? "" : String(student.group)
-        )
+        assignedStudents.flatMap((student) => {
+          const studentGroups = getStudentGroups(student);
+          return studentGroups.length ? studentGroups : [""];
+        })
       )]
         .sort((first, second) => {
           if (!first) return 1;
@@ -58,8 +68,8 @@ function ClassStudentsTile({ students, userId, role, onStudentSelect }) {
     ? assignedStudents
     : assignedStudents.filter((student) =>
         activeGroup === ""
-          ? student.group === "—"
-          : String(student.group) === activeGroup
+          ? getStudentGroups(student).length === 0
+          : getStudentGroups(student).includes(activeGroup)
       );
 
   return (
@@ -92,7 +102,7 @@ function ClassStudentsTile({ students, userId, role, onStudentSelect }) {
                 : groups.length
                   ? groups.map((group) => (
                       <option key={group} value={group}>
-                        {group === "" ? "No group" : `Group ${group}`}
+                        {group === "" ? "No group" : group}
                       </option>
                     ))
                   : <option value="">No groups</option>}

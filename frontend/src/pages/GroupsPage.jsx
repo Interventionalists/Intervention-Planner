@@ -1,12 +1,39 @@
 import { useEffect, useState } from "react";
+import { AlertTriangle, X } from "lucide-react";
 import { PageHeading } from "../components/PageElements";
-import GroupScheduleModal from "../components/GroupScheduleModal";
 import GroupStudentPicker from "../components/GroupStudentPicker";
 import { apiFetch } from "../api";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
-function GroupsPage({ user }) {
+function formatGroupSessionTime(startsAtValue, endsAtValue) {
+  const startsAt = new Date(startsAtValue);
+  if (Number.isNaN(startsAt.getTime())) {
+    return "Time unavailable";
+  }
+
+  const date = startsAt.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+  const startTime = startsAt.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  const endsAt = new Date(endsAtValue);
+  const endTime = Number.isNaN(endsAt.getTime())
+    ? ""
+    : endsAt.toLocaleTimeString(undefined, {
+        hour: "numeric",
+        minute: "2-digit",
+      });
+
+  return `${date} · ${startTime}${endTime ? `–${endTime}` : ""}`;
+}
+
+function GroupsPage({ user, onStudentSelect, onScheduleGroup }) {
   const [groups, setGroups] = useState([]);
   const [students, setStudents] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -14,9 +41,11 @@ function GroupsPage({ user }) {
   const [loadError, setLoadError] = useState("");
   const [studentsError, setStudentsError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [name, setName] = useState("");
   const [purpose, setPurpose] = useState("");
   const [selectedStudentIds, setSelectedStudentIds] = useState([]);
+  const [selectedGroupId, setSelectedGroupId] = useState(null);
   const [editingGroupId, setEditingGroupId] = useState(null);
   const [editName, setEditName] = useState("");
   const [editPurpose, setEditPurpose] = useState("");
@@ -26,11 +55,33 @@ function GroupsPage({ user }) {
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
-  const [schedulingGroup, setSchedulingGroup] = useState(null);
-  const [scheduleMessage, setScheduleMessage] = useState("");
   const [deletingGroupId, setDeletingGroupId] = useState(null);
+  const [groupToDelete, setGroupToDelete] = useState(null);
   const [groupDeleteError, setGroupDeleteError] = useState(null);
   const canCreateGroups = ["admin", "interventionist"].includes(user?.role);
+  const isInterventionist = user?.role === "interventionist";
+  const selectedGroup = groups.find((group) => group.id === selectedGroupId);
+  const ownGroups = isInterventionist
+    ? user?.public_id
+      ? groups.filter(
+          (group) =>
+            String(group.interventionist ?? "") === String(user.public_id)
+        )
+      : []
+    : groups;
+  const otherGroups = isInterventionist
+    ? user?.public_id
+      ? groups.filter(
+          (group) =>
+            String(group.interventionist ?? "") !== String(user.public_id)
+        )
+      : groups
+    : [];
+  const canManageSelectedGroup =
+    user?.role === "admin" ||
+    (isInterventionist &&
+      Boolean(user?.public_id) &&
+    String(selectedGroup?.interventionist ?? "") === String(user.public_id));
 
   useEffect(() => {
     const controller = new AbortController();
@@ -127,6 +178,7 @@ function GroupsPage({ user }) {
       setName("");
       setPurpose("");
       setSelectedStudentIds([]);
+      setIsCreateOpen(false);
       setSuccessMessage(
         selectedStudentIds.length
           ? `Group created and ${selectedStudentIds.length} student${selectedStudentIds.length === 1 ? "" : "s"} added.`
@@ -153,6 +205,15 @@ function GroupsPage({ user }) {
     setEditPurpose("");
     setEditStudentIds([]);
     setEditError("");
+  };
+
+  const closeCreateModal = () => {
+    if (isSaving) return;
+    setIsCreateOpen(false);
+    setName("");
+    setPurpose("");
+    setSelectedStudentIds([]);
+    setFormError("");
   };
 
   const saveGroup = async (event, groupId) => {
@@ -193,15 +254,20 @@ function GroupsPage({ user }) {
     }
   };
 
-  const deleteGroup = async (group) => {
-    if (
-      !window.confirm(
-        `Delete "${group.name}"? This will remove the group and its student memberships. Existing scheduled events will remain without this group link. This action cannot be undone.`
-      )
-    ) {
-      return;
-    }
+  const deleteGroup = (group) => {
+    setGroupDeleteError(null);
+    setGroupToDelete(group);
+  };
 
+  const cancelGroupDeletion = () => {
+    if (deletingGroupId !== null) return;
+    setGroupToDelete(null);
+    setGroupDeleteError(null);
+  };
+
+  const confirmDeleteGroup = async () => {
+    if (!groupToDelete) return;
+    const group = groupToDelete;
     setGroupDeleteError(null);
     setDeletingGroupId(group.id);
     try {
@@ -219,6 +285,8 @@ function GroupsPage({ user }) {
       setGroups((currentGroups) =>
         currentGroups.filter((currentGroup) => currentGroup.id !== group.id)
       );
+      setSelectedGroupId(null);
+      setGroupToDelete(null);
     } catch (error) {
       setGroupDeleteError({
         groupId: group.id,
@@ -229,18 +297,141 @@ function GroupsPage({ user }) {
     }
   };
 
+  const renderGroupSection = (title, sectionGroups, emptyMessage) => (
+    <section className="groups-subsection">
+      <div className="groups-section-heading">
+        <h2>{title}</h2>
+        <span>{sectionGroups.length} {sectionGroups.length === 1 ? "group" : "groups"}</span>
+      </div>
+      {sectionGroups.length ? (
+        <div className="groups-list">
+          {sectionGroups.map((group) => (
+            <article className="card group-card" key={group.public_id || group.id}>
+              <button
+                type="button"
+                className="group-card-open"
+                aria-label={`View ${group.name} group`}
+                onClick={() => {
+                  cancelEditingGroup();
+                  setGroupDeleteError(null);
+                  setSelectedGroupId(group.id);
+                }}
+              >
+                <span className="group-card-topline">
+                  <span className="group-card-member-count">
+                    {(group.student_ids || []).length} {(group.student_ids || []).length === 1 ? "student" : "students"}
+                  </span>
+                  <span className="group-card-arrow" aria-hidden="true">View group ›</span>
+                </span>
+                <span className="group-card-name">{group.name}</span>
+                <span className="group-card-purpose">{group.purpose}</span>
+                {(group.interventionist_name || group.interventionist) && (
+                  <span className="group-card-owner">
+                    {group.interventionist_name || "Assigned interventionist"}
+                  </span>
+                )}
+              </button>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="card">
+          <p>{emptyMessage}</p>
+        </div>
+      )}
+    </section>
+  );
+
   return (
     <>
-      <PageHeading
-        eyebrow="Groups"
-        title="Intervention groups"
-        subtitle="Create and review intervention groups at your school."
-      />
+      <div className="groups-page-header">
+        <PageHeading
+          eyebrow="Groups"
+          title="Intervention groups"
+          subtitle="Browse group members and schedule sessions from one place."
+        />
+        {canCreateGroups && (
+          <button
+            className="groups-add-button"
+            type="button"
+            onClick={() => {
+              setFormError("");
+              setSuccessMessage("");
+              setIsCreateOpen(true);
+            }}
+          >
+            Create group
+          </button>
+        )}
+      </div>
 
-      {canCreateGroups && (
-        <section className="card groups-create-layout">
-          <div className="groups-create-card">
-            <h2>Create a group</h2>
+      <section className="student-list-section groups-list-section">
+        {successMessage && <p className="assignment-success" role="status">{successMessage}</p>}
+        {isLoading ? (
+          <div className="card" role="status">Loading groups...</div>
+        ) : loadError ? (
+          <div className="card" role="alert">
+            <p>{loadError}</p>
+            <button
+              className="text-button"
+              type="button"
+              onClick={() => setReloadKey((key) => key + 1)}
+            >
+              Try again
+            </button>
+          </div>
+        ) : isInterventionist ? (
+          <div className="groups-section-stack">
+            {renderGroupSection(
+              "My intervention groups",
+              ownGroups,
+              "You don’t have any intervention groups assigned to you yet."
+            )}
+            {renderGroupSection(
+              "Other intervention groups",
+              otherGroups,
+              "No other intervention groups are available."
+            )}
+          </div>
+        ) : (
+          renderGroupSection(
+            "School groups",
+            groups,
+            "No intervention groups have been created for this school yet."
+          )
+        )}
+      </section>
+      {isCreateOpen && (
+        <div
+          className="calendar-event-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeCreateModal();
+          }}
+        >
+          <section
+            className="calendar-event-modal group-create-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="group-create-title"
+          >
+            <header className="calendar-event-modal-header">
+              <div>
+                <p className="calendar-event-modal-eyebrow">Groups</p>
+                <h2 id="group-create-title">Create a group</h2>
+                <p className="calendar-event-modal-subtitle">
+                  Add a group name, intervention focus, and students.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="calendar-event-modal-close"
+                onClick={closeCreateModal}
+                disabled={isSaving}
+                aria-label="Close create group form"
+              >
+                <X size={18} />
+              </button>
+            </header>
             <form className="groups-create-form" onSubmit={createGroup}>
               <label>
                 Group name
@@ -261,178 +452,377 @@ function GroupsPage({ user }) {
                   placeholder="Describe the group's intervention focus"
                 />
               </label>
+              <div className="groups-create-students">
+                <div>
+                  <h3>{user?.role === "admin" ? "School students" : "Assigned to you"}</h3>
+                  <p className="groups-student-hint">Choose students to include in this group.</p>
+                </div>
+                <GroupStudentPicker
+                  students={students}
+                  selectedStudentIds={selectedStudentIds}
+                  onSelectionChange={(studentIds) => {
+                    setSelectedStudentIds(studentIds);
+                    setFormError("");
+                    setSuccessMessage("");
+                  }}
+                  isLoading={areStudentsLoading}
+                  error={studentsError}
+                  disabled={isSaving}
+                />
+              </div>
               <p className="groups-selected-count" aria-live="polite">
                 {selectedStudentIds.length
                   ? `${selectedStudentIds.length} student${selectedStudentIds.length === 1 ? "" : "s"} selected`
-                  : "Select students to add to this group."}
+                  : "No students selected yet."}
               </p>
               {formError && <p className="assignment-error" role="alert">{formError}</p>}
-              {successMessage && <p className="assignment-success" role="status">{successMessage}</p>}
-              <button className="primary-button" type="submit" disabled={isSaving}>
-                {isSaving ? "Creating..." : "Create group"}
-              </button>
+              <div className="group-edit-actions">
+                <button className="groups-modal-primary" type="submit" disabled={isSaving}>
+                  {isSaving ? "Creating..." : "Create group"}
+                </button>
+                <button
+                  className="ghost-button"
+                  type="button"
+                  onClick={closeCreateModal}
+                  disabled={isSaving}
+                >
+                  Cancel
+                </button>
+              </div>
             </form>
-          </div>
-
-          <div className="groups-assigned-students">
-            <h2>{user?.role === "admin" ? "School students" : "Assigned to you"}</h2>
-            <p className="groups-student-hint">
-              Choose the students to include in this group.
-            </p>
-            <GroupStudentPicker
-              students={students}
-              selectedStudentIds={selectedStudentIds}
-              onSelectionChange={(studentIds) => {
-                setSelectedStudentIds(studentIds);
-                setFormError("");
-                setSuccessMessage("");
-              }}
-              isLoading={areStudentsLoading}
-              error={studentsError}
-              disabled={isSaving}
-            />
-          </div>
-        </section>
+          </section>
+        </div>
       )}
-
-      <section className="student-list-section groups-list-section">
-        <h2>School groups</h2>
-        {scheduleMessage && <p className="assignment-success" role="status">{scheduleMessage}</p>}
-        {isLoading ? (
-          <div className="card" role="status">Loading groups...</div>
-        ) : loadError ? (
-          <div className="card" role="alert">
-            <p>{loadError}</p>
-            <button
-              className="text-button"
-              type="button"
-              onClick={() => setReloadKey((key) => key + 1)}
-            >
-              Try again
-            </button>
-          </div>
-        ) : groups.length ? (
-          <div className="groups-list">
-            {groups.map((group) => (
-              <article className="card group-card" key={group.public_id || group.id}>
-                {editingGroupId === group.id ? (
-                  <form
-                    className="group-edit-form"
-                    onSubmit={(event) => saveGroup(event, group.id)}
-                  >
-                    <label>
-                      Group name
-                      <input
-                        required
-                        value={editName}
-                        onChange={(event) => setEditName(event.target.value)}
-                      />
-                    </label>
-                    <label>
-                      Purpose
-                      <textarea
-                        required
-                        rows={3}
-                        value={editPurpose}
-                        onChange={(event) => setEditPurpose(event.target.value)}
-                      />
-                    </label>
-                    <fieldset className="group-edit-students">
-                      <legend>Students</legend>
-                      <GroupStudentPicker
-                        students={students}
-                        selectedStudentIds={editStudentIds}
-                        onSelectionChange={setEditStudentIds}
-                        isLoading={areStudentsLoading}
-                        error={studentsError}
-                        disabled={isEditing}
-                      />
-                    </fieldset>
-                    {editError && <p className="assignment-error" role="alert">{editError}</p>}
-                    <div className="group-edit-actions">
-                      <button
-                        className="primary-button group-edit-save-button"
-                        type="submit"
-                        disabled={isEditing || areStudentsLoading || Boolean(studentsError)}
-                      >
-                        {isEditing ? "Saving..." : "Save changes"}
-                      </button>
-                      <button
-                        className="ghost-button"
-                        type="button"
-                        onClick={cancelEditingGroup}
-                        disabled={isEditing}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </form>
-                ) : (
-                  <div className="group-card-details">
-                    <div>
-                      <h3>{group.name}</h3>
-                      <p>{group.purpose}</p>
-                    </div>
-                    {canCreateGroups && (
-                      <div className="group-card-actions">
-                        <button
-                          className="ghost-button"
-                          type="button"
-                          onClick={() => startEditingGroup(group)}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          className="ghost-button"
-                          type="button"
-                          onClick={() => {
-                            setScheduleMessage("");
-                            setSchedulingGroup(group);
-                          }}
-                          disabled={deletingGroupId !== null}
-                        >
-                          Schedule
-                        </button>
-                        <button
-                          className="ghost-button group-delete-button"
-                          type="button"
-                          onClick={() => deleteGroup(group)}
-                          disabled={deletingGroupId !== null}
-                        >
-                          {deletingGroupId === group.id ? "Deleting..." : "Delete"}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-                {groupDeleteError?.groupId === group.id && (
-                  <p className="assignment-error group-delete-error" role="alert">
-                    {groupDeleteError.message}
+      {selectedGroup && !groupToDelete && (
+        <div
+          className="calendar-event-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !isEditing) {
+              setSelectedGroupId(null);
+              cancelEditingGroup();
+            }
+          }}
+        >
+          <section
+            className="calendar-event-modal group-detail-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="group-detail-title"
+          >
+            <header className="calendar-event-modal-header">
+              <div>
+                <p className="calendar-event-modal-eyebrow">Intervention group</p>
+                <h2 id="group-detail-title">{editingGroupId === selectedGroup.id ? "Edit group" : selectedGroup.name}</h2>
+                {!editingGroupId && (
+                  <p className="calendar-event-modal-subtitle">
+                    {(selectedGroup.student_ids || []).length} {(selectedGroup.student_ids || []).length === 1 ? "student" : "students"}
+                    {(selectedGroup.interventionist_name || selectedGroup.interventionist)
+                      ? ` · ${selectedGroup.interventionist_name || "Assigned interventionist"}`
+                      : ""}
                   </p>
                 )}
-                {(group.interventionist_name || group.interventionist) && (
-                  <span className="group-owner">
-                    {group.interventionist_name || "Assigned"}
-                  </span>
+              </div>
+              <button
+                type="button"
+                className="calendar-event-modal-close"
+                onClick={() => {
+                  setSelectedGroupId(null);
+                  cancelEditingGroup();
+                }}
+                disabled={isEditing}
+                aria-label="Close group details"
+              >
+                <X size={18} />
+              </button>
+            </header>
+            {editingGroupId === selectedGroup.id ? (
+              <form
+                className="group-edit-form"
+                onSubmit={(event) => saveGroup(event, selectedGroup.id)}
+              >
+                <label>
+                  Group name
+                  <input
+                    required
+                    value={editName}
+                    onChange={(event) => setEditName(event.target.value)}
+                  />
+                </label>
+                <label>
+                  Purpose
+                  <textarea
+                    required
+                    rows={3}
+                    value={editPurpose}
+                    onChange={(event) => setEditPurpose(event.target.value)}
+                  />
+                </label>
+                <fieldset className="group-edit-students">
+                  <legend>Students</legend>
+                  <GroupStudentPicker
+                    students={students}
+                    selectedStudentIds={editStudentIds}
+                    onSelectionChange={setEditStudentIds}
+                    isLoading={areStudentsLoading}
+                    error={studentsError}
+                    disabled={isEditing}
+                  />
+                </fieldset>
+                {editError && <p className="assignment-error" role="alert">{editError}</p>}
+                <div className="group-edit-actions">
+                  <button
+                    className="groups-modal-primary"
+                    type="submit"
+                    disabled={isEditing || areStudentsLoading || Boolean(studentsError)}
+                  >
+                    {isEditing ? "Saving..." : "Save changes"}
+                  </button>
+                  <button
+                    className="ghost-button"
+                    type="button"
+                    onClick={cancelEditingGroup}
+                    disabled={isEditing}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <>
+                <p className="group-detail-purpose">{selectedGroup.purpose}</p>
+                {isInterventionist && !canManageSelectedGroup && (
+                  <p className="group-read-only-notice">
+                    You can view this group, but only its assigned interventionist or an admin can edit or delete it.
+                  </p>
                 )}
-              </article>
-            ))}
-          </div>
-        ) : (
-          <div className="card">
-            <p>No intervention groups have been created for this school yet.</p>
-          </div>
-        )}
-      </section>
-      {schedulingGroup && (
-        <GroupScheduleModal
-          group={schedulingGroup}
-          onClose={() => setSchedulingGroup(null)}
-          onScheduled={(message) => {
-            setScheduleMessage(message);
-            setSchedulingGroup(null);
+                <section className="group-members-section">
+                  <div className="groups-section-heading">
+                    <h3>Students in this group</h3>
+                    <span>{(selectedGroup.student_ids || []).length}</span>
+                  </div>
+                  {(selectedGroup.student_ids || []).length ? (
+                    <ul className="group-members-list">
+                      {selectedGroup.student_ids.map((studentId) => {
+                        const profile = selectedGroup.students?.find(
+                          (candidate) => String(candidate.id) === String(studentId)
+                        );
+                        const rosterStudent = students.find(
+                          (candidate) => String(candidate.id) === String(studentId)
+                        );
+                        const student = rosterStudent || profile;
+                        const studentName =
+                          [student?.first_name, student?.last_name].filter(Boolean).join(" ") ||
+                          student?.name ||
+                          "Student profile unavailable";
+                        const grade = student?.grade_level ?? student?.grade ?? "—";
+                        const memberContent = (
+                          <>
+                            <span className="group-member-avatar" aria-hidden="true">
+                              {studentName === "Student profile unavailable"
+                                ? "?"
+                                : studentName.charAt(0).toUpperCase()}
+                              {student?.profile_api_link && (
+                                <img
+                                  src={student.profile_api_link}
+                                  alt=""
+                                  onError={(event) => event.currentTarget.remove()}
+                                />
+                              )}
+                            </span>
+                            <span className="group-member-info">
+                              <strong>{studentName}</strong>
+                              {student && <small>Grade {grade}</small>}
+                            </span>
+                          </>
+                        );
+
+                        return (
+                          <li key={studentId}>
+                            {rosterStudent && onStudentSelect ? (
+                              <button
+                                type="button"
+                                className="group-member-open"
+                                onClick={() =>
+                                  onStudentSelect({
+                                    ...rosterStudent,
+                                    name: studentName,
+                                    grade,
+                                    teacher:
+                                      rosterStudent.teacher_name || rosterStudent.teacher || "—",
+                                    interventionTeacher:
+                                      rosterStudent.interventionist_name ||
+                                      rosterStudent.interventionist ||
+                                      "—",
+                                    group_names: rosterStudent.group_names || [],
+                                    group: rosterStudent.group_names?.join(", ") || "—",
+                                    avatar:
+                                      rosterStudent.profile_api_link ||
+                                      rosterStudent.avatar ||
+                                      null,
+                                  })
+                                }
+                                aria-label={`Open ${studentName}'s profile`}
+                              >
+                                {memberContent}
+                                <span className="group-member-profile-link">View profile</span>
+                              </button>
+                            ) : (
+                              <div className="group-member-static">{memberContent}</div>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : (
+                    <p className="group-members-empty">No students have been added to this group.</p>
+                  )}
+                </section>
+                <section className="group-schedule-section">
+                  <div className="groups-section-heading">
+                    <h3>Upcoming sessions</h3>
+                    <span>Next 90 days</span>
+                  </div>
+                  {selectedGroup.sessions?.length ? (
+                    <ul className="group-sessions-list">
+                      {selectedGroup.sessions.map((session) => (
+                        <li
+                          key={`${session.public_id}-${session.starts_at}`}
+                        >
+                          <strong>{session.title || "Group session"}</strong>
+                          <time dateTime={session.starts_at}>
+                            {formatGroupSessionTime(
+                              session.starts_at,
+                              session.ends_at
+                            )}
+                          </time>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="group-sessions-empty">
+                      No sessions scheduled in the next 90 days.
+                    </p>
+                  )}
+                </section>
+                {groupDeleteError?.groupId === selectedGroup.id && (
+                  <p className="assignment-error" role="alert">{groupDeleteError.message}</p>
+                )}
+                <div className="group-detail-actions">
+                  {canCreateGroups && (
+                    <>
+                      {canManageSelectedGroup && (
+                        <button
+                          className="ghost-button"
+                          type="button"
+                          onClick={() => startEditingGroup(selectedGroup)}
+                          disabled={deletingGroupId !== null}
+                        >
+                          Edit group
+                        </button>
+                      )}
+                      {canManageSelectedGroup && (
+                        <button
+                          className="groups-modal-primary"
+                          type="button"
+                          onClick={() => onScheduleGroup(selectedGroup)}
+                          disabled={deletingGroupId !== null}
+                        >
+                          Schedule session
+                        </button>
+                      )}
+                      {canManageSelectedGroup && (
+                        <button
+                          className="ghost-button groups-danger-button"
+                          type="button"
+                          onClick={() => deleteGroup(selectedGroup)}
+                          disabled={deletingGroupId !== null}
+                        >
+                          {deletingGroupId === selectedGroup.id ? "Deleting..." : "Delete"}
+                        </button>
+                      )}
+                    </>
+                  )}
+                  <button
+                    className="ghost-button"
+                    type="button"
+                    onClick={() => setSelectedGroupId(null)}
+                  >
+                    Close
+                  </button>
+                </div>
+              </>
+            )}
+          </section>
+        </div>
+      )}
+      {groupToDelete && (
+        <div
+          className="calendar-event-modal-backdrop group-delete-confirm-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) cancelGroupDeletion();
           }}
-        />
+        >
+          <section
+            className="calendar-event-modal group-delete-confirm-modal"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="group-delete-confirm-title"
+            aria-describedby="group-delete-confirm-description"
+          >
+            <header className="group-delete-confirm-header">
+              <span className="group-delete-confirm-icon" aria-hidden="true">
+                <AlertTriangle size={21} />
+              </span>
+              <div>
+                <p className="calendar-event-modal-eyebrow">Delete group</p>
+                <h2 id="group-delete-confirm-title">
+                  Delete “{groupToDelete.name}”?
+                </h2>
+              </div>
+              <button
+                type="button"
+                className="calendar-event-modal-close"
+                onClick={cancelGroupDeletion}
+                disabled={deletingGroupId !== null}
+                aria-label="Close delete confirmation"
+              >
+                <X size={18} />
+              </button>
+            </header>
+            <p id="group-delete-confirm-description" className="group-delete-confirm-description">
+              This action is permanent. The group’s calendar sessions will be deleted along with the group.
+            </p>
+            <div className="group-delete-confirm-summary">
+              <strong>This will remove</strong>
+              <ul>
+                <li>The group and its student memberships</li>
+                <li>All linked calendar sessions, including past, future, and recurring sessions</li>
+                <li>Session invitations and participants</li>
+              </ul>
+            </div>
+            {groupDeleteError?.groupId === groupToDelete.id && (
+              <p className="assignment-error" role="alert">{groupDeleteError.message}</p>
+            )}
+            <footer className="group-delete-confirm-actions">
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={cancelGroupDeletion}
+                disabled={deletingGroupId !== null}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="groups-delete-confirm-button"
+                onClick={confirmDeleteGroup}
+                disabled={deletingGroupId !== null}
+              >
+                {deletingGroupId === groupToDelete.id ? "Deleting…" : "Delete group"}
+              </button>
+            </footer>
+          </section>
+        </div>
       )}
     </>
   );

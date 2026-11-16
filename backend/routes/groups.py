@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -5,7 +7,10 @@ from auth.security import get_current_user
 from database.supabase_client import (
     add_students_to_group,
     create_groups,
+    fetch_calendar_events,
+    fetch_group,
     fetch_groups,
+    fetch_group_students,
     fetch_group_student_ids,
     fetch_interventionist_students,
     fetch_interventionists,
@@ -17,6 +22,17 @@ from database.supabase_client import (
 )
 
 router = APIRouter()
+
+
+def _ensure_group_manage_access(group_id: int, school_id: int, user: dict):
+    group = fetch_group(group_id, school_id)
+    if group is None:
+        raise HTTPException(status_code=404, detail="Group not found.")
+    if str(group.get("interventionist")) != str(user["public_id"]):
+        raise HTTPException(
+            status_code=403,
+            detail="You can only manage groups assigned to you.",
+        )
 
 
 class GroupCreate(BaseModel):
@@ -37,9 +53,35 @@ def get_groups(user: dict = Depends(get_current_user)):
                 detail="The signed-in user does not have a school assigned.",
             )
         groups = fetch_groups(school_id)
+        group_ids = [group["id"] for group in groups]
+        sessions_by_group = {group_id: [] for group_id in group_ids}
+        if group_ids:
+            range_start = datetime.now().astimezone()
+            upcoming_sessions = fetch_calendar_events(
+                school_id,
+                range_start.isoformat(),
+                (range_start + timedelta(days=90)).isoformat(),
+                user["public_id"],
+                session_group_ids=set(group_ids),
+            )
+            for session in upcoming_sessions:
+                group_id = session.get("session_group_id")
+                if group_id in sessions_by_group:
+                    sessions_by_group[group_id].append({
+                        "public_id": session["public_id"],
+                        "title": session.get("title"),
+                        "starts_at": session["starts_at"],
+                        "ends_at": session["ends_at"],
+                    })
         student_ids_by_group = fetch_group_student_ids(
-            [group["id"] for group in groups]
+            group_ids
         )
+        student_ids = list({
+            student_id
+            for group_student_ids in student_ids_by_group.values()
+            for student_id in group_student_ids
+        })
+        students_by_id = fetch_group_students(student_ids, school_id)
         interventionists = fetch_interventionists(school_id)
         names_by_id = {
             str(interventionist["public_id"]): " ".join(
@@ -56,6 +98,12 @@ def get_groups(user: dict = Depends(get_current_user)):
             {
                 **group,
                 "student_ids": student_ids_by_group.get(group["id"], []),
+                "sessions": sessions_by_group.get(group["id"], []),
+                "students": [
+                    students_by_id[student_id]
+                    for student_id in student_ids_by_group.get(group["id"], [])
+                    if student_id in students_by_id
+                ],
                 "interventionist_name": names_by_id.get(
                     str(group.get("interventionist"))
                 ),
@@ -151,6 +199,8 @@ def update_group(
                 status_code=403,
                 detail="The signed-in user does not have a school assigned.",
             )
+        if user["role"] == "interventionist":
+            _ensure_group_manage_access(group_id, school_id, user)
         if payload.student_ids is not None:
             if len(payload.student_ids) != len(set(payload.student_ids)):
                 raise HTTPException(
@@ -209,6 +259,8 @@ def remove_group(
                 status_code=403,
                 detail="The signed-in user does not have a school assigned.",
             )
+        if user["role"] == "interventionist":
+            _ensure_group_manage_access(group_id, school_id, user)
         deleted = delete_group_record(group_id, school_id)
     except HTTPException:
         raise
