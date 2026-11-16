@@ -12,7 +12,7 @@ function SelectedStudentTile({
       <h2>{student.name}</h2>
       <p>Grade: {student.grade}</p>
       <p>Teacher: {student.teacher}</p>
-      {student.group !== "—" && <p>Group: {student.group}</p>}
+      {student.group !== "—" && <p>Groups: {student.group}</p>}
       <p>Int. Teacher: {student.interventionTeacher}</p>
       <select
         value={student.id ?? ""}

@@ -25,6 +25,7 @@ from database.supabase_client import (
     fetch_calendar_event,
     fetch_calendar_event_participants,
     fetch_calendar_events,
+    fetch_calendar_events_for_series,
     fetch_groups,
     fetch_calendar_invitees,
     fetch_calendar_recurrence,
@@ -496,17 +497,36 @@ def _has_series_occurrence_before(
     return False
 
 
-def _delete_event_and_recurrence(event: dict) -> None:
-    delete_calendar_event_participants(event["id"])
-    deleted = delete_calendar_event(
-        event["public_id"],
+def _delete_event_and_recurrence(
+    event: dict,
+    include_series: bool = False,
+) -> None:
+    series_events = fetch_calendar_events_for_series(
+        event.get("series_id") if include_series else None,
+        event.get("recurrence_id"),
         event["school"],
         event["organizer"],
     )
-    if not deleted:
-        raise RuntimeError("Calendar event deletion failed.")
-    if event.get("recurrence_id") is not None:
-        delete_calendar_recurrence(event["recurrence_id"])
+    events_by_id = {series_event["id"]: series_event for series_event in series_events}
+    events_by_id[event["id"]] = event
+    recurrence_ids = {
+        series_event["recurrence_id"]
+        for series_event in events_by_id.values()
+        if series_event.get("recurrence_id") is not None
+    }
+
+    for series_event in events_by_id.values():
+        delete_calendar_event_participants(series_event["id"])
+        deleted = delete_calendar_event(
+            series_event["public_id"],
+            series_event["school"],
+            series_event["organizer"],
+        )
+        if not deleted:
+            raise RuntimeError("Calendar event deletion failed.")
+
+    for recurrence_id in recurrence_ids:
+        delete_calendar_recurrence(recurrence_id)
 
 
 def _validate_invitees(participants, school_id: int) -> None:
@@ -647,10 +667,26 @@ def add_calendar_event(
             event_data["series_id"] = str(payload.series_id or uuid4())
         if payload.session_group_id is not None:
             groups = fetch_groups(school_id)
-            if not any(group["id"] == payload.session_group_id for group in groups):
+            group = next(
+                (
+                    candidate
+                    for candidate in groups
+                    if candidate["id"] == payload.session_group_id
+                ),
+                None,
+            )
+            if group is None:
                 raise HTTPException(
                     status_code=404,
                     detail="Intervention group not found.",
+                )
+            if (
+                user["role"] == "interventionist"
+                and str(group.get("interventionist")) != str(user["public_id"])
+            ):
+                raise HTTPException(
+                    status_code=403,
+                    detail="You can only schedule sessions for groups assigned to you.",
                 )
         event_data.update(
             school=school_id,
@@ -914,7 +950,7 @@ def remove_calendar_event(
         if event.get("recurrence_id") is not None and recurrence is None:
             raise HTTPException(status_code=500, detail="Meeting recurrence was not found.")
         if recurrence is None or scope == "series":
-            _delete_event_and_recurrence(event)
+                _delete_event_and_recurrence(event, include_series=scope == "series")
         else:
             if occurrence_at is None:
                 raise HTTPException(

@@ -21,6 +21,18 @@ def client():
     app.dependency_overrides.clear()
 
 
+def allow_group_management(monkeypatch, owner="user-123"):
+    monkeypatch.setattr(
+        groups,
+        "fetch_group",
+        lambda group_id, school_id: {
+            "id": group_id,
+            "school": school_id,
+            "interventionist": owner,
+        },
+    )
+
+
 def test_fetch_groups_scopes_to_school_and_includes_interventionist_name(
     client, monkeypatch
 ):
@@ -29,6 +41,39 @@ def test_fetch_groups_scopes_to_school_and_includes_interventionist_name(
     )
     monkeypatch.setattr(
         groups, "fetch_group_student_ids", lambda group_ids: {3: [11, 12]}
+    )
+    monkeypatch.setattr(
+        groups,
+        "fetch_calendar_events",
+        lambda school_id, range_start, range_end, user_public_id, **kwargs: [
+            {
+                "public_id": "event-3",
+                "title": "Reading group",
+                "starts_at": "2026-11-18T09:00:00-06:00",
+                "ends_at": "2026-11-18T09:30:00-06:00",
+                "session_group_id": 3,
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        groups,
+        "fetch_group_students",
+        lambda student_ids, school_id: {
+            11: {
+                "id": 11,
+                "first_name": "Avery",
+                "last_name": "Student",
+                "grade_level": 4,
+                "profile_api_link": "https://example.test/avery.png",
+            },
+            12: {
+                "id": 12,
+                "first_name": "Jordan",
+                "last_name": "Student",
+                "grade_level": 5,
+                "profile_api_link": None,
+            },
+        },
     )
     monkeypatch.setattr(
         groups,
@@ -66,6 +111,30 @@ def test_fetch_groups_scopes_to_school_and_includes_interventionist_name(
             "interventionist": "user-123",
             "school": 7,
             "student_ids": [11, 12],
+            "sessions": [
+                {
+                    "public_id": "event-3",
+                    "title": "Reading group",
+                    "starts_at": "2026-11-18T09:00:00-06:00",
+                    "ends_at": "2026-11-18T09:30:00-06:00",
+                }
+            ],
+            "students": [
+                {
+                    "id": 11,
+                    "first_name": "Avery",
+                    "last_name": "Student",
+                    "grade_level": 4,
+                    "profile_api_link": "https://example.test/avery.png",
+                },
+                {
+                    "id": 12,
+                    "first_name": "Jordan",
+                    "last_name": "Student",
+                    "grade_level": 5,
+                    "profile_api_link": None,
+                },
+            ],
             "interventionist_name": "Taylor Teacher",
         }
     ]
@@ -213,6 +282,7 @@ def test_edit_group_updates_name_and_purpose_in_callers_school(client, monkeypat
     monkeypatch.setattr(
         groups, "fetch_user_school_by_public_id", lambda _public_id: 7
     )
+    allow_group_management(monkeypatch)
     updated = {}
 
     def fake_update_group(group_id, school_id, updates):
@@ -245,6 +315,7 @@ def test_edit_group_rejects_missing_group(client, monkeypatch):
     monkeypatch.setattr(
         groups, "fetch_user_school_by_public_id", lambda _public_id: 7
     )
+    allow_group_management(monkeypatch)
     monkeypatch.setattr(groups, "update_group_record", lambda *_args: None)
 
     response = client.put(
@@ -259,6 +330,7 @@ def test_edit_group_replaces_selected_students(client, monkeypatch):
     monkeypatch.setattr(
         groups, "fetch_user_school_by_public_id", lambda _public_id: 7
     )
+    allow_group_management(monkeypatch)
     monkeypatch.setattr(
         groups,
         "fetch_interventionist_students",
@@ -310,6 +382,7 @@ def test_edit_group_rejects_students_not_assigned_to_interventionist(
     monkeypatch.setattr(
         groups, "fetch_user_school_by_public_id", lambda _public_id: 7
     )
+    allow_group_management(monkeypatch)
     monkeypatch.setattr(
         groups, "fetch_interventionist_students", lambda *_args: []
     )
@@ -331,10 +404,32 @@ def test_edit_group_rejects_students_not_assigned_to_interventionist(
     assert response.status_code == 400
 
 
+def test_edit_group_rejects_group_owned_by_another_interventionist(
+    client, monkeypatch
+):
+    monkeypatch.setattr(
+        groups, "fetch_user_school_by_public_id", lambda _public_id: 7
+    )
+    allow_group_management(monkeypatch, owner="other-user")
+    monkeypatch.setattr(
+        groups,
+        "update_group_record",
+        lambda *_args: pytest.fail("Unauthorized group edit reached database"),
+    )
+
+    response = client.put(
+        "/groups-edit/3",
+        json={"name": "Updated group", "purpose": "Updated purpose"},
+    )
+
+    assert response.status_code == 403
+
+
 def test_delete_group_deletes_from_callers_school(client, monkeypatch):
     monkeypatch.setattr(
         groups, "fetch_user_school_by_public_id", lambda _public_id: 7
     )
+    allow_group_management(monkeypatch)
     deleted = {}
 
     def fake_delete_group(group_id, school_id):
@@ -350,10 +445,29 @@ def test_delete_group_deletes_from_callers_school(client, monkeypatch):
     assert response.json() == {"deleted": True}
 
 
+def test_delete_group_rejects_group_owned_by_another_interventionist(
+    client, monkeypatch
+):
+    monkeypatch.setattr(
+        groups, "fetch_user_school_by_public_id", lambda _public_id: 7
+    )
+    allow_group_management(monkeypatch, owner="other-user")
+    monkeypatch.setattr(
+        groups,
+        "delete_group_record",
+        lambda *_args: pytest.fail("Unauthorized group deletion reached database"),
+    )
+
+    response = client.delete("/groups-delete/3")
+
+    assert response.status_code == 403
+
+
 def test_delete_group_returns_not_found(client, monkeypatch):
     monkeypatch.setattr(
         groups, "fetch_user_school_by_public_id", lambda _public_id: 7
     )
+    allow_group_management(monkeypatch)
     monkeypatch.setattr(groups, "delete_group_record", lambda *_args: False)
 
     response = client.delete("/groups-delete/999")

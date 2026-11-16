@@ -6,7 +6,7 @@ function StudentsList({ list, selectedStudent, onSelect }) {
           <span className="student-name-header">Student</span>
           <span>Grade</span>
           <span>Teacher</span>
-          <span>Group</span>
+          <span>Groups</span>
           <span>Lowest Grade</span>
         </div>
         {list.map((student) => {

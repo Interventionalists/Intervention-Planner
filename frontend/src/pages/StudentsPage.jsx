@@ -12,17 +12,19 @@ function formatStudent(record) {
     record.name ||
     [record.first_name, record.last_name].filter(Boolean).join(" ") ||
     "Unnamed student";
+  const groupNames = Array.isArray(record.group_names)
+    ? record.group_names.filter(
+        (groupName) => typeof groupName === "string" && groupName.trim()
+      )
+    : [];
 
   return {
     ...record,
     name,
     grade: record.grade ?? record.grade_level ?? "—",
     teacher: record.teacher_name ?? record.teacher ?? "—",
-    group:
-      record.group_number ??
-      record.group ??
-      record.intervention_group ??
-      "—",
+    group_names: groupNames,
+    group: groupNames.join(", ") || "—",
     interventionTeacher:
       record.intervention_teacher_name ??
       record.interventionist_name ??
@@ -349,7 +351,7 @@ function StudentsPage({ query = "", selectedStudent, onSelect, userId }) {
                       <div>
                         <strong>{student.name}</strong>
                         <small>Grade {student.grade}</small>
-                        <small>Group {student.group}</small>
+                        <small>Groups: {student.group}</small>
                       </div>
                     </button>
                     <div className="student-assignment-controls">
