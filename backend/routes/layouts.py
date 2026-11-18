@@ -1,4 +1,5 @@
 import json
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel
@@ -6,6 +7,7 @@ from pydantic import BaseModel
 from auth.security import get_current_user
 from database.supabase_client import (
     delete_user_layout,
+    delete_user_layouts_with_prefix,
     fetch_user_layout,
     upsert_user_layout,
 )
@@ -52,6 +54,24 @@ def save_layout(
     if row is None:
         raise HTTPException(status_code=500, detail="Layout could not be saved.")
     return {"layout": row["layout"], "updated_at": row["updated_at"]}
+
+
+#resets a whole group of pages back to the app's default layout by deleting
+#the user's saved copies. Student layouts are stored one row per student, so
+#"students" clears every student profile page at once.
+@router.delete("/layouts")
+def reset_layouts(
+    scope: Literal["dashboard", "students"],
+    user: dict = Depends(get_current_user),
+):
+    try:
+        if scope == "dashboard":
+            deleted = 1 if delete_user_layout(user["public_id"], "dashboard") else 0
+        else:
+            deleted = delete_user_layouts_with_prefix(user["public_id"], "student-")
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=str(error)) from error
+    return {"deleted": deleted}
 
 
 @router.delete("/layouts/{page_key}")

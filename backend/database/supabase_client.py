@@ -1644,6 +1644,19 @@ def delete_user_layout(user_id: str, page_key: str) -> bool:
     )
     return bool(response.data)
 
+#deletes every layout for this user whose page_key starts with prefix (e.g.
+#"student-" clears all student profile pages). prefix is a fixed server-side
+#value, never user input. Returns how many rows were removed.
+def delete_user_layouts_with_prefix(user_id: str, prefix: str) -> int:
+    response = (
+        supabase.table("user_layouts")
+        .delete()
+        .eq("user_id", user_id)
+        .like("page_key", f"{prefix}%")
+        .execute()
+    )
+    return len(response.data or [])
+
 
 ################################## TODO LIST FUNCTIONS ########################################
 
