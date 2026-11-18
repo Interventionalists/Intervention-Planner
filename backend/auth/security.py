@@ -6,7 +6,10 @@ from dotenv import load_dotenv
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from database.supabase_client import fetch_student_ownership
+from database.supabase_client import (
+    fetch_student_ownership,
+    fetch_user_school_by_public_id,
+)
 
 load_dotenv()
 
@@ -75,9 +78,10 @@ def require_self_or_admin(user: dict, public_id) -> None:
 OWNER_COLUMN_BY_ROLE = {"teacher": "teacher", "interventionist": "interventionist"}
 
 
-#admins can view any student. Teachers and interventionists can only reach
-#students assigned to them. Raises 404 rather than 403 for someone else's
-#student so student ids can't be probed.
+#admins can view any student. Interventionists can reach any student in their
+#own school (they search and support the whole school). Teachers can only
+#reach students assigned to them. Raises 404 rather than 403 for a student the
+#caller can't reach so student ids can't be probed.
 def require_student_access(user: dict, student_id) -> None:
     ownership = fetch_student_ownership(student_id)
     if ownership is None:
@@ -85,5 +89,13 @@ def require_student_access(user: dict, student_id) -> None:
     if user["role"] == "admin":
         return
     owner_column = OWNER_COLUMN_BY_ROLE.get(user["role"])
-    if owner_column is None or str(ownership.get(owner_column)) != str(user["public_id"]):
+    if owner_column is None:
         raise HTTPException(status_code=404, detail="Student not found")
+    if str(ownership.get(owner_column)) == str(user["public_id"]):
+        return
+    if user["role"] == "interventionist":
+        user_school = fetch_user_school_by_public_id(user["public_id"])
+        student_school = ownership.get("school")
+        if user_school is not None and str(user_school) == str(student_school):
+            return
+    raise HTTPException(status_code=404, detail="Student not found")
