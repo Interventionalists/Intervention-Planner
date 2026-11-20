@@ -4,6 +4,7 @@ import { events } from "../data";
 import { canShowModule } from "../components/ModuleTile";
 import { CardTitle, PageHeading } from "../components/PageElements";
 import TileWorkspace from "../components/TileWorkspace";
+import { DEFAULT_STUDENT_LAYOUT } from "../layouts/defaultLayouts";
 import AddGradesTile from "../studtiles/AddGradesTile";
 import ChangeParentNameTile from "../studtiles/ChangeParentNameTile";
 import ChangeStudentGradeTile from "../studtiles/ChangeStudentGradeTile";
@@ -351,6 +352,7 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
 
       <TileWorkspace
         className="student-profile-layout"
+        defaultLayout={DEFAULT_STUDENT_LAYOUT}
         gridSizing
         key={`student-profile-${userId ?? "default"}-${student.id ?? "unknown"}`}
         pageKey={`student-${student.id ?? "unknown"}`}

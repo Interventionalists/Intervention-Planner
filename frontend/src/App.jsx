@@ -289,12 +289,18 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
     setSchoolLogo(result.school_logo_api || null);
   };
 
-  const filteredStudents = useMemo(
+  //who the header search may find: teachers only their own students; admins
+  //and interventionists every student in their school (/students-fetch is
+  //already limited to the user's school). The backend enforces the same rule
+  //when a profile is opened, so this is not the security boundary.
+  const searchableStudents = useMemo(
     () =>
-      studentsData.filter((student) =>
-        student.name.toLowerCase().includes(query.toLowerCase())
-      ),
-    [query, studentsData]
+      user?.role === "teacher"
+        ? studentsData.filter(
+            (student) => String(student.teacherId ?? "") === String(user.public_id)
+          )
+        : studentsData,
+    [studentsData, user?.role, user?.public_id]
   );
 
   const selectPage = (id) => {
@@ -363,6 +369,14 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
           userInitials={userInitials}
           onAccountClick={() => selectPage("account")}
           showSearch={!ADMIN_PAGES.has(page)}
+          searchStudents={searchableStudents}
+          searchLoading={studentsLoading}
+          onStudentSearchSelect={(student) =>
+            openStudentProfile(
+              student,
+              page === "student-profile" ? studentProfileReturnPage : page
+            )
+          }
         />
 
         <main className="content">
@@ -419,7 +433,7 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
               )}
               {page === "students" && (
                 <StudentsPage
-                  students={filteredStudents}
+                  query={query}
                   selectedStudent={selectedStudent}
                   userId={user?.public_id}
                   role={user?.role}

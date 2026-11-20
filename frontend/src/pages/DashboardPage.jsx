@@ -2,6 +2,7 @@ import { useState } from "react";
 import { PageHeading } from "../components/PageElements";
 import { canShowModule } from "../components/ModuleTile";
 import TileWorkspace from "../components/TileWorkspace";
+import { DEFAULT_DASHBOARD_LAYOUT } from "../layouts/defaultLayouts";
 import {
   DashboardDayViewTile,
   DashboardWeekViewTile,
@@ -176,6 +177,7 @@ function DashboardPage({
 
       <TileWorkspace
         className="dashboard-grid"
+        defaultLayout={DEFAULT_DASHBOARD_LAYOUT}
         gridSizing
         key={`dashboard-${userId ?? role ?? "default"}`}
         pageKey="dashboard"

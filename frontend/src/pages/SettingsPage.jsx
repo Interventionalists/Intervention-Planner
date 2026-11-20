@@ -1,8 +1,35 @@
 import { useEffect, useState } from "react";
 import { themePresets } from "../data";
 import { CardTitle, PageHeading } from "../components/PageElements";
+import { apiFetch } from "../api";
 
 const colorLabels = ["Primary", "Secondary", "Tertiary"];
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
+//each scope maps to the backend reset scope and the local layout cache keys
+//TileWorkspace writes, which must be cleared too or the old layout reappears.
+const layoutResets = {
+  dashboard: {
+    label: "Reset dashboard",
+    done: "Dashboard reset to the default layout.",
+    cachePrefix: "tile-layout-dashboard-",
+  },
+  students: {
+    label: "Reset all student pages",
+    done: "All student pages reset to the default layout.",
+    cachePrefix: "tile-layout-student-",
+  },
+};
+
+function clearCachedLayouts(prefix) {
+  try {
+    Object.keys(localStorage)
+      .filter((key) => key.startsWith(prefix))
+      .forEach((key) => localStorage.removeItem(key));
+  } catch {
+    //no local cache available; nothing to clear.
+  }
+}
 
 function SettingsPage({
   theme,
@@ -23,6 +50,9 @@ function SettingsPage({
   const [logoSaveError, setLogoSaveError] = useState("");
   const [logoSavedNotice, setLogoSavedNotice] = useState("");
   const [logoPreviewError, setLogoPreviewError] = useState(false);
+  const [resettingLayout, setResettingLayout] = useState(null);
+  const [layoutResetError, setLayoutResetError] = useState("");
+  const [layoutResetNotice, setLayoutResetNotice] = useState("");
   const hasChanges = JSON.stringify(theme) !== JSON.stringify(savedTheme);
   const hasLogoChanges = logoUrl.trim() !== (schoolLogo || "");
   const normalizedLogoUrl = logoUrl.trim();
@@ -81,6 +111,35 @@ function SettingsPage({
     setTheme(savedTheme);
     setSaveError("");
     setSavedNotice("");
+  };
+
+  const resetLayout = async (scope) => {
+    const reset = layoutResets[scope];
+    const confirmed = window.confirm(
+      scope === "students"
+        ? "Reset the layout of every student page to the default? Your custom arrangements will be lost."
+        : "Reset your dashboard to the default layout? Your custom arrangement will be lost."
+    );
+    if (!confirmed) return;
+
+    setResettingLayout(scope);
+    setLayoutResetError("");
+    setLayoutResetNotice("");
+    try {
+      const response = await apiFetch(
+        `${API_BASE_URL}/layouts?scope=${scope}`,
+        { method: "DELETE" }
+      );
+      if (!response.ok) {
+        throw new Error(`Reset failed (${response.status}).`);
+      }
+      clearCachedLayouts(reset.cachePrefix);
+      setLayoutResetNotice(reset.done);
+    } catch (error) {
+      setLayoutResetError(error.message || "Unable to reset the layout.");
+    } finally {
+      setResettingLayout(null);
+    }
   };
 
   const revertLogo = () => {
@@ -179,6 +238,32 @@ function SettingsPage({
               <div />
               <div />
             </div>
+          </div>
+        </div>
+        <div className="card">
+          <CardTitle title="Page layouts" />
+          <p className="muted">
+            Put your tiles back in the default arrangement. This only affects
+            your own account.
+          </p>
+          {layoutResetError && (
+            <p className="theme-message error-state" role="alert">{layoutResetError}</p>
+          )}
+          {layoutResetNotice && (
+            <p className="theme-message" role="status">{layoutResetNotice}</p>
+          )}
+          <div className="theme-actions">
+            {Object.entries(layoutResets).map(([scope, reset]) => (
+              <button
+                className="theme-revert-button"
+                disabled={resettingLayout !== null}
+                key={scope}
+                onClick={() => resetLayout(scope)}
+                type="button"
+              >
+                {resettingLayout === scope ? "Resetting..." : reset.label}
+              </button>
+            ))}
           </div>
         </div>
         {canManageTheme && (

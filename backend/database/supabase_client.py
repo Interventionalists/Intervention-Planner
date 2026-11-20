@@ -258,6 +258,16 @@ def fetch_user_school_by_public_id(public_id: str):
     )
     return response.data[0]["school"] if response.data else None
 
+def fetch_user_role_and_school_by_public_id(public_id: str):
+    response = (
+        supabase.table("users")
+        .select("role, school")
+        .eq("public_id", public_id)
+        .limit(1)
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
 def fetch_unassigned_students(school_id: int):
     response = (
         supabase.table("students")
@@ -591,10 +601,22 @@ def fetch_interventionists(school_id: int | None = None):
     return response.data
 
 def fetch_interventionist_students(interventionist_id: str, school_id: int | None = None):
+    return fetch_assigned_students(interventionist_id, "interventionist", school_id)
+
+
+#owner_column is the students column linking a student to the user:
+#"teacher" for teachers, "interventionist" for interventionists.
+def fetch_assigned_students(
+    owner_id: str,
+    owner_column: str,
+    school_id: int | None = None,
+):
+    if owner_column not in {"teacher", "interventionist"}:
+        raise ValueError(f"Unsupported student owner column: {owner_column}")
     query = (
         supabase.table("students")
         .select("*")
-        .eq("interventionist", interventionist_id)
+        .eq(owner_column, owner_id)
     )
     if school_id is not None:
         query = query.eq("school", school_id)
@@ -1621,6 +1643,19 @@ def delete_user_layout(user_id: str, page_key: str) -> bool:
         .execute()
     )
     return bool(response.data)
+
+#deletes every layout for this user whose page_key starts with prefix (e.g.
+#"student-" clears all student profile pages). prefix is a fixed server-side
+#value, never user input. Returns how many rows were removed.
+def delete_user_layouts_with_prefix(user_id: str, prefix: str) -> int:
+    response = (
+        supabase.table("user_layouts")
+        .delete()
+        .eq("user_id", user_id)
+        .like("page_key", f"{prefix}%")
+        .execute()
+    )
+    return len(response.data or [])
 
 
 ################################## TODO LIST FUNCTIONS ########################################

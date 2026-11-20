@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from auth.security import (
+    OWNER_COLUMN_BY_ROLE,
     get_current_user,
     require_self_or_admin,
     require_student_access,
@@ -15,13 +16,14 @@ from database.supabase_client import (
     create_student,
     delete_state_test_score,
     create_student_goals as insert_student_goals,
+    fetch_assigned_students,
     fetch_interventionists,
-    fetch_interventionist_students,
     fetch_state_test_scores,
     fetch_student_name,
     fetch_student_goals as get_student_goals_record,
     fetch_students,
     fetch_unassigned_students,
+    fetch_user_role_and_school_by_public_id,
     fetch_user_school_by_public_id,
     update_state_test_score,
     update_student_profile,
@@ -103,14 +105,20 @@ def get_all_students(user: dict = Depends(get_current_user)):
 def get_students(interventionist_id: UUID, user: dict = Depends(get_current_user)):
     require_self_or_admin(user, interventionist_id)
     try:
-        school_id = fetch_user_school_by_public_id(str(interventionist_id))
+        target_user = fetch_user_role_and_school_by_public_id(str(interventionist_id))
+        school_id = target_user.get("school") if target_user else None
         if school_id is None:
             raise HTTPException(
                 status_code=403,
                 detail="The signed-in user does not have a school assigned.",
             )
-        students = fetch_interventionist_students(
-            str(interventionist_id), school_id
+        #teachers own students through students.teacher, interventionists
+        #through students.interventionist. Other roles have no assigned students.
+        owner_column = OWNER_COLUMN_BY_ROLE.get(target_user.get("role"))
+        students = (
+            fetch_assigned_students(str(interventionist_id), owner_column, school_id)
+            if owner_column
+            else []
         )
     except HTTPException:
         raise
