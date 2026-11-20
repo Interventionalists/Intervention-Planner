@@ -3,13 +3,26 @@ import math
 import os
 
 import bcrypt
-from supabase import create_client, Client
+import httpx
+from supabase import create_client, Client, ClientOptions
 from dotenv import load_dotenv
 
 load_dotenv()
+
+#HTTP/1.1 on purpose: supabase-py defaults to HTTP/2, and sharing one HTTP/2
+#connection across FastAPI's threadpool causes intermittent
+#"[Errno 11] Resource temporarily unavailable" 500s. HTTP/1.1 gives each
+#concurrent request its own pooled connection.
+_http_client = httpx.Client(
+    http2=False,
+    timeout=httpx.Timeout(30.0),
+    follow_redirects=True,
+)
+
 supabase: Client = create_client(
     os.environ["SUPABASE_URL"],
     os.environ["SUPABASE_SERVICE_KEY"],
+    options=ClientOptions(httpx_client=_http_client),
 )
 
 
