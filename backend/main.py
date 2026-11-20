@@ -1,6 +1,9 @@
+import logging
 import os
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
+from fastapi.exception_handlers import http_exception_handler
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from routes.students import router as students_router
 from routes.teachers import router as teachers_router
@@ -46,6 +49,26 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+#routes wrap failures as HTTPException(500) from the original error, which
+#otherwise never reaches the server logs. Log the underlying traceback for any
+#5xx, then fall back to FastAPI's normal response.
+logger = logging.getLogger("intervention_planner")
+
+
+@app.exception_handler(StarletteHTTPException)
+async def log_server_errors(request: Request, exc: StarletteHTTPException):
+    if exc.status_code >= 500:
+        cause = exc.__cause__ or exc
+        logger.error(
+            "%s %s -> %s",
+            request.method,
+            request.url.path,
+            exc.status_code,
+            exc_info=(type(cause), cause, cause.__traceback__),
+        )
+    return await http_exception_handler(request, exc)
+
 
 #auth is applied here, per router, so a new endpoint can't forget it.
 #/login, /change-password and /health stay public; admin routes need the admin role.
