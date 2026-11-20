@@ -394,15 +394,7 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
             />
           )}
 
-          <div className="security-item">
-            <div className="security-icon muted-icon">
-              <Mail size={17} aria-hidden="true" />
-              <strong>Email notifications (not implemented yet)</strong>
-            </div>
-            <button className="ghost-button" type="button">
-              Manage
-            </button>
-          </div>
+          
         </section>
 
         <AccountNotesCard userId={user?.public_id} />

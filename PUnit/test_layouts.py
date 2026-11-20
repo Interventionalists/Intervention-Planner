@@ -110,3 +110,45 @@ def test_reset_layout_deletes_for_token_user(client, monkeypatch):
     assert response.status_code == 200
     assert response.json() == {"deleted": True}
     assert deleted == [("user-123", "dashboard")]
+
+
+def test_reset_all_student_layouts_for_token_user(client, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        layouts,
+        "delete_user_layouts_with_prefix",
+        lambda user_id, prefix: calls.append((user_id, prefix)) or 3,
+    )
+
+    response = client.delete("/layouts?scope=students")
+
+    assert response.status_code == 200
+    assert response.json() == {"deleted": 3}
+    assert calls == [("user-123", "student-")]
+
+
+def test_reset_dashboard_scope_deletes_dashboard_only(client, monkeypatch):
+    deleted = []
+    monkeypatch.setattr(
+        layouts,
+        "delete_user_layout",
+        lambda user_id, page_key: deleted.append((user_id, page_key)) or True,
+    )
+    monkeypatch.setattr(
+        layouts,
+        "delete_user_layouts_with_prefix",
+        lambda *_args: pytest.fail("dashboard reset should not touch student pages"),
+    )
+
+    response = client.delete("/layouts?scope=dashboard")
+
+    assert response.status_code == 200
+    assert response.json() == {"deleted": 1}
+    assert deleted == [("user-123", "dashboard")]
+
+
+@pytest.mark.parametrize("query", ["", "?scope=everything", "?scope=student-"])
+def test_reset_layouts_rejects_unknown_scope(client, query):
+    response = client.delete(f"/layouts{query}")
+
+    assert response.status_code == 422

@@ -11,7 +11,21 @@ import { apiFetch } from "../api";
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 const SAVE_DELAY_MS = 600;
 
-function defaultLayout(tiles) {
+//presetLayout is a page's curated starting layout ({ order, sizes }). It only
+//applies when the user has nothing saved; tiles it lists that this user can't
+//see are dropped, and tiles it leaves out start hidden (addable from the menu).
+function defaultLayout(tiles, presetLayout) {
+  const tileIds = tiles.map((tile) => tile.id);
+  if (presetLayout && Array.isArray(presetLayout.order)) {
+    return {
+      order: presetLayout.order.filter(
+        (id, index) =>
+          tileIds.includes(id) && presetLayout.order.indexOf(id) === index
+      ),
+      catalogIds: tileIds,
+      sizes: { ...(presetLayout.sizes ?? {}) },
+    };
+  }
   return {
     order: tiles
       .filter((tile) => tile.defaultVisible !== false)
@@ -61,16 +75,16 @@ function readCachedLayout(storageKey) {
   }
 }
 
-function createInitialLayout(storageKey, tiles) {
+function createInitialLayout(storageKey, tiles, presetLayout) {
   const cachedLayout = readCachedLayout(storageKey);
   if (!cachedLayout) {
-    return defaultLayout(tiles);
+    return defaultLayout(tiles, presetLayout);
   }
   try {
     return normalizeLayout(cachedLayout, tiles);
   } catch (error) {
     console.error("Could not load the saved tile layout:", error);
-    return defaultLayout(tiles);
+    return defaultLayout(tiles, presetLayout);
   }
 }
 
@@ -92,9 +106,10 @@ function TileWorkspace({
   storageKey,
   tiles,
   gridSizing = false,
+  defaultLayout: presetLayout = null,
 }) {
   const [layout, setLayout] = useState(() =>
-    createInitialLayout(storageKey, tiles)
+    createInitialLayout(storageKey, tiles, presetLayout)
   );
   //no server writes until the server copy has been loaded, so a stale local
   //cache can't overwrite a layout saved from another device.

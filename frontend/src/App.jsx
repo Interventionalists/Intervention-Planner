@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { themePresets } from "./data";
 import { Header, Sidebar } from "./components/AppNavigation";
@@ -36,6 +36,10 @@ function relatedUserName(user) {
 }
 
 function mapStudent(row) {
+  const groupNames = Array.isArray(row.group_names)
+    ? row.group_names.filter((name) => typeof name === "string" && name.trim())
+    : [];
+
   return {
     ...row,
     name:
@@ -50,7 +54,8 @@ function mapStudent(row) {
       row.interventionist_name ||
       relatedUserName(row.interventionist_user) ||
       "Not assigned",
-    group: row.group_number ?? row.group ?? "—",
+    group_names: groupNames,
+    group: groupNames.join(", ") || "—",
     avatar: `https://api.dicebear.com/9.x/adventurer/svg?seed=${encodeURIComponent(
       [row.first_name, row.last_name].filter(Boolean).join(" ") || row.id
     )}`,
@@ -125,6 +130,8 @@ function App() {
 
 function PlannerApp({ onLogout, onUserUpdated, user }) {
   const [page, setPage] = useState("dashboard");
+  const [groupToSchedule, setGroupToSchedule] = useState(null);
+  const [studentProfileReturnPage, setStudentProfileReturnPage] = useState("students");
   const [studentsData, setStudentsData] = useState([]);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [studentsLoading, setStudentsLoading] = useState(true);
@@ -282,12 +289,18 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
     setSchoolLogo(result.school_logo_api || null);
   };
 
-  const filteredStudents = useMemo(
+  //who the header search may find: teachers only their own students; admins
+  //and interventionists every student in their school (/students-fetch is
+  //already limited to the user's school). The backend enforces the same rule
+  //when a profile is opened, so this is not the security boundary.
+  const searchableStudents = useMemo(
     () =>
-      studentsData.filter((student) =>
-        student.name.toLowerCase().includes(query.toLowerCase())
-      ),
-    [query, studentsData]
+      user?.role === "teacher"
+        ? studentsData.filter(
+            (student) => String(student.teacherId ?? "") === String(user.public_id)
+          )
+        : studentsData,
+    [studentsData, user?.role, user?.public_id]
   );
 
   const selectPage = (id) => {
@@ -298,8 +311,15 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
     setMobileOpen(false);
   };
 
-  const openStudentProfile = (student) => {
+  const scheduleGroup = (group) => {
+    setGroupToSchedule(group);
+    selectPage("calendar");
+  };
+  const clearGroupToSchedule = useCallback(() => setGroupToSchedule(null), []);
+
+  const openStudentProfile = (student, returnPage = "students") => {
     setSelectedStudent(student);
+    setStudentProfileReturnPage(returnPage);
     selectPage("student-profile");
   };
 
@@ -349,6 +369,14 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
           userInitials={userInitials}
           onAccountClick={() => selectPage("account")}
           showSearch={!ADMIN_PAGES.has(page)}
+          searchStudents={searchableStudents}
+          searchLoading={studentsLoading}
+          onStudentSearchSelect={(student) =>
+            openStudentProfile(
+              student,
+              page === "student-profile" ? studentProfileReturnPage : page
+            )
+          }
         />
 
         <main className="content">
@@ -361,7 +389,17 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
               </Suspense>
             )
           ) : page === "groups" ? (
-            <GroupsPage user={user} />
+            <GroupsPage
+              user={user}
+              onStudentSelect={(student) => openStudentProfile(student, "groups")}
+              onScheduleGroup={scheduleGroup}
+            />
+          ) : page === "calendar" ? (
+            <CalendarPage
+              user={user}
+              groupToSchedule={groupToSchedule}
+              onGroupScheduleHandled={clearGroupToSchedule}
+            />
           ) : studentsLoading ? (
             <div className="data-state" role="status">Loading students...</div>
           ) : studentsError ? (
@@ -388,14 +426,14 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
               {page === "student-profile" && (
                 <StudentProfilePage
                   student={selectedStudent}
-                  onBack={() => selectPage("students")}
+                  onBack={() => selectPage(studentProfileReturnPage)}
                   userId={user?.public_id}
                   role={user?.role}
                 />
               )}
               {page === "students" && (
                 <StudentsPage
-                  students={filteredStudents}
+                  query={query}
                   selectedStudent={selectedStudent}
                   userId={user?.public_id}
                   role={user?.role}
@@ -409,7 +447,6 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
                   onUserUpdated={onUserUpdated}
                 />
               )}
-              {page === "calendar" && <CalendarPage user={user} />}
               {page === "settings" && (
                 <SettingsPage
                   theme={theme}

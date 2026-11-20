@@ -4,6 +4,7 @@ import { events } from "../data";
 import { canShowModule } from "../components/ModuleTile";
 import { CardTitle, PageHeading } from "../components/PageElements";
 import TileWorkspace from "../components/TileWorkspace";
+import { DEFAULT_STUDENT_LAYOUT } from "../layouts/defaultLayouts";
 import AddGradesTile from "../studtiles/AddGradesTile";
 import ChangeParentNameTile from "../studtiles/ChangeParentNameTile";
 import ChangeStudentGradeTile from "../studtiles/ChangeStudentGradeTile";
@@ -43,9 +44,6 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
     isLoading: sessionsLoading,
     error: sessionsError,
   } = useStudentSessions(student.id);
-  const [groupNumber, setGroupNumber] = useState(
-    student.group_number == null ? "" : String(student.group_number)
-  );
   const [subjectGoals, setSubjectGoals] = useState({});
   const [profileUpdateError, setProfileUpdateError] = useState("");
   const [profileUpdateMessage, setProfileUpdateMessage] = useState("");
@@ -84,12 +82,9 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
     "Not provided";
 
   useEffect(() => {
-    setGroupNumber(
-      student.group_number == null ? "" : String(student.group_number)
-    );
     setProfileUpdateError("");
     setProfileUpdateMessage("");
-  }, [student.id, student.group_number]);
+  }, [student.id]);
 
   useEffect(() => {
     setSubjectGoals({});
@@ -131,23 +126,6 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
     }
   };
 
-  const saveGroupNumber = (event) => {
-    event.preventDefault();
-    const parsedGroupNumber = groupNumber.trim() ? Number(groupNumber) : null;
-    if (
-      parsedGroupNumber !== null &&
-      (!Number.isInteger(parsedGroupNumber) || parsedGroupNumber < 1)
-    ) {
-      setProfileUpdateError("Enter a whole group number greater than zero.");
-      return;
-    }
-
-    updateStudentProfile(
-      { group_number: parsedGroupNumber },
-      "Group number saved."
-    );
-  };
-
   const unassignInterventionist = () =>
     updateStudentProfile(
       { interventionist: null },
@@ -169,7 +147,7 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
           </div>
           <dl className="profile-details">
             <div><dt>Teacher</dt><dd>{student.teacher}</dd></div>
-            <div><dt>Group</dt><dd>{student.group}</dd></div>
+            <div><dt>Groups</dt><dd>{student.group}</dd></div>
             <div>
               <dt>Intervention teacher</dt>
               <dd>{interventionTeacher || student.interventionTeacher || "Not assigned"}</dd>
@@ -374,6 +352,7 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
 
       <TileWorkspace
         className="student-profile-layout"
+        defaultLayout={DEFAULT_STUDENT_LAYOUT}
         gridSizing
         key={`student-profile-${userId ?? "default"}-${student.id ?? "unknown"}`}
         pageKey={`student-${student.id ?? "unknown"}`}

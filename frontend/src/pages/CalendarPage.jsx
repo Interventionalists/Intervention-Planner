@@ -234,7 +234,11 @@ function getAvailabilityDayTimeline(day, busyTimes, people) {
   }));
 }
 
-function CalendarPage({ user }) {
+function CalendarPage({
+  user,
+  groupToSchedule = null,
+  onGroupScheduleHandled,
+}) {
   const [view, setView] = useState("week");
   const [selectedDate, setSelectedDate] = useState(initialDate);
   const [selectedEvent, setSelectedEvent] = useState(null);
@@ -244,6 +248,7 @@ function CalendarPage({ user }) {
   const [colorSaveMessage, setColorSaveMessage] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [createColor, setCreateColor] = useState("#172c50");
+  const [sessionGroupId, setSessionGroupId] = useState(null);
   const [editingEvent, setEditingEvent] = useState(null);
   const [editScope, setEditScope] = useState("series");
   const [meetingForm, setMeetingForm] = useState(() => getDefaultMeetingForm(initialDate));
@@ -319,6 +324,43 @@ function CalendarPage({ user }) {
     { label: "Purple", color: "#7a3db8" },
     { label: "Gray", color: "#667085" },
   ];
+  useEffect(() => {
+    if (!groupToSchedule) return;
+
+    const startsAt = new Date();
+    startsAt.setDate(startsAt.getDate() + 1);
+    startsAt.setHours(9, 0, 0, 0);
+    const defaultColor =
+      getComputedStyle(document.querySelector(".app") || document.body)
+        .getPropertyValue("--primary")
+        .trim() || "#172c50";
+    const studentIds = groupToSchedule.student_ids?.length
+      ? groupToSchedule.student_ids
+      : (groupToSchedule.students || []).map((student) => student.id);
+
+    setSelectedDate(startsAt);
+    setEditingEvent(null);
+    setMeetingForm({
+      ...getDefaultMeetingForm(startsAt),
+      title: groupToSchedule.name,
+      eventType: "Group session",
+    });
+    setSessionGroupId(groupToSchedule.id);
+    setCreateColor(defaultColor);
+    setEditScope("series");
+    setSelectedInvitees(
+      [...new Set(studentIds)].map((student_id) => ({ student_id }))
+    );
+    setInviteeSearch("");
+    setInviteeBusyTimes([]);
+    setAvailabilityError("");
+    setCreateError("");
+    setInviteesError("");
+    setAvailabilityConfirmOpen(false);
+    setIsCreateOpen(true);
+    onGroupScheduleHandled?.();
+  }, [groupToSchedule, onGroupScheduleHandled]);
+
   useEffect(() => {
     const controller = new AbortController();
     const params = new URLSearchParams({
@@ -668,6 +710,7 @@ function CalendarPage({ user }) {
   function openCreateMeeting() {
     setAvailabilityConfirmOpen(false);
     setEditingEvent(null);
+    setSessionGroupId(null);
     setMeetingForm(getDefaultMeetingForm(selectedDate));
     setCreateColor(themeColorOptions[0].color);
     setEditScope("series");
@@ -693,6 +736,7 @@ function CalendarPage({ user }) {
         : event.ends_at;
     const formDefaults = getDefaultMeetingForm(new Date(formStart));
     setEditingEvent(event);
+    setSessionGroupId(null);
     setEditScope(scope);
     setMeetingForm({
       ...formDefaults,
@@ -797,6 +841,9 @@ function CalendarPage({ user }) {
         color: createColor,
         participants: selectedInvitees,
       };
+      if (!editingEvent && sessionGroupId != null) {
+        payload.session_group_id = Number(sessionGroupId);
+      }
       if (meetingForm.repeatEveryWeeks > 0) {
         payload.recurrence = {
           weekdays: meetingForm.weekdays,
@@ -829,6 +876,7 @@ function CalendarPage({ user }) {
       setIsCreateOpen(false);
       setAvailabilityConfirmOpen(false);
       setEditingEvent(null);
+      setSessionGroupId(null);
     } catch (error) {
       setCreateError(error.message || "Unable to create the meeting.");
     } finally {
@@ -1102,6 +1150,7 @@ function CalendarPage({ user }) {
           onMouseDown={(event) => {
             if (event.target === event.currentTarget && !isCreatingMeeting) {
               setIsCreateOpen(false);
+              setSessionGroupId(null);
             }
           }}
         >
@@ -1114,15 +1163,28 @@ function CalendarPage({ user }) {
             <header className="calendar-event-modal-header">
               <div>
                 <p className="calendar-event-modal-eyebrow">Calendar</p>
-                <h2 id="calendar-create-title">{editingEvent ? "Edit meeting" : "Create a meeting"}</h2>
+                <h2 id="calendar-create-title">
+                  {editingEvent
+                    ? "Edit meeting"
+                    : sessionGroupId != null
+                      ? "Schedule group session"
+                      : "Create a meeting"}
+                </h2>
                 <p className="calendar-event-modal-subtitle">
-                  {editingEvent ? "Update the meeting details and invited people." : "Set the details and invite people from your school."}
+                  {editingEvent
+                    ? "Update the meeting details and invited people."
+                    : sessionGroupId != null
+                      ? "Review the session details and invited group members."
+                      : "Set the details and invite people from your school."}
                 </p>
               </div>
               <button
                 type="button"
                 className="calendar-event-modal-close"
-                onClick={() => setIsCreateOpen(false)}
+                onClick={() => {
+                  setIsCreateOpen(false);
+                  setSessionGroupId(null);
+                }}
                 aria-label="Close new meeting form"
                 disabled={isCreatingMeeting}
               >
@@ -1471,9 +1533,16 @@ function CalendarPage({ user }) {
                 <button type="button" onClick={() => {
                   setIsCreateOpen(false);
                   setEditingEvent(null);
+                  setSessionGroupId(null);
                 }} disabled={isCreatingMeeting}>Cancel</button>
                 <button type="submit" disabled={isCreatingMeeting || isLoadingInvitees || Boolean(inviteesError)}>
-                  {isCreatingMeeting ? (editingEvent ? "Saving…" : "Creating…") : (editingEvent ? "Save changes" : "Create meeting")}
+                  {isCreatingMeeting
+                    ? (editingEvent ? "Saving…" : "Creating…")
+                    : editingEvent
+                      ? "Save changes"
+                      : sessionGroupId != null
+                        ? "Schedule group session"
+                        : "Create meeting"}
                 </button>
               </footer>
             </form>
