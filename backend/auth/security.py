@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 import jwt
 from dotenv import load_dotenv
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from database.supabase_client import (
@@ -37,6 +37,7 @@ def create_access_token(user: dict) -> str:
         "sub": str(user["public_id"]),
         "uid": user["id"],
         "role": user.get("role"),
+        "ro": bool(user.get("read_only")),
         "iat": now,
         "exp": now + timedelta(hours=TOKEN_TTL_HOURS),
     }
@@ -59,7 +60,25 @@ def get_current_user(
         )
     except jwt.PyJWTError:
         raise UNAUTHORIZED
-    return {"id": payload["uid"], "public_id": payload["sub"], "role": payload.get("role")}
+    return {
+        "id": payload["uid"],
+        "public_id": payload["sub"],
+        "role": payload.get("role"),
+        "read_only": bool(payload.get("ro")),
+    }
+
+
+READ_ONLY_DETAIL = "This account is read-only"
+SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+
+
+#router-level guard for demo accounts (users.read_only = true): they can view
+#everything their role allows but every write request is rejected.
+def block_writes_if_read_only(
+    request: Request, user: dict = Depends(get_current_user)
+) -> None:
+    if user["read_only"] and request.method not in SAFE_METHODS:
+        raise HTTPException(status_code=403, detail=READ_ONLY_DETAIL)
 
 
 def require_admin(user: dict = Depends(get_current_user)) -> dict:
