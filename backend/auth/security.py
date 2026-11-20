@@ -78,16 +78,21 @@ def require_self_or_admin(user: dict, public_id) -> None:
 OWNER_COLUMN_BY_ROLE = {"teacher": "teacher", "interventionist": "interventionist"}
 
 
-#admins can view any student. Interventionists can reach any student in their
-#own school (they search and support the whole school). Teachers can only
-#reach students assigned to them. Raises 404 rather than 403 for a student the
-#caller can't reach so student ids can't be probed.
+#Admins can view any student. Interventionists can reach only
+#students marked as needing interventions in their school. Teachers can reach
+#only students assigned to them. Raises 404 rather than 403 when a student is
+#not accessible so student IDs cannot be probed.
 def require_student_access(user: dict, student_id) -> None:
     ownership = fetch_student_ownership(student_id)
     if ownership is None:
         raise HTTPException(status_code=404, detail="Student not found")
     if user["role"] == "admin":
         return
+    if (
+        user["role"] == "interventionist"
+        and ownership.get("needs_interventions") is not True
+    ):
+        raise HTTPException(status_code=404, detail="Student not found")
     owner_column = OWNER_COLUMN_BY_ROLE.get(user["role"])
     if owner_column is None:
         raise HTTPException(status_code=404, detail="Student not found")

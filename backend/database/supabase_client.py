@@ -236,17 +236,28 @@ def _add_assignment_grades(students):
     ]
 
 
-def fetch_students(school_id: int | None = None):
+def fetch_students(
+    school_id: int | None = None,
+    needs_interventions_only: bool = False,
+):
     query = supabase.table("students").select("*")
     if school_id is not None:
         query = query.eq("school", school_id)
+    if needs_interventions_only:
+        query = query.eq("needs_interventions", True)
     response = query.execute()
     students = _add_assignment_grades(_add_student_user_names(response.data))
     return _add_student_group_names(students, school_id)
 
 def fetch_student_name(student_id):
-    response = supabase.table("students").select("first_name", "last_name").eq("id", student_id).execute()
-    return _add_student_user_names(response.data)
+    response = (
+        supabase.table("students")
+        .select("first_name, last_name")
+        .eq("id", student_id)
+        .limit(1)
+        .execute()
+    )
+    return response.data[0] if response.data else None
 
 def fetch_user_school_by_public_id(public_id: str):
     response = (
@@ -268,14 +279,19 @@ def fetch_user_role_and_school_by_public_id(public_id: str):
     )
     return response.data[0] if response.data else None
 
-def fetch_unassigned_students(school_id: int):
-    response = (
+def fetch_unassigned_students(
+    school_id: int,
+    needs_interventions_only: bool = False,
+):
+    query = (
         supabase.table("students")
         .select("*")
         .eq("school", school_id)
         .is_("interventionist", "null")
-        .execute()
     )
+    if needs_interventions_only:
+        query = query.eq("needs_interventions", True)
+    response = query.execute()
     students = _add_assignment_grades(_add_student_user_names(response.data))
     return _add_student_group_names(students, school_id)
 
@@ -302,6 +318,7 @@ def assign_student_to_interventionist(
         .eq("id", student_id)
         .eq("school", school_id)
         .is_("interventionist", "null")
+        .eq("needs_interventions", True)
         .select("*")
         .execute()
     )
@@ -453,6 +470,17 @@ def fetch_state_test_scores(student: int, school_id: int | None = None):
         .execute()
     )
     return response.data
+
+
+def fetch_state_test_score_student(score_id: int):
+    response = (
+        supabase.table("state_test_scoring")
+        .select("student")
+        .eq("id", score_id)
+        .limit(1)
+        .execute()
+    )
+    return response.data[0]["student"] if response.data else None
 
 
 def create_student(
@@ -620,6 +648,8 @@ def fetch_assigned_students(
     )
     if school_id is not None:
         query = query.eq("school", school_id)
+    if owner_column == "interventionist":
+        query = query.eq("needs_interventions", True)
     response = query.execute()
     students = _add_assignment_grades(_add_student_user_names(response.data))
     return _add_student_group_names(students, school_id)
@@ -736,6 +766,18 @@ def fetch_notes_for_session(session_id):
         .execute()
     )
     return response.data
+
+
+def fetch_note_for_author(note_id, author_id):
+    response = (
+        supabase.table("notes")
+        .select("id, student_id")
+        .eq("id", note_id)
+        .eq("created_by", author_id)
+        .limit(1)
+        .execute()
+    )
+    return response.data[0] if response.data else None
 
 
 def create_note(student_id, created_by, text, is_private=False, session_id=None):
@@ -903,12 +945,23 @@ def delete_assignment(assignment_id: str):
 def fetch_student_ownership(student_id: int):
     response = (
         supabase.table("students")
-        .select("school, teacher, interventionist")
+        .select("school, teacher, interventionist, needs_interventions")
         .eq("id", student_id)
         .limit(1)
         .execute()
     )
     return response.data[0] if response.data else None
+
+
+def fetch_student_ids_needing_interventions(school_id: int) -> set[int]:
+    response = (
+        supabase.table("students")
+        .select("id")
+        .eq("school", school_id)
+        .eq("needs_interventions", True)
+        .execute()
+    )
+    return {student["id"] for student in response.data or []}
 
 ############################### SESSION FUNCTIONS ######################################
 
@@ -996,7 +1049,10 @@ def update_session_status(session_id: int, status: str):
 
 ######################################## CALENDAR ENDPOINTS ########################################
 
-def fetch_calendar_invitees(school_id: int):
+def fetch_calendar_invitees(
+    school_id: int,
+    needs_interventions_only: bool = False,
+):
     users_response = (
         supabase.table("users")
         .select("public_id, first_name, last_name, role")
@@ -1004,13 +1060,15 @@ def fetch_calendar_invitees(school_id: int):
         .order("first_name")
         .execute()
     )
-    students_response = (
+    students_query = (
         supabase.table("students")
         .select("id, first_name, last_name, grade_level, profile_api_link")
         .eq("school", school_id)
         .order("first_name")
-        .execute()
     )
+    if needs_interventions_only:
+        students_query = students_query.eq("needs_interventions", True)
+    students_response = students_query.execute()
     return {
         "users": users_response.data,
         "students": students_response.data,
@@ -1027,6 +1085,7 @@ def fetch_calendar_events(
     attendee_user_ids: set[str] | None = None,
     attendee_student_ids: set[int] | None = None,
     session_group_ids: set[int] | None = None,
+    allowed_student_ids: set[int] | None = None,
 ):
     if session_group_ids is not None and not session_group_ids:
         return []
@@ -1245,6 +1304,21 @@ def fetch_calendar_events(
                     })
             occurrence_date += timedelta(days=1)
 
+    if allowed_student_ids is not None:
+        result = [
+            {
+                **event,
+                "participants": [
+                    participant
+                    for participant in event["participants"]
+                    if participant.get("student_id") is None
+                    or participant["student_id"] in allowed_student_ids
+                ],
+            }
+            for event in result
+            if event.get("regarding_student") is None
+            or event["regarding_student"] in allowed_student_ids
+        ]
     return sorted(result, key=lambda event: event["starts_at"])
 
 
@@ -1462,16 +1536,19 @@ def fetch_group_student_ids(group_ids: list[int]) -> dict[int, list[int]]:
 def fetch_group_students(
     student_ids: list[int],
     school_id: int,
+    needs_interventions_only: bool = False,
 ) -> dict[int, dict]:
     if not student_ids:
         return {}
-    response = (
+    query = (
         supabase.table("students")
         .select("id, first_name, last_name, grade_level, profile_api_link")
         .eq("school", school_id)
         .in_("id", student_ids)
-        .execute()
     )
+    if needs_interventions_only:
+        query = query.eq("needs_interventions", True)
+    response = query.execute()
     return {student["id"]: student for student in (response.data or [])}
 
 

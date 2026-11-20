@@ -9,15 +9,33 @@ from database.supabase_client import (
     fetch_notes_for_student,
     fetch_notes_from_date,
     fetch_notes_from_user,
+    fetch_note_for_author,
     fetch_session,
+    fetch_student_ids_needing_interventions,
+    fetch_user_school_by_public_id,
 )
 
 router = APIRouter()
 
 
 def _visible_notes(notes: list[dict], user: dict) -> list[dict]:
+    eligible_student_ids = None
+    if user["role"] == "interventionist":
+        school_id = fetch_user_school_by_public_id(user["public_id"])
+        eligible_student_ids = (
+            fetch_student_ids_needing_interventions(school_id)
+            if school_id is not None
+            else set()
+        )
     visible_notes = []
     for note in notes:
+        student_id = note.get("student_id")
+        if (
+            eligible_student_ids is not None
+            and student_id is not None
+            and student_id not in eligible_student_ids
+        ):
+            continue
         is_private = note.get("privateNote", note.get("is_private", False))
         if isinstance(is_private, str):
             is_private = is_private.lower() == "true"
@@ -83,8 +101,18 @@ def get_notes_for_session(session_id: int, user_id: str, user: dict = Depends(ge
 @router.put("/notes-editText")
 def update_note_text(note_id: str, new_text: str, user: dict = Depends(get_current_user)):
     try:
+        note = fetch_note_for_author(note_id, user["public_id"])
+        if note is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Note not found or not owned by user",
+            )
+        if note.get("student_id") is not None:
+            require_student_access(user, note["student_id"])
         #scoped to the caller, so a note can only be edited by its author
         updated_note = edit_text(note_id, new_text, user["public_id"])
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     if not updated_note:
@@ -126,7 +154,17 @@ def add_note(payload: NoteCreate, user: dict = Depends(get_current_user)):
 def remove_note(note_id: str, user_id: str, user: dict = Depends(get_current_user)):
     require_self_or_admin(user, user_id)
     try:
+        note = fetch_note_for_author(note_id, user_id)
+        if note is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Note not found or not owned by user",
+            )
+        if note.get("student_id") is not None:
+            require_student_access(user, note["student_id"])
         deleted = delete_note(note_id, user_id)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     if not deleted:

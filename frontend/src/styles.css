@@ -2124,6 +2124,7 @@ nav { display: grid; gap: 6px; }
   cursor: not-allowed;
 }
 .unassigned-student-list { display: grid; gap: 10px; }
+.intervention-status-list { display: grid; gap: 10px; }
 .unassigned-student-row {
   display: flex;
   align-items: center;
@@ -2159,6 +2160,10 @@ nav { display: grid; gap: 6px; }
 .unassigned-student-info > div { display: grid; gap: 4px; }
 .unassigned-student-info strong { font-size: 14px; }
 .unassigned-student-info small { color: #758095; font-size: 12px; }
+.intervention-status-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.intervention-status-toggle { display: flex; align-items: center; gap: 9px; color: #475467; font-size: 13px; }
+.intervention-status-toggle input { width: 18px; height: 18px; accent-color: var(--primary); }
+.intervention-status-section > p { margin: -4px 0 12px; color: #758095; font-size: 13px; }
 .student-assignment-controls {
   display: flex;
   align-items: center;
@@ -2733,7 +2738,8 @@ nav { display: grid; gap: 6px; }
   .calendar-create-invitees.availability-open .calendar-invitee-availability { max-height: 260px; }
   .groups-page-header { align-items: flex-start; }
   .groups-add-button { margin-top: 0; }
-  .unassigned-student-row { align-items: stretch; flex-direction: column; }
+  .unassigned-student-row,
+  .intervention-status-row { align-items: stretch; flex-direction: column; }
   .user-row { grid-template-columns: 1fr auto; }
   .user-school { grid-column: 1 / -1; }
   .user-edit-form { grid-template-columns: 1fr; }
