@@ -100,7 +100,9 @@ async function fetchWithRetry(url, options, onRetry) {
   }
 }
 
-function StudentsPage({ query = "", selectedStudent, onSelect, userId }) {
+function StudentsPage({ query = "", selectedStudent, onSelect, userId, role }) {
+  const isTeacher = role === "teacher";
+  const isAdmin = role === "admin";
   const [students, setStudents] = useState([]);
   const [unassignedStudents, setUnassignedStudents] = useState([]);
   const [interventionists, setInterventionists] = useState([]);
@@ -128,10 +130,13 @@ function StudentsPage({ query = "", selectedStudent, onSelect, userId }) {
           throw new Error("The signed-in user's public ID is missing.");
         }
 
+        const assignedStudentsUrl = isAdmin
+          ? `${API_BASE_URL}/students-fetch`
+          : `${API_BASE_URL}/students-fetch/${encodeURIComponent(userId)}`;
         const [assignedResponse, unassignedResponse, interventionistsResponse] =
           await Promise.all([
             fetchWithRetry(
-              `${API_BASE_URL}/students-fetch/${encodeURIComponent(userId)}`,
+              assignedStudentsUrl,
               { signal: controller.signal },
               () => setRetryCount((count) => count + 1)
             ),
@@ -169,8 +174,19 @@ function StudentsPage({ query = "", selectedStudent, onSelect, userId }) {
         ) {
           throw new Error("A student or interventionist response has an unexpected format.");
         }
-        setStudents(assignedData.students.map(formatStudent));
-        setUnassignedStudents(unassignedData.students.map(formatStudent));
+        const formattedUnassignedStudents = unassignedData.students.map(formatStudent);
+        const formattedStudents = assignedData.students.map(formatStudent);
+        const unassignedStudentIds = new Set(
+          formattedUnassignedStudents.map((student) => String(student.id))
+        );
+        setStudents(
+          isAdmin
+            ? formattedStudents.filter(
+                (student) => !unassignedStudentIds.has(String(student.id))
+              )
+            : formattedStudents
+        );
+        setUnassignedStudents(formattedUnassignedStudents);
         setInterventionists(interventionistsData.interventionists);
         setAssignmentIds({});
         setAssignmentErrors({});
@@ -192,7 +208,7 @@ function StudentsPage({ query = "", selectedStudent, onSelect, userId }) {
 
     loadStudents();
     return () => controller.abort();
-  }, [reloadKey, userId]);
+  }, [isAdmin, reloadKey, userId]);
 
   const assignStudent = async (student) => {
     const interventionistId = assignmentIds[student.id];
@@ -272,8 +288,14 @@ function StudentsPage({ query = "", selectedStudent, onSelect, userId }) {
     <>
       <PageHeading
         eyebrow="Students"
-        title="Your students"
-        subtitle="Students assigned to you and students available to assign."
+        title={isAdmin ? "School students" : "Your students"}
+        subtitle={
+          isAdmin
+            ? "All students at your school, organized by interventionist assignment."
+            : isTeacher
+              ? "Students in your class and students available to assign."
+              : "Students assigned to you and students available to assign."
+        }
       />
       {isLoading ? (
         <div className="card" role="status">Loading...</div>
@@ -322,7 +344,13 @@ function StudentsPage({ query = "", selectedStudent, onSelect, userId }) {
           </div>
           {assignmentMessage && <p className="assignment-success" role="status">{assignmentMessage}</p>}
           <section className="student-list-section">
-            <h2>Assigned to you</h2>
+            <h2>
+              {isAdmin
+                ? "Assigned to interventionists"
+                : isTeacher
+                  ? "Your class"
+                  : "Assigned to you"}
+            </h2>
             {filteredStudents.length ? (
               <StudentsList
                 list={filteredStudents}
@@ -331,7 +359,15 @@ function StudentsPage({ query = "", selectedStudent, onSelect, userId }) {
               />
             ) : (
               <div className="card">
-                <p>{students.length ? "No students match your search and filters." : "No students are assigned to you."}</p>
+                <p>
+                  {students.length
+                    ? "No students match your search and filters."
+                    : isTeacher
+                      ? "No students are in your class."
+                      : isAdmin
+                        ? "No students are assigned to an interventionist."
+                        : "No students are assigned to you."}
+                </p>
               </div>
             )}
           </section>

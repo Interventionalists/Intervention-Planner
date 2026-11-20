@@ -201,7 +201,7 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
       <PageHeading
         eyebrow="Account"
         title="My profile"
-        subtitle="Manage your teacher account and intervention preferences."
+        subtitle="Manage your account and preferences."
       />
 
       <section className="card account-header">
