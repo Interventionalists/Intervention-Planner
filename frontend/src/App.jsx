@@ -289,10 +289,9 @@ function PlannerApp({ onLogout, onUserUpdated, user }) {
     setSchoolLogo(result.school_logo_api || null);
   };
 
-  //who the header search may find: teachers only their own students; admins
-  //and interventionists every student in their school (/students-fetch is
-  //already limited to the user's school). The backend enforces the same rule
-  //when a profile is opened, so this is not the security boundary.
+  //Teachers search their own students; interventionists search only students
+  //marked as needing interventions. Admins search the whole school roster.
+  //The backend enforces these rules when a profile is opened.
   const searchableStudents = useMemo(
     () =>
       user?.role === "teacher"

@@ -19,6 +19,7 @@ from database.supabase_client import (
     fetch_assigned_students,
     fetch_interventionists,
     fetch_state_test_scores,
+    fetch_state_test_score_student,
     fetch_student_name,
     fetch_student_goals as get_student_goals_record,
     fetch_students,
@@ -54,6 +55,11 @@ class StudentProfileUpdateRequest(BaseModel):
     requester_id: UUID
     interventionist: UUID | None = None
     group_number: int | None = Field(default=None, ge=1)
+
+
+class StudentInterventionStatusRequest(BaseModel):
+    requester_id: UUID
+    needs_interventions: bool
 
 
 class StudentGoalsRequest(BaseModel):
@@ -95,7 +101,14 @@ class StateTestScoreUpdateRequest(BaseModel):
 def get_all_students(user: dict = Depends(get_current_user)):
     try:
         school_id = fetch_user_school_by_public_id(user["public_id"])
-        students = [] if school_id is None else fetch_students(school_id)
+        students = (
+            []
+            if school_id is None
+            else fetch_students(
+                school_id,
+                needs_interventions_only=user.get("role") == "interventionist",
+            )
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
     return {"students": students}
@@ -131,13 +144,17 @@ def get_students(interventionist_id: UUID, user: dict = Depends(get_current_user
 def get_unassigned_students(requester_id: UUID, user: dict = Depends(get_current_user)):
     require_self_or_admin(user, requester_id)
     try:
-        school_id = fetch_user_school_by_public_id(str(requester_id))
+        requester = fetch_user_role_and_school_by_public_id(str(requester_id))
+        school_id = requester.get("school") if requester else None
         if school_id is None:
             raise HTTPException(
                 status_code=403,
                 detail="The signed-in user does not have a school assigned.",
             )
-        students = fetch_unassigned_students(school_id)
+        students = fetch_unassigned_students(
+            school_id,
+            needs_interventions_only=True,
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -177,6 +194,43 @@ def assign_student(
     return {"student": student}
 
 
+@router.patch("/students-needs-interventions/{student_id}")
+def update_student_intervention_status(
+    student_id: int,
+    payload: StudentInterventionStatusRequest,
+    user: dict = Depends(get_current_user),
+):
+    if user.get("role") not in {"teacher", "admin"}:
+        raise HTTPException(
+            status_code=403,
+            detail="Only teachers and administrators can change intervention status.",
+        )
+    require_self_or_admin(user, payload.requester_id)
+    if user["role"] == "teacher":
+        require_student_access(user, student_id)
+
+    try:
+        school_id = fetch_user_school_by_public_id(user["public_id"])
+        if school_id is None:
+            raise HTTPException(
+                status_code=403,
+                detail="The signed-in user does not have a school assigned.",
+            )
+        student = update_student_profile(
+            student_id,
+            school_id,
+            {"needs_interventions": payload.needs_interventions},
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+    if student is None:
+        raise HTTPException(status_code=404, detail="Student not found.")
+    return {"student": student}
+
+
 @router.patch("/students-profile/{student_id}")
 def update_student(
     student_id: int,
@@ -197,6 +251,7 @@ def update_student(
         updates["group_number"] = None
 
     try:
+        require_student_access(user, student_id)
         school_id = fetch_user_school_by_public_id(str(payload.requester_id))
         if school_id is None:
             raise HTTPException(
@@ -237,6 +292,7 @@ def get_state_test_scores(
         raise HTTPException(status_code=403, detail="Not authorized to view state test scores.")
 
     try:
+        require_student_access(user, student_id)
         school_id = (
             None
             if user["role"] == "admin"
@@ -300,6 +356,7 @@ def add_state_test_score(
                 detail="MCA scores must be from 200 to 1300.",
             )
     try:
+        require_student_access(user, payload.student)
         school_id = (
             None
             if user["role"] == "admin"
@@ -364,6 +421,10 @@ def edit_state_test_score(
         )
 
     try:
+        student_id = fetch_state_test_score_student(score_id)
+        if student_id is None:
+            raise HTTPException(status_code=404, detail="State test score not found.")
+        require_student_access(user, student_id)
         school_id = (
             None
             if user["role"] == "admin"
@@ -403,6 +464,10 @@ def remove_state_test_score(
         )
 
     try:
+        student_id = fetch_state_test_score_student(score_id)
+        if student_id is None:
+            raise HTTPException(status_code=404, detail="State test score not found.")
+        require_student_access(user, student_id)
         school_id = (
             None
             if user["role"] == "admin"
@@ -425,7 +490,11 @@ def remove_state_test_score(
 
 
 @router.get("/students-fetchName/{student_id}")
-def get_student_name(student_id: str):
+def get_student_name(
+    student_id: int,
+    user: dict = Depends(get_current_user),
+):
+    require_student_access(user, student_id)
     try:
         student_name = fetch_student_name(student_id)
     except Exception as e:
