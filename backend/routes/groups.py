@@ -13,6 +13,7 @@ from database.supabase_client import (
     fetch_group_students,
     fetch_group_student_ids,
     fetch_interventionist_students,
+    fetch_student_ids_needing_interventions,
     fetch_interventionists,
     fetch_students,
     fetch_user_school_by_public_id,
@@ -54,6 +55,11 @@ def get_groups(user: dict = Depends(get_current_user)):
             )
         groups = fetch_groups(school_id)
         group_ids = [group["id"] for group in groups]
+        eligible_student_ids = (
+            fetch_student_ids_needing_interventions(school_id)
+            if user["role"] == "interventionist"
+            else None
+        )
         sessions_by_group = {group_id: [] for group_id in group_ids}
         if group_ids:
             range_start = datetime.now().astimezone()
@@ -63,6 +69,7 @@ def get_groups(user: dict = Depends(get_current_user)):
                 (range_start + timedelta(days=90)).isoformat(),
                 user["public_id"],
                 session_group_ids=set(group_ids),
+                allowed_student_ids=eligible_student_ids,
             )
             for session in upcoming_sessions:
                 group_id = session.get("session_group_id")
@@ -76,12 +83,25 @@ def get_groups(user: dict = Depends(get_current_user)):
         student_ids_by_group = fetch_group_student_ids(
             group_ids
         )
+        if eligible_student_ids is not None:
+            student_ids_by_group = {
+                group_id: [
+                    student_id
+                    for student_id in group_student_ids
+                    if student_id in eligible_student_ids
+                ]
+                for group_id, group_student_ids in student_ids_by_group.items()
+            }
         student_ids = list({
             student_id
             for group_student_ids in student_ids_by_group.values()
             for student_id in group_student_ids
         })
-        students_by_id = fetch_group_students(student_ids, school_id)
+        students_by_id = fetch_group_students(
+            student_ids,
+            school_id,
+            needs_interventions_only=user["role"] == "interventionist",
+        )
         interventionists = fetch_interventionists(school_id)
         names_by_id = {
             str(interventionist["public_id"]): " ".join(

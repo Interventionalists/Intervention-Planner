@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 import jwt
 from dotenv import load_dotenv
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from database.supabase_client import (
@@ -37,6 +37,7 @@ def create_access_token(user: dict) -> str:
         "sub": str(user["public_id"]),
         "uid": user["id"],
         "role": user.get("role"),
+        "ro": bool(user.get("read_only")),
         "iat": now,
         "exp": now + timedelta(hours=TOKEN_TTL_HOURS),
     }
@@ -59,7 +60,25 @@ def get_current_user(
         )
     except jwt.PyJWTError:
         raise UNAUTHORIZED
-    return {"id": payload["uid"], "public_id": payload["sub"], "role": payload.get("role")}
+    return {
+        "id": payload["uid"],
+        "public_id": payload["sub"],
+        "role": payload.get("role"),
+        "read_only": bool(payload.get("ro")),
+    }
+
+
+READ_ONLY_DETAIL = "This account is read-only"
+SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+
+
+#router-level guard for demo accounts (users.read_only = true): they can view
+#everything their role allows but every write request is rejected.
+def block_writes_if_read_only(
+    request: Request, user: dict = Depends(get_current_user)
+) -> None:
+    if user["read_only"] and request.method not in SAFE_METHODS:
+        raise HTTPException(status_code=403, detail=READ_ONLY_DETAIL)
 
 
 def require_admin(user: dict = Depends(get_current_user)) -> dict:
@@ -78,16 +97,21 @@ def require_self_or_admin(user: dict, public_id) -> None:
 OWNER_COLUMN_BY_ROLE = {"teacher": "teacher", "interventionist": "interventionist"}
 
 
-#admins can view any student. Interventionists can reach any student in their
-#own school (they search and support the whole school). Teachers can only
-#reach students assigned to them. Raises 404 rather than 403 for a student the
-#caller can't reach so student ids can't be probed.
+#Admins can view any student. Interventionists can reach only
+#students marked as needing interventions in their school. Teachers can reach
+#only students assigned to them. Raises 404 rather than 403 when a student is
+#not accessible so student IDs cannot be probed.
 def require_student_access(user: dict, student_id) -> None:
     ownership = fetch_student_ownership(student_id)
     if ownership is None:
         raise HTTPException(status_code=404, detail="Student not found")
     if user["role"] == "admin":
         return
+    if (
+        user["role"] == "interventionist"
+        and ownership.get("needs_interventions") is not True
+    ):
+        raise HTTPException(status_code=404, detail="Student not found")
     owner_column = OWNER_COLUMN_BY_ROLE.get(user["role"])
     if owner_column is None:
         raise HTTPException(status_code=404, detail="Student not found")

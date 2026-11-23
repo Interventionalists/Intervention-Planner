@@ -29,6 +29,7 @@ from database.supabase_client import (
     fetch_groups,
     fetch_calendar_invitees,
     fetch_calendar_recurrence,
+    fetch_student_ids_needing_interventions,
     fetch_student_ownership,
     fetch_user_school_by_public_id,
     update_calendar_event,
@@ -77,6 +78,11 @@ def get_calendar_events(
             starts_at.isoformat(),
             ends_at.isoformat(),
             user["public_id"],
+            allowed_student_ids=(
+                fetch_student_ids_needing_interventions(school_id)
+                if user["role"] == "interventionist"
+                else None
+            ),
         )
     except HTTPException:
         raise
@@ -94,7 +100,10 @@ def get_calendar_invitees(user: dict = Depends(get_current_user)):
                 status_code=403,
                 detail="The signed-in user does not have a school assigned.",
             )
-        return fetch_calendar_invitees(school_id)
+        return fetch_calendar_invitees(
+            school_id,
+            needs_interventions_only=user["role"] == "interventionist",
+        )
     except HTTPException:
         raise
     except Exception as error:
@@ -149,7 +158,10 @@ def get_calendar_availability(
                 status_code=403,
                 detail="The signed-in user does not have a school assigned.",
             )
-        invitees = fetch_calendar_invitees(school_id)
+        invitees = fetch_calendar_invitees(
+            school_id,
+            needs_interventions_only=user["role"] == "interventionist",
+        )
         allowed_user_ids = {
             str(invitee["public_id"]) for invitee in invitees["users"]
         }
@@ -168,6 +180,9 @@ def get_calendar_availability(
             user["public_id"],
             attendee_user_ids=target_user_ids,
             attendee_student_ids=target_student_ids,
+            allowed_student_ids=(
+                allowed_student_ids if user["role"] == "interventionist" else None
+            ),
         )
         busy = []
         for event in events:
@@ -529,10 +544,13 @@ def _delete_event_and_recurrence(
         delete_calendar_recurrence(recurrence_id)
 
 
-def _validate_invitees(participants, school_id: int) -> None:
+def _validate_invitees(participants, school_id: int, user: dict) -> None:
     if not participants:
         return
-    invitees = fetch_calendar_invitees(school_id)
+    invitees = fetch_calendar_invitees(
+        school_id,
+        needs_interventions_only=user["role"] == "interventionist",
+    )
     allowed_users = {str(row["public_id"]) for row in invitees["users"]}
     allowed_students = {row["id"] for row in invitees["students"]}
     for participant in participants:
@@ -633,7 +651,10 @@ def add_calendar_event(
                 )
         _validate_regarding_student(payload.regarding_student, school_id, user)
         if payload.participants:
-            invitees = fetch_calendar_invitees(school_id)
+            invitees = fetch_calendar_invitees(
+                school_id,
+                needs_interventions_only=user["role"] == "interventionist",
+            )
             allowed_users = {str(row["public_id"]) for row in invitees["users"]}
             allowed_students = {row["id"] for row in invitees["students"]}
             for participant in payload.participants:
@@ -775,7 +796,7 @@ def edit_calendar_event(
                 event["school"],
                 user,
             )
-            _validate_invitees(participants_value, event["school"])
+            _validate_invitees(participants_value, event["school"], user)
             starts_at = updates.pop(
                 "starts_at",
                 occurrence_at.astimezone(
@@ -885,7 +906,7 @@ def edit_calendar_event(
             user,
         )
         if participants_requested and participants_value is not None:
-            _validate_invitees(participants_value, event["school"])
+            _validate_invitees(participants_value, event["school"], user)
         if recurrence_requested:
             if recurrence_value is None:
                 updates.update(recurrence_id=None, series_id=None)

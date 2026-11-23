@@ -104,6 +104,7 @@ function StudentsPage({ query = "", selectedStudent, onSelect, userId, role }) {
   const isTeacher = role === "teacher";
   const isAdmin = role === "admin";
   const [students, setStudents] = useState([]);
+  const [statusStudents, setStatusStudents] = useState([]);
   const [unassignedStudents, setUnassignedStudents] = useState([]);
   const [interventionists, setInterventionists] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -113,6 +114,8 @@ function StudentsPage({ query = "", selectedStudent, onSelect, userId, role }) {
   const [assignmentErrors, setAssignmentErrors] = useState({});
   const [assignmentMessage, setAssignmentMessage] = useState("");
   const [assigningStudentId, setAssigningStudentId] = useState(null);
+  const [updatingStatus, setUpdatingStatus] = useState({});
+  const [statusErrors, setStatusErrors] = useState({});
   const [reloadKey, setReloadKey] = useState(0);
   const [gradeFilter, setGradeFilter] = useState("all");
   const [teacherFilter, setTeacherFilter] = useState("all");
@@ -150,6 +153,13 @@ function StudentsPage({ query = "", selectedStudent, onSelect, userId, role }) {
               { signal: controller.signal },
               () => setRetryCount((count) => count + 1)
             ),
+            role === "admin"
+              ? fetchWithRetry(
+                  `${API_BASE_URL}/students-fetch`,
+                  { signal: controller.signal },
+                  () => setRetryCount((count) => count + 1)
+                )
+              : Promise.resolve(null),
           ]);
         if (!assignedResponse.ok) {
           throw await requestError(assignedResponse, "Assigned student");
@@ -160,33 +170,32 @@ function StudentsPage({ query = "", selectedStudent, onSelect, userId, role }) {
         if (!interventionistsResponse.ok) {
           throw await requestError(interventionistsResponse, "Interventionist");
         }
+        if (rosterResponse && !rosterResponse.ok) {
+          throw await requestError(rosterResponse, "Student roster");
+        }
 
-        const [assignedData, unassignedData, interventionistsData] =
+        const [assignedData, unassignedData, interventionistsData, rosterData] =
           await Promise.all([
             assignedResponse.json(),
             unassignedResponse.json(),
             interventionistsResponse.json(),
+            rosterResponse ? rosterResponse.json() : Promise.resolve(null),
           ]);
         if (
           !Array.isArray(assignedData.students) ||
           !Array.isArray(unassignedData.students) ||
-          !Array.isArray(interventionistsData.interventionists)
+          !Array.isArray(interventionistsData.interventionists) ||
+          (role === "admin" && !Array.isArray(rosterData?.students))
         ) {
           throw new Error("A student or interventionist response has an unexpected format.");
         }
-        const formattedUnassignedStudents = unassignedData.students.map(formatStudent);
-        const formattedStudents = assignedData.students.map(formatStudent);
-        const unassignedStudentIds = new Set(
-          formattedUnassignedStudents.map((student) => String(student.id))
+        setStudents(assignedData.students.map(formatStudent));
+        setStatusStudents(
+          (role === "admin" ? rosterData.students : assignedData.students).map(
+            formatStudent
+          )
         );
-        setStudents(
-          isAdmin
-            ? formattedStudents.filter(
-                (student) => !unassignedStudentIds.has(String(student.id))
-              )
-            : formattedStudents
-        );
-        setUnassignedStudents(formattedUnassignedStudents);
+        setUnassignedStudents(unassignedData.students.map(formatStudent));
         setInterventionists(interventionistsData.interventionists);
         setAssignmentIds({});
         setAssignmentErrors({});
@@ -208,7 +217,7 @@ function StudentsPage({ query = "", selectedStudent, onSelect, userId, role }) {
 
     loadStudents();
     return () => controller.abort();
-  }, [isAdmin, reloadKey, userId]);
+  }, [reloadKey, role, userId]);
 
   const assignStudent = async (student) => {
     const interventionistId = assignmentIds[student.id];
@@ -258,12 +267,58 @@ function StudentsPage({ query = "", selectedStudent, onSelect, userId, role }) {
     }
   };
 
+  const updateInterventionStatus = async (student, needsInterventions) => {
+    setUpdatingStatus((current) => ({ ...current, [student.id]: true }));
+    setStatusErrors((current) => ({ ...current, [student.id]: "" }));
+
+    try {
+      const response = await apiFetch(
+        `${API_BASE_URL}/students-needs-interventions/${encodeURIComponent(student.id)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            requester_id: userId,
+            needs_interventions: needsInterventions,
+          }),
+        }
+      );
+      if (!response.ok) {
+        throw await requestError(response, "Intervention status");
+      }
+
+      const data = await response.json();
+      if (data.student?.needs_interventions !== needsInterventions) {
+        throw new Error("The intervention status response has an unexpected format.");
+      }
+      const updatedStudent = formatStudent(data.student);
+      setStatusStudents((current) =>
+        current.map((item) => (item.id === student.id ? updatedStudent : item))
+      );
+      setStudents((current) =>
+        current.map((item) => (item.id === student.id ? updatedStudent : item))
+      );
+      setUnassignedStudents((current) =>
+        current.map((item) => (item.id === student.id ? updatedStudent : item))
+      );
+    } catch (statusError) {
+      console.error("Error updating intervention status:", statusError);
+      setStatusErrors((current) => ({
+        ...current,
+        [student.id]: statusError.userMessage || "Could not update intervention status.",
+      }));
+    } finally {
+      setUpdatingStatus((current) => ({ ...current, [student.id]: false }));
+    }
+  };
+
   const allStudents = [...students, ...unassignedStudents];
-  const grades = [...new Set(allStudents.map((student) => student.grade))].sort(
+  const filterStudents = role === "admin" ? statusStudents : allStudents;
+  const grades = [...new Set(filterStudents.map((student) => student.grade))].sort(
     (left, right) =>
       String(left).localeCompare(String(right), undefined, { numeric: true })
   );
-  const teachers = [...new Set(allStudents.map((student) => student.teacher))].sort(
+  const teachers = [...new Set(filterStudents.map((student) => student.teacher))].sort(
     (left, right) => left.localeCompare(right)
   );
   const normalizedQuery = query.trim().toLowerCase();
@@ -273,6 +328,8 @@ function StudentsPage({ query = "", selectedStudent, onSelect, userId, role }) {
     (teacherFilter === "all" || student.teacher === teacherFilter);
   const filteredStudents = students.filter(matchesFilters);
   const filteredUnassignedStudents = unassignedStudents.filter(matchesFilters);
+  const filteredStatusStudents = statusStudents.filter(matchesFilters);
+  const canManageInterventionStatus = role === "teacher" || role === "admin";
   const interventionistName = (interventionist) =>
     interventionist.name ||
     [interventionist.first_name, interventionist.last_name].filter(Boolean).join(" ") ||
@@ -288,13 +345,11 @@ function StudentsPage({ query = "", selectedStudent, onSelect, userId, role }) {
     <>
       <PageHeading
         eyebrow="Students"
-        title={isAdmin ? "School students" : "Your students"}
+        title={role === "admin" ? "Student roster" : "Your students"}
         subtitle={
-          isAdmin
-            ? "All students at your school, organized by interventionist assignment."
-            : isTeacher
-              ? "Students in your class and students available to assign."
-              : "Students assigned to you and students available to assign."
+          role === "admin"
+            ? "All students in your school, with intervention status controls."
+            : "Students assigned to you and students available to assign."
         }
       />
       {isLoading ? (
@@ -334,7 +389,9 @@ function StudentsPage({ query = "", selectedStudent, onSelect, userId, role }) {
               </select>
             </label>
             <span className="student-filter-count" aria-live="polite">
-              Assigned: {filteredStudents.length} of {students.length}; unassigned: {filteredUnassignedStudents.length} of {unassignedStudents.length}
+              {role === "admin"
+                ? `School roster: ${filteredStatusStudents.length} of ${statusStudents.length}; unassigned needing interventions: ${filteredUnassignedStudents.length} of ${unassignedStudents.length}`
+                : `Assigned: ${filteredStudents.length} of ${students.length}; unassigned needing interventions: ${filteredUnassignedStudents.length} of ${unassignedStudents.length}`}
             </span>
             {(gradeFilter !== "all" || teacherFilter !== "all") && (
               <button className="student-filter-clear" type="button" onClick={clearFilters}>
@@ -342,6 +399,63 @@ function StudentsPage({ query = "", selectedStudent, onSelect, userId, role }) {
               </button>
             )}
           </div>
+          {canManageInterventionStatus && (
+            <section className="student-list-section intervention-status-section">
+              <h2>Students needing interventions</h2>
+              <p>Choose which students should be included in interventionists' caseloads.</p>
+              {filteredStatusStudents.length ? (
+                <div className="intervention-status-list">
+                  {filteredStatusStudents.map((student) => (
+                    <div className="card intervention-status-row" key={student.id}>
+                      <button
+                        className="unassigned-student-info"
+                        type="button"
+                        onClick={() => onSelect(student)}
+                        aria-label={`View profile for ${student.name}`}
+                      >
+                        <img src={student.avatar} alt="" />
+                        <div>
+                          <strong>{student.name}</strong>
+                          <small>Grade {student.grade}</small>
+                          <small>Teacher: {student.teacher}</small>
+                        </div>
+                      </button>
+                      <label className="intervention-status-toggle">
+                        <input
+                          type="checkbox"
+                          checked={student.needs_interventions === true}
+                          disabled={updatingStatus[student.id]}
+                          onChange={(event) =>
+                            updateInterventionStatus(student, event.target.checked)
+                          }
+                        />
+                        <span>
+                          {updatingStatus[student.id]
+                            ? "Saving..."
+                            : "Needs interventions"}
+                        </span>
+                      </label>
+                      {statusErrors[student.id] && (
+                        <p className="assignment-error" role="alert">
+                          {statusErrors[student.id]}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="card">
+                  <p>
+                    {statusStudents.length
+                      ? "No students match your search and filters."
+                      : role === "admin"
+                        ? "No students are in your school's roster."
+                        : "No students are assigned to you."}
+                  </p>
+                </div>
+              )}
+            </section>
+          )}
           {assignmentMessage && <p className="assignment-success" role="status">{assignmentMessage}</p>}
           <section className="student-list-section">
             <h2>
@@ -438,7 +552,7 @@ function StudentsPage({ query = "", selectedStudent, onSelect, userId, role }) {
               </div>
             ) : (
               <div className="card">
-                <p>{unassignedStudents.length ? "No unassigned students match your search and filters." : "There are no unassigned students."}</p>
+                <p>{unassignedStudents.length ? "No unassigned students match your search and filters." : "There are no unassigned students needing interventions."}</p>
               </div>
             )}
           </section>

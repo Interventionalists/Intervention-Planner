@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from auth.security import create_access_token, get_current_user
+from auth.security import READ_ONLY_DETAIL, create_access_token, get_current_user
 from database.supabase_client import (
     fetch_user_by_email,
     hash_password,
@@ -135,7 +135,9 @@ def change_password(payload: ChangePasswordRequest):
     if payload.new_password == payload.current_password:
         raise HTTPException(status_code=400, detail="New password must differ from current password")
 
-    authenticate(payload.email, payload.current_password)
+    account = authenticate(payload.email, payload.current_password)
+    if account.get("read_only"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=READ_ONLY_DETAIL)
 
     try:
         updated = update_user_password(payload.email, hash_password(payload.new_password))
@@ -153,6 +155,8 @@ def update_account_profile(
     payload: AccountProfileUpdateRequest,
     user: dict = Depends(get_current_user),
 ):
+    if user.get("read_only"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=READ_ONLY_DETAIL)
     updates = payload.model_dump(exclude_unset=True)
     profile_fields = {"first_name", "last_name", "email"}
     if user["role"] == "teacher":
