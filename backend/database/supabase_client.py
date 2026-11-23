@@ -35,6 +35,23 @@ def fetch_user_by_email(email):
     response = supabase.table("users").select("*").eq("email", email).limit(1).execute()
     return response.data[0] if response.data else None
 
+#the authorization-relevant fields for a signed-in user, read on every request
+#so role/read_only/school changes take effect without waiting for the token.
+#selects * so environments without a read_only column still work; only the
+#allowlisted fields leave this function.
+def fetch_user_auth(user_id):
+    response = (
+        supabase.table("users")
+        .select("*")
+        .eq("id", user_id)
+        .limit(1)
+        .execute()
+    )
+    if not response.data:
+        return None
+    row = response.data[0]
+    return {key: row.get(key) for key in ("id", "public_id", "role", "read_only", "school")}
+
 #hashes a plaintext password for storage in password_hash. bcrypt generates
 #and embeds a random salt per call, so no separate salt column is needed.
 def hash_password(password: str) -> str:
@@ -68,8 +85,13 @@ def _escape_filter_value(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
-def fetch_users_page(page: int, search: str = "", role: str | None = None):
+#admins manage their own school's users plus unassigned ones (school is null),
+#so they can bring new accounts into their school. school_id is an int from the
+#caller's own row, never from the request.
+def fetch_users_page(school_id: int, page: int, search: str = "", role: str | None = None):
     page_size = 25
+    school_id = int(school_id)
+    school_scope = f"or(school.eq.{school_id},school.is.null)"
     query = (
         supabase.table("users")
         .select(PUBLIC_USER_COLUMNS, count="exact")
@@ -77,6 +99,8 @@ def fetch_users_page(page: int, search: str = "", role: str | None = None):
     )
     if role:
         query = query.eq("role", role)
+    if not search:
+        query = query.or_(f"school.eq.{school_id},school.is.null")
     if search:
         search_filters = [
             f'{field}.ilike."%{_escape_filter_value(search)}%"'
@@ -98,7 +122,8 @@ def fetch_users_page(page: int, search: str = "", role: str | None = None):
             )
         if search.isdigit():
             search_filters.append(f"school.eq.{int(search)}")
-        query = query.or_(",".join(search_filters))
+        #one logical tree so the school scope is ANDed with the search terms
+        query = query.or_(f"and({school_scope},or({','.join(search_filters)}))")
 
     offset = (page - 1) * page_size
     response = query.range(offset, offset + page_size - 1).execute()
@@ -669,8 +694,14 @@ def fetch_assigned_students(
 
 
 ################################ ADMIN FUNCTIONS ########################################
-def fetch_admins():
-    response = supabase.table("users").select(PUBLIC_USER_COLUMNS).eq("role", "admin").execute()
+def fetch_admins(school_id: int):
+    response = (
+        supabase.table("users")
+        .select(PUBLIC_USER_COLUMNS)
+        .eq("role", "admin")
+        .eq("school", school_id)
+        .execute()
+    )
     return response.data
 
 
@@ -678,10 +709,6 @@ def fetch_admins():
 ########################### SCHOOL FUNCTIONS #######################################33
 def fetch_schools():
     response = supabase.table("schools").select("*").execute()
-    return response.data
-
-def update_user_school(user_id, new_school_id):
-    response = supabase.table("users").update({"school": new_school_id}).eq("id", user_id).execute()
     return response.data
 
 def fetch_user_school(user_id):
@@ -759,10 +786,6 @@ def save_school_theme(school_id, colors):
 
 def fetch_notes_from_user(public_id):
     response = supabase.table("notes").select("*").eq("created_by", public_id).execute()
-    return response.data
-
-def fetch_notes_from_date(timestamp):
-    response = supabase.table("notes").select("*").eq("date", timestamp).execute()
     return response.data
 
 def fetch_notes_for_student(student_id):

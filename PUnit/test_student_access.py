@@ -19,8 +19,17 @@ def user(role, public_id):
     return {"id": 1, "public_id": public_id, "role": role}
 
 
-def test_admin_can_reach_any_student(student_in_school_7):
+def test_admin_can_reach_student_in_own_school(student_in_school_7, monkeypatch):
+    set_user_school(monkeypatch, 7)
     security.require_student_access(user("admin", "admin-1"), 42)
+
+
+@pytest.mark.parametrize("school", [8, None])
+def test_admin_blocked_outside_own_school(student_in_school_7, monkeypatch, school):
+    set_user_school(monkeypatch, school)
+    with pytest.raises(HTTPException) as error:
+        security.require_student_access(user("admin", "admin-1"), 42)
+    assert error.value.status_code == 404
 
 
 def test_assigned_teacher_can_reach_student(student_in_school_7):

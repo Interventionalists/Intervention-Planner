@@ -66,8 +66,8 @@ async function loadSchools(
 const AccountPage = ({ user, name, initials, onUserUpdated }) => {
   const userRole = user?.role?.toLowerCase();
   const canEditProfile = userRole === "admin";
-  const canEditSchool =
-    userRole === "admin" || userRole === "interventionist";
+  // A school is a tenant boundary, so nobody picks their own: admins assign
+  // schools from the Users page.
   const [editing, setEditing] = useState(false);
   const [schoolId, setSchoolId] = useState(
     user?.school_id != null
@@ -152,23 +152,14 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
       if (!user?.id) {
         throw new Error("The logged-in user ID is missing.");
       }
-      if (schoolsLoading || schoolLoadError) {
-        throw new Error("Wait for the school list to load before saving.");
-      }
-      if (schoolId && !selectedSchool) {
-        throw new Error("Select a school from the list.");
+      if (!canEditProfile) {
+        throw new Error("Ask an administrator to update your account details.");
       }
 
-      const profileUpdates = canEditProfile
-        ? {
-            ...profileDraft,
-            school: selectedSchool ? Number(selectedSchool.id) : null,
-          }
-        : { school: selectedSchool ? Number(selectedSchool.id) : null };
       const response = await apiFetch(`${API_BASE_URL}/account/profile`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(profileUpdates),
+        body: JSON.stringify(profileDraft),
       });
       const result = await response.json();
       if (!response.ok) {
@@ -181,15 +172,13 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
       onUserUpdated?.({
         ...user,
         ...result.user,
-        school_id: selectedSchool?.id ?? null,
-        school_name: selectedSchool?.name ?? "",
       });
       setEditing(false);
     } catch (error) {
       setSaveError(
         error instanceof Error
           ? error.message
-          : "Couldn't save your school. Please try again."
+          : "Couldn't save your profile. Please try again."
       );
     } finally {
       setSaving(false);
@@ -220,7 +209,7 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
           <CardTitle
             title="Account details"
             action={
-              !editing && canEditSchool && (
+              !editing && canEditProfile && (
                 <button
                   className="text-button"
                   type="button"
@@ -299,29 +288,9 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
               </label>
               <label>
                 School
-                <select
-                  value={schoolId}
-                  onChange={(event) => setSchoolId(event.target.value)}
-                  disabled={
-                    !canEditSchool ||
-                    schoolsLoading ||
-                    Boolean(schoolLoadError)
-                  }
-                >
-                  <option value="">No school assigned</option>
-                  {schools.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.name}
-                    </option>
-                  ))}
-                </select>
+                <input value={schoolName} readOnly />
               </label>
 
-              {schoolLoadError && (
-                <p className="assignment-error error-state" role="alert">
-                  {schoolLoadError}
-                </p>
-              )}
               {saveError && (
                 <p className="assignment-error error-state" role="alert">
                   {saveError}
@@ -332,14 +301,7 @@ const AccountPage = ({ user, name, initials, onUserUpdated }) => {
                 <button
                   className="ghost-button"
                   type="submit"
-                  disabled={
-                    (!canEditProfile && !canEditSchool) ||
-                    schoolsLoading ||
-                    Boolean(schoolLoadError) ||
-                    Boolean(schoolId && !selectedSchool) ||
-                    !user?.id ||
-                    saving
-                  }
+                  disabled={!canEditProfile || !user?.id || saving}
                 >
                   {saving ? "Saving…" : "Save changes"}
                 </button>

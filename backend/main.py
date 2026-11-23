@@ -56,10 +56,14 @@ app.add_middleware(
 logger = logging.getLogger("intervention_planner")
 
 
+GENERIC_SERVER_ERROR = "Something went wrong on our end. Please try again."
+
+
 @app.exception_handler(StarletteHTTPException)
 async def log_server_errors(request: Request, exc: StarletteHTTPException):
     if exc.status_code >= 500:
-        cause = exc.__cause__ or exc
+        underlying = exc.__cause__ or exc.__context__
+        cause = underlying or exc
         logger.error(
             "%s %s -> %s",
             request.method,
@@ -67,6 +71,16 @@ async def log_server_errors(request: Request, exc: StarletteHTTPException):
             exc.status_code,
             exc_info=(type(cause), cause, cause.__traceback__),
         )
+        #a 5xx raised while handling another exception usually carries that
+        #exception's text (database/table/column names). It is logged above;
+        #the client only gets a generic message. Deliberate 5xx messages raised
+        #outside an except block are passed through unchanged.
+        if underlying is not None and not isinstance(underlying, StarletteHTTPException):
+            exc = StarletteHTTPException(
+                status_code=exc.status_code,
+                detail=GENERIC_SERVER_ERROR,
+                headers=exc.headers,
+            )
     return await http_exception_handler(request, exc)
 
 

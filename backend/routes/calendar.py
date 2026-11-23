@@ -338,12 +338,14 @@ def _get_writable_event(event_id: UUID, user: dict) -> dict:
     event = fetch_calendar_event(str(event_id))
     if event is None:
         raise HTTPException(status_code=404, detail="Calendar event not found.")
+    #admins may manage any event in their own school; everyone else only the
+    #events they organize, and never across schools
+    school_id = fetch_user_school_by_public_id(user["public_id"])
+    if school_id is None or str(event["school"]) != str(school_id):
+        raise HTTPException(status_code=404, detail="Calendar event not found.")
     if user["role"] == "admin":
         return event
     if str(event["organizer"]) != str(user["public_id"]):
-        raise HTTPException(status_code=404, detail="Calendar event not found.")
-    school_id = fetch_user_school_by_public_id(user["public_id"])
-    if school_id is None or str(event["school"]) != str(school_id):
         raise HTTPException(status_code=404, detail="Calendar event not found.")
     return event
 
@@ -635,20 +637,17 @@ def add_calendar_event(
     recurrence = None
     event = None
     try:
-        if user["role"] == "admin":
-            school_id = payload.school
-        else:
-            school_id = fetch_user_school_by_public_id(user["public_id"])
-            if school_id is None:
-                raise HTTPException(
-                    status_code=403,
-                    detail="The signed-in user does not have a school assigned.",
-                )
-            if payload.school != school_id:
-                raise HTTPException(
-                    status_code=403,
-                    detail="Calendar events can only be created for your school.",
-                )
+        school_id = fetch_user_school_by_public_id(user["public_id"])
+        if school_id is None:
+            raise HTTPException(
+                status_code=403,
+                detail="The signed-in user does not have a school assigned.",
+            )
+        if str(payload.school) != str(school_id):
+            raise HTTPException(
+                status_code=403,
+                detail="Calendar events can only be created for your school.",
+            )
         _validate_regarding_student(payload.regarding_student, school_id, user)
         if payload.participants:
             invitees = fetch_calendar_invitees(

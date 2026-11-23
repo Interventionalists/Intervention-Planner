@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, HttpUrl
-from auth.security import get_current_user, require_admin
+from auth.security import get_current_user, require_admin, same_school
 from database.supabase_client import (
     fetch_school_logo_api,
     fetch_school_name,
@@ -9,7 +9,6 @@ from database.supabase_client import (
     fetch_user_school,
     save_school_logo_api,
     save_school_theme,
-    update_user_school,
 )
 
 router = APIRouter()
@@ -31,10 +30,14 @@ def format_theme_color(color: str) -> str:
     return f"#{color.removeprefix('#')}"
 
 
-#these routes take the integer users.id rather than public_id
+#these routes take the integer users.id rather than public_id. Admins may act
+#on users in their own school only.
 def require_self_id_or_admin(user: dict, user_id: str) -> None:
-    if user["role"] != "admin" and str(user["id"]) != str(user_id):
-        raise HTTPException(status_code=403, detail="Not allowed")
+    if str(user["id"]) == str(user_id):
+        return
+    if user["role"] == "admin" and same_school(user, fetch_user_school(user_id)):
+        return
+    raise HTTPException(status_code=403, detail="Not allowed")
 
 #fetch all schools from the database
 @router.get("/schools-fetch")
@@ -45,18 +48,8 @@ def get_schools():
         raise HTTPException(status_code=500, detail=str(e))
     return {"schools": schools}
 
-#update user if the school has been changed through account
-@router.get("/schools-update")
-@router.put("/schools-update")
-def update_school(user_id: str, new_school_id: str, user: dict = Depends(get_current_user)):
-    require_self_id_or_admin(user, user_id)
-    try:
-        updated_user = update_user_school(user_id, new_school_id)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
-    if not updated_user:
-        raise HTTPException(status_code=404, detail="User not found.")
-    return {"message": "School updated successfully", "user": updated_user[0]}
+#a user's school is their tenant boundary, so it is never self-service: admins
+#assign it through PATCH /admins-users/{user_id}, which is scoped to their school.
 
 #get a user's school ID based off their user ID.
 @router.get("/schools-user-school")

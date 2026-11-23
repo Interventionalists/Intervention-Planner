@@ -7,8 +7,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from auth.security import (
     OWNER_COLUMN_BY_ROLE,
     get_current_user,
+    require_admin,
     require_self_or_admin,
     require_student_access,
+    user_school,
 )
 from database.supabase_client import (
     assign_student_to_interventionist,
@@ -501,15 +503,45 @@ def get_student_name(
         raise HTTPException(status_code=500, detail=str(e))
     return {"student_name": student_name}
 
-#insert a new student into the database
+#insert a new student into the database. Admin only, and always into the
+#admin's own school; the assigned teacher/interventionist must work there too.
 @router.post("/students-insert", status_code=status.HTTP_201_CREATED)
-def insert_student(payload: StudentCreateRequest):
+def insert_student(payload: StudentCreateRequest, user: dict = Depends(require_admin)):
+    school_id = user_school(user)
+    if school_id is None:
+        raise HTTPException(
+            status_code=403,
+            detail="The signed-in user does not have a school assigned.",
+        )
+    if payload.school is not None and str(payload.school) != str(school_id):
+        raise HTTPException(
+            status_code=403,
+            detail="Students can only be created in your school.",
+        )
+    for owner_role, owner_id in (
+        ("teacher", payload.teacher),
+        ("interventionist", payload.interventionist),
+    ):
+        if owner_id is None:
+            continue
+        owner = fetch_user_role_and_school_by_public_id(str(owner_id))
+        if (
+            owner is None
+            or owner.get("role") != owner_role
+            or str(owner.get("school")) != str(school_id)
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=f"The {owner_role} must belong to your school.",
+            )
+    student_data = payload.model_dump(mode="json", exclude_none=True)
+    student_data["school"] = school_id
     try:
-        student = create_student(**payload.model_dump(mode="json", exclude_none=True))
+        student = create_student(**student_data)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Unable to create student: {e}",
+            detail="Unable to create student.",
         ) from e
     return {"student": student}
 

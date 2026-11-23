@@ -2,6 +2,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from auth import security
 from routes import students
 
 TEACHER_ID = "11111111-1111-1111-1111-111111111111"
@@ -63,12 +64,24 @@ def test_interventionist_gets_students_by_interventionist_column(
 
 def test_admin_viewing_a_teacher_uses_the_teachers_role(monkeypatch, record_fetch):
     set_target_user(monkeypatch, "teacher")
-    client = make_client({"public_id": OTHER_ID, "role": "admin"})
+    monkeypatch.setattr(security, "fetch_user_school_by_public_id", lambda _id: 7)
+    client = make_client({"public_id": OTHER_ID, "role": "admin", "school": 7})
 
     response = client.get(f"/students-fetch/{TEACHER_ID}")
 
     assert response.status_code == 200
     assert record_fetch == [(TEACHER_ID, "teacher", 7)]
+
+
+def test_admin_cannot_view_teacher_in_another_school(monkeypatch, record_fetch):
+    set_target_user(monkeypatch, "teacher", school=8)
+    monkeypatch.setattr(security, "fetch_user_school_by_public_id", lambda _id: 8)
+    client = make_client({"public_id": OTHER_ID, "role": "admin", "school": 7})
+
+    response = client.get(f"/students-fetch/{TEACHER_ID}")
+
+    assert response.status_code == 403
+    assert record_fetch == []
 
 
 def test_role_without_assigned_students_gets_empty_list(monkeypatch, record_fetch):
