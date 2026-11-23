@@ -20,7 +20,7 @@ from routes.layouts import router as layouts_router
 from routes.todos import router as todos_router
 from routes.health import router as health_router
 from routes.system_health import router as system_health_router
-from auth.security import get_current_user, require_admin
+from auth.security import block_writes_if_read_only, get_current_user, require_admin
 
 load_dotenv()
 
@@ -56,10 +56,14 @@ app.add_middleware(
 logger = logging.getLogger("intervention_planner")
 
 
+GENERIC_SERVER_ERROR = "Something went wrong on our end. Please try again."
+
+
 @app.exception_handler(StarletteHTTPException)
 async def log_server_errors(request: Request, exc: StarletteHTTPException):
     if exc.status_code >= 500:
-        cause = exc.__cause__ or exc
+        underlying = exc.__cause__ or exc.__context__
+        cause = underlying or exc
         logger.error(
             "%s %s -> %s",
             request.method,
@@ -67,12 +71,23 @@ async def log_server_errors(request: Request, exc: StarletteHTTPException):
             exc.status_code,
             exc_info=(type(cause), cause, cause.__traceback__),
         )
+        #a 5xx raised while handling another exception usually carries that
+        #exception's text (database/table/column names). It is logged above;
+        #the client only gets a generic message. Deliberate 5xx messages raised
+        #outside an except block are passed through unchanged.
+        if underlying is not None and not isinstance(underlying, StarletteHTTPException):
+            exc = StarletteHTTPException(
+                status_code=exc.status_code,
+                detail=GENERIC_SERVER_ERROR,
+                headers=exc.headers,
+            )
     return await http_exception_handler(request, exc)
 
 
 #auth is applied here, per router, so a new endpoint can't forget it.
 #/login, /change-password and /health stay public; admin routes need the admin role.
-protected = [Depends(get_current_user)]
+#read-only (demo) accounts are blocked from every non-GET request on these routers.
+protected = [Depends(get_current_user), Depends(block_writes_if_read_only)]
 
 app.include_router(auth_router)
 app.include_router(health_router)
@@ -87,5 +102,5 @@ app.include_router(sessions_router, dependencies=protected)
 app.include_router(schools_router, dependencies=protected)
 app.include_router(layouts_router, dependencies=protected)
 app.include_router(todos_router, dependencies=protected)
-app.include_router(admins_router, dependencies=[Depends(require_admin)])
-app.include_router(system_health_router, dependencies=[Depends(require_admin)])
+app.include_router(admins_router, dependencies=[Depends(require_admin), Depends(block_writes_if_read_only)])
+app.include_router(system_health_router, dependencies=[Depends(require_admin), Depends(block_writes_if_read_only)])

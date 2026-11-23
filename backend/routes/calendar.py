@@ -29,11 +29,14 @@ from database.supabase_client import (
     fetch_groups,
     fetch_calendar_invitees,
     fetch_calendar_recurrence,
+    fetch_event_participant,
+    fetch_pending_event_invitations,
     fetch_student_ids_needing_interventions,
     fetch_student_ownership,
     fetch_user_school_by_public_id,
     update_calendar_event,
     update_calendar_recurrence,
+    update_event_participant_attendance,
 )
 
 router = APIRouter()
@@ -230,6 +233,67 @@ def get_calendar_availability(
         raise HTTPException(status_code=500, detail=str(error)) from error
 
 
+@router.get("/calendar-notifications")
+def get_calendar_notifications(user: dict = Depends(get_current_user)):
+    """Meeting invitations the signed-in user still needs to accept or decline."""
+    try:
+        school_id = fetch_user_school_by_public_id(user["public_id"])
+        if school_id is None:
+            raise HTTPException(
+                status_code=403,
+                detail="The signed-in user does not have a school assigned.",
+            )
+        invitations = fetch_pending_event_invitations(user["public_id"], school_id)
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=str(error)) from error
+    return {"notifications": invitations, "count": len(invitations)}
+
+
+class CalendarInvitationResponse(BaseModel):
+    response: Literal["accepted", "declined"]
+
+
+@router.post("/calendar-events/{event_id}/response")
+def respond_to_calendar_invitation(
+    event_id: UUID,
+    payload: CalendarInvitationResponse,
+    user: dict = Depends(get_current_user),
+):
+    """Accept or decline a meeting the signed-in user was invited to.
+
+    A user can change their answer later by responding again.
+    """
+    try:
+        event = fetch_calendar_event(str(event_id))
+        school_id = fetch_user_school_by_public_id(user["public_id"])
+        #same 404 for "no such event", "other school" and "not invited" so the
+        #endpoint can't be used to probe for events
+        if (
+            event is None
+            or school_id is None
+            or str(event["school"]) != str(school_id)
+        ):
+            raise HTTPException(status_code=404, detail="Invitation not found.")
+        participant = fetch_event_participant(event["id"], user["public_id"])
+        if participant is None:
+            raise HTTPException(status_code=404, detail="Invitation not found.")
+        updated = update_event_participant_attendance(
+            event["id"], user["public_id"], payload.response
+        )
+        if updated is None:
+            raise RuntimeError("Unable to save your response.")
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=str(error)) from error
+    return {
+        "event_id": str(event_id),
+        "attendance": updated["attendance"],
+    }
+
+
 class CalendarParticipantCreate(BaseModel):
     user_id: UUID | None = None
     student_id: int | None = Field(default=None, ge=1)
@@ -338,12 +402,14 @@ def _get_writable_event(event_id: UUID, user: dict) -> dict:
     event = fetch_calendar_event(str(event_id))
     if event is None:
         raise HTTPException(status_code=404, detail="Calendar event not found.")
+    #admins may manage any event in their own school; everyone else only the
+    #events they organize, and never across schools
+    school_id = fetch_user_school_by_public_id(user["public_id"])
+    if school_id is None or str(event["school"]) != str(school_id):
+        raise HTTPException(status_code=404, detail="Calendar event not found.")
     if user["role"] == "admin":
         return event
     if str(event["organizer"]) != str(user["public_id"]):
-        raise HTTPException(status_code=404, detail="Calendar event not found.")
-    school_id = fetch_user_school_by_public_id(user["public_id"])
-    if school_id is None or str(event["school"]) != str(school_id):
         raise HTTPException(status_code=404, detail="Calendar event not found.")
     return event
 
@@ -368,23 +434,49 @@ def _event_update_values(payload: CalendarEventUpdate) -> dict:
     )
 
 
-def _participant_rows(participants, event_id: int) -> list[dict]:
-    return [
-        {
-            "event_id": event_id,
-            "user_id": str(participant.user_id) if participant.user_id else None,
+def _participant_key(user_id, student_id) -> tuple:
+    if user_id is not None:
+        return ("user", str(user_id))
+    return ("student", student_id)
+
+
+def _existing_attendance(participant_rows: list[dict] | None) -> dict:
+    #keeps accept/decline answers when an organizer re-saves the invite list
+    return {
+        _participant_key(row.get("user_id"), row.get("student_id")): row.get("attendance")
+        for row in (participant_rows or [])
+        if row.get("attendance")
+    }
+
+
+def _participant_rows(
+    participants,
+    event_id: int | None,
+    existing_rows: list[dict] | None = None,
+) -> list[dict]:
+    previous = _existing_attendance(existing_rows)
+    rows = []
+    for participant in participants:
+        user_id = str(participant.user_id) if participant.user_id else None
+        row = {
+            "user_id": user_id,
             "student_id": participant.student_id,
-            "attendance": "invited",
+            "attendance": previous.get(
+                _participant_key(user_id, participant.student_id), "invited"
+            ),
         }
-        for participant in participants
-    ]
+        if event_id is not None:
+            row["event_id"] = event_id
+        rows.append(row)
+    return rows
 
 
 def _replace_event_participants(event_id: int, participants) -> None:
+    existing_rows = fetch_calendar_event_participants(event_id)
     delete_calendar_event_participants(event_id)
     if participants:
         saved = create_calendar_event_participants(
-            _participant_rows(participants, event_id)
+            _participant_rows(participants, event_id, existing_rows)
         )
         if len(saved) != len(participants):
             raise RuntimeError("Not all invited participants were saved.")
@@ -635,20 +727,17 @@ def add_calendar_event(
     recurrence = None
     event = None
     try:
-        if user["role"] == "admin":
-            school_id = payload.school
-        else:
-            school_id = fetch_user_school_by_public_id(user["public_id"])
-            if school_id is None:
-                raise HTTPException(
-                    status_code=403,
-                    detail="The signed-in user does not have a school assigned.",
-                )
-            if payload.school != school_id:
-                raise HTTPException(
-                    status_code=403,
-                    detail="Calendar events can only be created for your school.",
-                )
+        school_id = fetch_user_school_by_public_id(user["public_id"])
+        if school_id is None:
+            raise HTTPException(
+                status_code=403,
+                detail="The signed-in user does not have a school assigned.",
+            )
+        if str(payload.school) != str(school_id):
+            raise HTTPException(
+                status_code=403,
+                detail="Calendar events can only be created for your school.",
+            )
         _validate_regarding_student(payload.regarding_student, school_id, user)
         if payload.participants:
             invitees = fetch_calendar_invitees(
@@ -813,18 +902,7 @@ def edit_calendar_event(
                     detail="Event end must be after its start.",
                 )
             attendee_data = (
-                [
-                    {
-                        "user_id": (
-                            str(participant.user_id)
-                            if participant.user_id
-                            else None
-                        ),
-                        "student_id": participant.student_id,
-                        "attendance": "invited",
-                    }
-                    for participant in participants_value
-                ]
+                _participant_rows(participants_value, None, source_participants)
                 if participants_requested and participants_value is not None
                 else [
                     {

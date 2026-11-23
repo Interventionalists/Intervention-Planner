@@ -101,6 +101,8 @@ async function fetchWithRetry(url, options, onRetry) {
 }
 
 function StudentsPage({ query = "", selectedStudent, onSelect, userId, role }) {
+  const isTeacher = role === "teacher";
+  const isAdmin = role === "admin";
   const [students, setStudents] = useState([]);
   const [statusStudents, setStatusStudents] = useState([]);
   const [unassignedStudents, setUnassignedStudents] = useState([]);
@@ -131,10 +133,15 @@ function StudentsPage({ query = "", selectedStudent, onSelect, userId, role }) {
           throw new Error("The signed-in user's public ID is missing.");
         }
 
-        const [assignedResponse, unassignedResponse, interventionistsResponse, rosterResponse] =
+        const assignedStudentsUrl = isAdmin
+          ? `${API_BASE_URL}/students-fetch`
+          : `${API_BASE_URL}/students-fetch/${encodeURIComponent(userId)}`;
+        // Admins already get the whole school roster from assignedStudentsUrl,
+        // so the same list feeds both the student list and the status table.
+        const [assignedResponse, unassignedResponse, interventionistsResponse] =
           await Promise.all([
             fetchWithRetry(
-              `${API_BASE_URL}/students-fetch/${encodeURIComponent(userId)}`,
+              assignedStudentsUrl,
               { signal: controller.signal },
               () => setRetryCount((count) => count + 1)
             ),
@@ -148,13 +155,6 @@ function StudentsPage({ query = "", selectedStudent, onSelect, userId, role }) {
               { signal: controller.signal },
               () => setRetryCount((count) => count + 1)
             ),
-            role === "admin"
-              ? fetchWithRetry(
-                  `${API_BASE_URL}/students-fetch`,
-                  { signal: controller.signal },
-                  () => setRetryCount((count) => count + 1)
-                )
-              : Promise.resolve(null),
           ]);
         if (!assignedResponse.ok) {
           throw await requestError(assignedResponse, "Assigned student");
@@ -165,31 +165,23 @@ function StudentsPage({ query = "", selectedStudent, onSelect, userId, role }) {
         if (!interventionistsResponse.ok) {
           throw await requestError(interventionistsResponse, "Interventionist");
         }
-        if (rosterResponse && !rosterResponse.ok) {
-          throw await requestError(rosterResponse, "Student roster");
-        }
 
-        const [assignedData, unassignedData, interventionistsData, rosterData] =
+        const [assignedData, unassignedData, interventionistsData] =
           await Promise.all([
             assignedResponse.json(),
             unassignedResponse.json(),
             interventionistsResponse.json(),
-            rosterResponse ? rosterResponse.json() : Promise.resolve(null),
           ]);
         if (
           !Array.isArray(assignedData.students) ||
           !Array.isArray(unassignedData.students) ||
-          !Array.isArray(interventionistsData.interventionists) ||
-          (role === "admin" && !Array.isArray(rosterData?.students))
+          !Array.isArray(interventionistsData.interventionists)
         ) {
           throw new Error("A student or interventionist response has an unexpected format.");
         }
-        setStudents(assignedData.students.map(formatStudent));
-        setStatusStudents(
-          (role === "admin" ? rosterData.students : assignedData.students).map(
-            formatStudent
-          )
-        );
+        const loadedStudents = assignedData.students.map(formatStudent);
+        setStudents(loadedStudents);
+        setStatusStudents(loadedStudents);
         setUnassignedStudents(unassignedData.students.map(formatStudent));
         setInterventionists(interventionistsData.interventionists);
         setAssignmentIds({});
@@ -452,22 +444,34 @@ function StudentsPage({ query = "", selectedStudent, onSelect, userId, role }) {
             </section>
           )}
           {assignmentMessage && <p className="assignment-success" role="status">{assignmentMessage}</p>}
-          {role !== "admin" && (
-            <section className="student-list-section">
-              <h2>Assigned to you</h2>
-              {filteredStudents.length ? (
-                <StudentsList
-                  list={filteredStudents}
-                  selectedStudent={selectedStudent}
-                  onSelect={onSelect}
-                />
-              ) : (
-                <div className="card">
-                  <p>{students.length ? "No students match your search and filters." : "No students are assigned to you."}</p>
-                </div>
-              )}
-            </section>
-          )}
+          <section className="student-list-section">
+            <h2>
+              {isAdmin
+                ? "Assigned to interventionists"
+                : isTeacher
+                  ? "Your class"
+                  : "Assigned to you"}
+            </h2>
+            {filteredStudents.length ? (
+              <StudentsList
+                list={filteredStudents}
+                selectedStudent={selectedStudent}
+                onSelect={onSelect}
+              />
+            ) : (
+              <div className="card">
+                <p>
+                  {students.length
+                    ? "No students match your search and filters."
+                    : isTeacher
+                      ? "No students are in your class."
+                      : isAdmin
+                        ? "No students are assigned to an interventionist."
+                        : "No students are assigned to you."}
+                </p>
+              </div>
+            )}
+          </section>
 
           <section className="student-list-section">
             <h2>Unassigned students</h2>
