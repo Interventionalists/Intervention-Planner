@@ -13,6 +13,8 @@ export function toSessionView(session) {
     duration: session.duration_minutes,
     scheduledAt: session.scheduled_at,
     status: session.status,
+    recurrence: session.recurrence || null,
+    recurrence: session.recurrence || null,
   };
 }
 

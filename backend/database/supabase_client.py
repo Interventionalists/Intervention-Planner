@@ -858,6 +858,41 @@ def _from_session_row(row: dict):
     return session
 
 
+def _attach_session_recurrences(sessions: list[dict]):
+    if not sessions:
+        return sessions
+
+    events_response = (
+        supabase.table("calendar_events")
+        .select("id, recurrence_id")
+        .in_("id", [session["id"] for session in sessions])
+        .execute()
+    )
+    recurrence_by_event = {
+        event["id"]: event.get("recurrence_id")
+        for event in (events_response.data or [])
+    }
+    recurrence_ids = list({
+        recurrence_id
+        for recurrence_id in recurrence_by_event.values()
+        if recurrence_id is not None
+    })
+    recurrence_response = (
+        supabase.table("event_recurrence")
+        .select("id, weekdays, every_n_weeks, ends_on")
+        .in_("id", recurrence_ids)
+        .execute()
+    ) if recurrence_ids else None
+    recurrence_by_id = {
+        recurrence["id"]: recurrence
+        for recurrence in (recurrence_response.data if recurrence_response else [])
+    }
+    for session in sessions:
+        recurrence_id = recurrence_by_event.get(session["id"])
+        session["recurrence"] = recurrence_by_id.get(recurrence_id)
+    return sessions
+
+
 def fetch_sessions_for_student(student_id: int):
     response = (
         supabase.table("session_details")
@@ -865,7 +900,9 @@ def fetch_sessions_for_student(student_id: int):
         .eq("student_id", student_id)
         .execute()
     )
-    return [_from_session_row(row) for row in (response.data or [])]
+    return _attach_session_recurrences(
+        [_from_session_row(row) for row in (response.data or [])]
+    )
 
 
 def create_session(session_data: dict):
@@ -875,7 +912,9 @@ def create_session(session_data: dict):
         .select("*")
         .execute()
     )
-    return _from_session_row(response.data[0]) if response.data else None
+    return _attach_session_recurrences(
+        [_from_session_row(response.data[0])]
+    )[0] if response.data else None
 
 
 def fetch_session(session_id: int):

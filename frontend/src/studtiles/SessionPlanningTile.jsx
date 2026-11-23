@@ -23,6 +23,16 @@ function formatSessionDate(value) {
   }).format(new Date(value));
 }
 
+function formatLocalDateTimeForApi(value) {
+  const date = new Date(value);
+  const offsetMinutes = -date.getTimezoneOffset();
+  const sign = offsetMinutes >= 0 ? "+" : "-";
+  const absoluteOffset = Math.abs(offsetMinutes);
+  const hours = String(Math.floor(absoluteOffset / 60)).padStart(2, "0");
+  const minutes = String(absoluteOffset % 60).padStart(2, "0");
+  return `${value}:00${sign}${hours}:${minutes}`;
+}
+
 async function getResponseResult(response, action) {
   const result = await response.json();
   if (!response.ok) {
@@ -47,6 +57,7 @@ export default function SessionPlanningTile({
   const [selectedDuration, setSelectedDuration] = useState(starterPlans[0].duration);
   const [sessionDescription, setSessionDescription] = useState(starterPlans[0].focus);
   const [scheduledAt, setScheduledAt] = useState("");
+  const [repeatWeekly, setRepeatWeekly] = useState(false);
   const [view, setView] = useState("upcoming");
   const [message, setMessage] = useState("");
 
@@ -87,7 +98,12 @@ export default function SessionPlanningTile({
           plan_type: plan.title,
           focus: sessionDescription,
           duration_minutes: selectedDuration,
-          scheduled_at: scheduledAt ? new Date(scheduledAt).toISOString() : null,
+          scheduled_at: scheduledAt ? formatLocalDateTimeForApi(scheduledAt) : null,
+          recurrence: repeatWeekly ? {
+            weekdays: [(new Date(`${scheduledAt.slice(0, 10)}T12:00:00`).getDay() + 6) % 7],
+            every_n_weeks: 1,
+            ends_on: null,
+          } : null,
         }),
       });
       const result = await getResponseResult(response, "Create session");
@@ -99,7 +115,10 @@ export default function SessionPlanningTile({
         ...currentSessions,
       ]);
       setScheduledAt("");
-      setMessage(`Session planned for ${studentName}.`);
+      setRepeatWeekly(false);
+      setMessage(repeatWeekly
+        ? `Weekly session planned for ${studentName}.`
+        : `Session planned for ${studentName}.`);
       setView("upcoming");
     } catch (error) {
       setMessage(error instanceof TypeError
@@ -125,7 +144,9 @@ export default function SessionPlanningTile({
       }
       setSessions((currentSessions) =>
         currentSessions.map((session) =>
-          session.id === sessionId ? toSessionView(result.session) : session
+          session.id === sessionId
+            ? toSessionView({ ...result.session, recurrence: session.recurrence })
+            : session
         )
       );
       setMessage(status === "completed" ? "Session marked complete." : "Session cancelled.");
@@ -201,6 +222,14 @@ export default function SessionPlanningTile({
               value={scheduledAt}
             />
           </label>
+          <label className="session-recurrence-toggle">
+            <input
+              checked={repeatWeekly}
+              onChange={(event) => setRepeatWeekly(event.target.checked)}
+              type="checkbox"
+            />
+            <span>Repeat weekly until cancelled</span>
+          </label>
           <button className="session-primary-button" type="submit">
             <Plus aria-hidden="true" size={17} />
             Plan session
@@ -247,6 +276,9 @@ export default function SessionPlanningTile({
                   </span>
                 </div>
                 {session.focus && <p>{session.focus}</p>}
+                {session.recurrence && (
+                  <p className="session-recurring-label">Repeats weekly until cancelled</p>
+                )}
                 <div className="session-item-meta">
                   <span>{formatSessionDate(session.scheduledAt)}</span>
                   <span>{session.duration} min</span>
@@ -254,20 +286,24 @@ export default function SessionPlanningTile({
               </div>
               {canManage && session.status === "planned" && (
                 <div className="session-item-actions">
+                  {!session.recurrence && (
+                    <button
+                      aria-label={`Mark ${session.planTitle} complete`}
+                      className="session-icon-button"
+                      onClick={() => updateSessionStatus(session.id, "completed")}
+                      title="Mark complete"
+                      type="button"
+                    >
+                      <Check size={18} />
+                    </button>
+                  )}
                   <button
-                    aria-label={`Mark ${session.planTitle} complete`}
-                    className="session-icon-button"
-                    onClick={() => updateSessionStatus(session.id, "completed")}
-                    title="Mark complete"
-                    type="button"
-                  >
-                    <Check size={18} />
-                  </button>
-                  <button
-                    aria-label={`Cancel ${session.planTitle}`}
+                    aria-label={session.recurrence
+                      ? `End recurring ${session.planTitle}`
+                      : `Cancel ${session.planTitle}`}
                     className="session-icon-button session-cancel-button"
                     onClick={() => updateSessionStatus(session.id, "cancelled")}
-                    title="Cancel session"
+                    title={session.recurrence ? "End recurring series" : "Cancel session"}
                     type="button"
                   >
                     <X size={18} />
