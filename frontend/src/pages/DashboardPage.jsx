@@ -172,7 +172,11 @@ function DashboardPage({
       <PageHeading
         eyebrow="Overview"
         title={`Good morning, ${userName}!`}
-        subtitle="Here’s what’s happening with your intervention students."
+        subtitle={
+          role === "teacher"
+            ? "Here’s what’s happening with your students."
+            : "Here’s what’s happening with your intervention students."
+        }
       />
 
       <TileWorkspace

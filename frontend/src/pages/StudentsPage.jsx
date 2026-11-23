@@ -101,6 +101,8 @@ async function fetchWithRetry(url, options, onRetry) {
 }
 
 function StudentsPage({ query = "", selectedStudent, onSelect, userId, role }) {
+  const isTeacher = role === "teacher";
+  const isAdmin = role === "admin";
   const [students, setStudents] = useState([]);
   const [statusStudents, setStatusStudents] = useState([]);
   const [unassignedStudents, setUnassignedStudents] = useState([]);
@@ -131,10 +133,13 @@ function StudentsPage({ query = "", selectedStudent, onSelect, userId, role }) {
           throw new Error("The signed-in user's public ID is missing.");
         }
 
-        const [assignedResponse, unassignedResponse, interventionistsResponse, rosterResponse] =
+        const assignedStudentsUrl = isAdmin
+          ? `${API_BASE_URL}/students-fetch`
+          : `${API_BASE_URL}/students-fetch/${encodeURIComponent(userId)}`;
+        const [assignedResponse, unassignedResponse, interventionistsResponse] =
           await Promise.all([
             fetchWithRetry(
-              `${API_BASE_URL}/students-fetch/${encodeURIComponent(userId)}`,
+              assignedStudentsUrl,
               { signal: controller.signal },
               () => setRetryCount((count) => count + 1)
             ),
@@ -452,22 +457,34 @@ function StudentsPage({ query = "", selectedStudent, onSelect, userId, role }) {
             </section>
           )}
           {assignmentMessage && <p className="assignment-success" role="status">{assignmentMessage}</p>}
-          {role !== "admin" && (
-            <section className="student-list-section">
-              <h2>Assigned to you</h2>
-              {filteredStudents.length ? (
-                <StudentsList
-                  list={filteredStudents}
-                  selectedStudent={selectedStudent}
-                  onSelect={onSelect}
-                />
-              ) : (
-                <div className="card">
-                  <p>{students.length ? "No students match your search and filters." : "No students are assigned to you."}</p>
-                </div>
-              )}
-            </section>
-          )}
+          <section className="student-list-section">
+            <h2>
+              {isAdmin
+                ? "Assigned to interventionists"
+                : isTeacher
+                  ? "Your class"
+                  : "Assigned to you"}
+            </h2>
+            {filteredStudents.length ? (
+              <StudentsList
+                list={filteredStudents}
+                selectedStudent={selectedStudent}
+                onSelect={onSelect}
+              />
+            ) : (
+              <div className="card">
+                <p>
+                  {students.length
+                    ? "No students match your search and filters."
+                    : isTeacher
+                      ? "No students are in your class."
+                      : isAdmin
+                        ? "No students are assigned to an interventionist."
+                        : "No students are assigned to you."}
+                </p>
+              </div>
+            )}
+          </section>
 
           <section className="student-list-section">
             <h2>Unassigned students</h2>
