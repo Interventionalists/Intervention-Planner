@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -58,6 +60,113 @@ def test_create_session_links_calendar_event(monkeypatch):
     assert created["session"]["event_id"] == 981
     assert created["session"]["created_by"] == "user-123"
     assert response.json()["session"]["id"] == 981
+
+
+def test_create_recurring_session_uses_calendar_recurrence(monkeypatch):
+    app = FastAPI()
+    app.include_router(sessions.router)
+    user = {"id": 1, "public_id": "user-123", "role": "interventionist"}
+    app.dependency_overrides[sessions.get_current_user] = lambda: user
+    client = TestClient(app)
+    created = {}
+    recurrence = {
+        "id": 17,
+        "weekdays": [0],
+        "every_n_weeks": 1,
+        "ends_on": None,
+    }
+
+    monkeypatch.setattr(sessions, "require_student_access", lambda *_args: None)
+    monkeypatch.setattr(
+        sessions,
+        "fetch_student_ownership",
+        lambda _student_id: {"school": 7},
+    )
+    monkeypatch.setattr(
+        sessions,
+        "create_calendar_recurrence",
+        lambda data: created.update(recurrence_data=data) or recurrence,
+    )
+    monkeypatch.setattr(
+        sessions,
+        "create_calendar_event",
+        lambda data: created.update(event=data) or {
+            "id": 981,
+            "public_id": "event-public-id",
+        },
+    )
+    monkeypatch.setattr(
+        sessions,
+        "create_session",
+        lambda data: created.update(session_data=data) or {"id": 981, **data},
+    )
+
+    response = client.post(
+        "/sessions-create",
+        json={
+            "student_id": 42,
+            "plan_type": "Reading fluency",
+            "duration_minutes": 25,
+            "scheduled_at": "2026-11-09T15:15:00Z",
+            "recurrence": {
+                "weekdays": [0],
+                "every_n_weeks": 1,
+                "ends_on": None,
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    assert created["recurrence_data"] == {
+        "weekdays": [0],
+        "every_n_weeks": 1,
+        "ends_on": None,
+    }
+    assert created["event"]["recurrence_id"] == recurrence["id"]
+    assert created["event"]["series_id"]
+    assert response.json()["session"]["recurrence"] == recurrence
+
+
+def test_cancelling_recurring_session_ends_calendar_series(monkeypatch):
+    app = FastAPI()
+    app.include_router(sessions.router)
+    user = {"id": 1, "public_id": "user-123", "role": "interventionist"}
+    app.dependency_overrides[sessions.get_current_user] = lambda: user
+    client = TestClient(app)
+    changes = {}
+
+    monkeypatch.setattr(sessions, "fetch_session", lambda _id: {
+        "id": 981,
+        "student_id": 42,
+        "status": "planned",
+    })
+    monkeypatch.setattr(sessions, "require_student_access", lambda *_args: None)
+    monkeypatch.setattr(sessions, "fetch_calendar_event_by_id", lambda _id: {
+        "id": 981,
+        "recurrence_id": 17,
+        "starts_at": "2026-11-09T15:15:00+00:00",
+    })
+    monkeypatch.setattr(
+        sessions,
+        "fetch_calendar_recurrence",
+        lambda _id: {"id": 17, "ends_on": None},
+    )
+    monkeypatch.setattr(
+        sessions,
+        "update_calendar_recurrence",
+        lambda recurrence_id, updates: changes.update({"recurrence_id": recurrence_id, **updates}) or updates,
+    )
+    monkeypatch.setattr(
+        sessions,
+        "update_session_status",
+        lambda session_id, status: {"id": session_id, "status": status},
+    )
+
+    response = client.patch("/sessions-updateStatus/981", json={"status": "cancelled"})
+
+    assert response.status_code == 200
+    assert changes["recurrence_id"] == 17
+    assert date.fromisoformat(changes["ends_on"]) < date.today()
 
 
 def test_update_planned_session_updates_calendar_and_details(monkeypatch):

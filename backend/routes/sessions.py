@@ -1,24 +1,42 @@
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Literal
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from auth.security import get_current_user, require_student_access
 from database.supabase_client import (
     create_calendar_event,
+    create_calendar_recurrence,
     create_session,
     delete_calendar_event,
+    delete_calendar_recurrence,
     fetch_calendar_event_by_id,
+    fetch_calendar_recurrence,
     fetch_session,
     fetch_sessions_for_student,
     fetch_student_ownership,
+    update_calendar_recurrence,
     update_calendar_event,
     update_session_details,
     update_session_status,
 )
 
 router = APIRouter()
+
+
+class SessionRecurrence(BaseModel):
+    weekdays: list[int] = Field(min_length=1, max_length=1)
+    every_n_weeks: int = Field(default=1, ge=1, le=52)
+    ends_on: date | None = None
+
+    @field_validator("weekdays")
+    @classmethod
+    def validate_weekday(cls, weekdays: list[int]) -> list[int]:
+        if any(day < 0 or day > 6 for day in weekdays):
+            raise ValueError("Weekday must use values from 0 (Monday) to 6 (Sunday).")
+        return weekdays
 
 
 class SessionCreate(BaseModel):
@@ -29,6 +47,7 @@ class SessionCreate(BaseModel):
     focus: str = Field(default="", max_length=300)
     duration_minutes: int = Field(ge=1, le=240)
     scheduled_at: datetime
+    recurrence: SessionRecurrence | None = None
 
     @field_validator("scheduled_at")
     @classmethod
@@ -36,6 +55,15 @@ class SessionCreate(BaseModel):
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("Session start time must include a timezone.")
         return value
+
+    @model_validator(mode="after")
+    def require_start_weekday(self):
+        if self.recurrence:
+            if self.recurrence.ends_on and self.recurrence.ends_on < self.scheduled_at.date():
+                raise ValueError("The recurrence end date cannot be before the session start.")
+            if self.scheduled_at.weekday() not in self.recurrence.weekdays:
+                raise ValueError("The recurring session weekday must match its start date.")
+        return self
 
 
 class SessionStatusUpdate(BaseModel):
@@ -78,6 +106,8 @@ def add_session(
     payload: SessionCreate,
     user: dict = Depends(get_current_user),
 ):
+    recurrence = None
+    calendar_event = None
     try:
         require_student_access(user, payload.student_id)
         ownership = fetch_student_ownership(payload.student_id)
@@ -86,7 +116,14 @@ def add_session(
 
         starts_at = payload.scheduled_at
         ends_at = starts_at + timedelta(minutes=payload.duration_minutes)
-        calendar_event = create_calendar_event({
+        if payload.recurrence:
+            recurrence = create_calendar_recurrence(
+                payload.recurrence.model_dump(mode="json")
+            )
+            if not recurrence:
+                raise HTTPException(status_code=500, detail="Session recurrence creation failed")
+
+        event_data = {
             "school": ownership["school"],
             "event_type": "intervention_session",
             "title": payload.plan_type,
@@ -94,20 +131,25 @@ def add_session(
             "ends_at": ends_at.isoformat(),
             "regarding_student": payload.student_id,
             "organizer": user["public_id"],
-        })
+        }
+        if recurrence:
+            event_data.update(recurrence_id=recurrence["id"], series_id=str(uuid4()))
+        calendar_event = create_calendar_event(event_data)
         if not calendar_event:
             raise HTTPException(status_code=500, detail="Calendar event creation failed")
 
-        session_data = payload.model_dump()
+        session_data = payload.model_dump(exclude={"recurrence"})
         session_data["scheduled_at"] = starts_at.isoformat()
         session_data["status"] = "planned"
         session_data["created_by"] = user["public_id"]
         session_data["event_id"] = calendar_event["id"]
-        try:
-            session = create_session(session_data)
-            if not session:
-                raise RuntimeError("Session creation failed")
-        except Exception:
+        session = create_session(session_data)
+        if not session:
+            raise RuntimeError("Session creation failed")
+        if recurrence:
+            session["recurrence"] = recurrence
+    except Exception as error:
+        if calendar_event:
             try:
                 delete_calendar_event(
                     calendar_event["public_id"],
@@ -116,10 +158,13 @@ def add_session(
                 )
             except Exception:
                 pass
+        if recurrence:
+            try:
+                delete_calendar_recurrence(recurrence["id"])
+            except Exception:
+                pass
+        if isinstance(error, HTTPException):
             raise
-    except HTTPException:
-        raise
-    except Exception as error:
         raise HTTPException(status_code=500, detail=str(error)) from error
     return {"session": session}
 
@@ -135,6 +180,22 @@ def edit_session_status(
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
         require_student_access(user, session["student_id"])
+        if payload.status == "cancelled":
+            calendar_event = fetch_calendar_event_by_id(session_id)
+            if calendar_event and calendar_event.get("recurrence_id") is not None:
+                recurrence = fetch_calendar_recurrence(calendar_event["recurrence_id"])
+                if recurrence:
+                    starts_at = datetime.fromisoformat(calendar_event["starts_at"])
+                    end_date = datetime.now(starts_at.tzinfo).date() - timedelta(days=1)
+                    ended_recurrence = update_calendar_recurrence(
+                        recurrence["id"],
+                        {"ends_on": end_date.isoformat()},
+                    )
+                    if not ended_recurrence:
+                        raise HTTPException(
+                            status_code=500,
+                            detail="Could not end the recurring session series.",
+                        )
         updated_session = update_session_status(str(session_id), payload.status)
     except HTTPException:
         raise

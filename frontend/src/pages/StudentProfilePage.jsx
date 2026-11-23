@@ -118,9 +118,12 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
 
       onStudentUpdated(result.student);
       setProfileUpdateMessage(successMessage);
+      return { student: result.student };
     } catch (error) {
       console.error("Error updating student profile:", error);
-      setProfileUpdateError(error.message || "Could not update this student.");
+      const message = error.message || "Could not update this student.";
+      setProfileUpdateError(message);
+      return { error: message };
     } finally {
       setIsUpdatingProfile(false);
     }
@@ -166,12 +169,24 @@ function StudentProfilePage({ student, onBack, userId, onStudentUpdated, role })
     canShowModule("changeParentName", "studentProfile", role) && {
       id: "changeParentName",
       title: "Change parent name",
-      content: <ChangeParentNameTile />,
+      content: (
+        <ChangeParentNameTile
+          isSaving={isUpdatingProfile}
+          onSave={(updates) => updateStudentProfile(updates, "Parent name saved.")}
+          student={student}
+        />
+      ),
     },
     canShowModule("changeStudentName", "studentProfile", role) && {
       id: "changeStudentName",
       title: "Change student name",
-      content: <ChangeStudentNameTile />,
+      content: (
+        <ChangeStudentNameTile
+          isSaving={isUpdatingProfile}
+          onSave={(updates) => updateStudentProfile(updates, "Student name saved.")}
+          student={student}
+        />
+      ),
     },
     canShowModule("changeStudentGrade", "studentProfile", role) && {
       id: "changeStudentGrade",

@@ -325,6 +325,64 @@ def test_create_calendar_meeting_saves_invitees_and_recurrence(client, monkeypat
     ]
 
 
+def test_create_student_calendar_event_creates_editable_session(client, monkeypatch):
+    event_id = "123e4567-e89b-12d3-a456-426614174000"
+    saved = {}
+    monkeypatch.setattr(calendar, "fetch_user_school_by_public_id", lambda _id: 7)
+    monkeypatch.setattr(
+        calendar,
+        "fetch_calendar_invitees",
+        lambda _school_id: {"users": [], "students": [{"id": 42}]},
+    )
+    monkeypatch.setattr(calendar, "require_student_access", lambda *_args: None)
+    monkeypatch.setattr(
+        calendar,
+        "fetch_student_ownership",
+        lambda _student_id: {"school": 7},
+    )
+
+    def fake_create_event(event_data):
+        saved["event"] = event_data
+        return {"id": 9, "public_id": event_id, **event_data}
+
+    def fake_create_session(session_data):
+        saved["session"] = session_data
+        return session_data
+
+    monkeypatch.setattr(calendar, "create_calendar_event", fake_create_event)
+    monkeypatch.setattr(
+        calendar,
+        "create_calendar_event_participants",
+        lambda participants: participants,
+    )
+    monkeypatch.setattr(calendar, "create_session", fake_create_session)
+
+    response = client.post(
+        "/calendar-events",
+        json={
+            "school": 7,
+            "event_type": "meeting",
+            "title": "Reading fluency",
+            "starts_at": "2026-11-10T09:00:00-06:00",
+            "ends_at": "2026-11-10T09:30:00-06:00",
+            "participants": [{"student_id": 42}],
+        },
+    )
+
+    assert response.status_code == 200
+    assert saved["event"]["regarding_student"] == 42
+    assert saved["session"] == {
+        "event_id": 9,
+        "student_id": 42,
+        "plan_type": "Reading fluency",
+        "focus": "",
+        "duration_minutes": 30,
+        "scheduled_at": "2026-11-10T09:00:00-06:00",
+        "status": "planned",
+        "created_by": "user-123",
+    }
+
+
 def test_create_calendar_event_for_group(client, monkeypatch):
     saved = {}
     monkeypatch.setattr(

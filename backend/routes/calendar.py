@@ -19,6 +19,7 @@ from database.supabase_client import (
     create_calendar_event,
     create_calendar_event_participants,
     create_calendar_recurrence,
+    create_session,
     delete_calendar_recurrence,
     delete_calendar_event,
     delete_calendar_event_participants,
@@ -726,6 +727,7 @@ def add_calendar_event(
 ):
     recurrence = None
     event = None
+    session_student_id = payload.regarding_student
     try:
         school_id = fetch_user_school_by_public_id(user["public_id"])
         if school_id is None:
@@ -739,6 +741,30 @@ def add_calendar_event(
                 detail="Calendar events can only be created for your school.",
             )
         _validate_regarding_student(payload.regarding_student, school_id, user)
+        student_invitee_ids = [
+            participant.student_id
+            for participant in payload.participants
+            if participant.student_id is not None
+        ]
+        if (
+            session_student_id is None
+            and payload.recurrence is None
+            and len(student_invitee_ids) == 1
+        ):
+            session_student_id = student_invitee_ids[0]
+        if payload.recurrence is None and session_student_id is not None:
+            _validate_regarding_student(session_student_id, school_id, user)
+            session_duration_seconds = (
+                payload.ends_at - payload.starts_at
+            ).total_seconds()
+            if (
+                session_duration_seconds % 60 != 0
+                or not 1 <= session_duration_seconds // 60 <= 240
+            ):
+                raise HTTPException(
+                    status_code=422,
+                    detail="A student session must be between 1 and 240 whole minutes.",
+                )
         if payload.participants:
             invitees = fetch_calendar_invitees(
                 school_id,
@@ -763,6 +789,8 @@ def add_calendar_event(
             exclude={"school", "participants", "recurrence"},
             exclude_none=True,
         )
+        if payload.recurrence is None and session_student_id is not None:
+            event_data["regarding_student"] = session_student_id
         if payload.recurrence:
             recurrence = create_calendar_recurrence({
                 **payload.recurrence.model_dump(mode="json"),
@@ -819,6 +847,19 @@ def add_calendar_event(
             ])
             if len(saved_participants) != len(payload.participants):
                 raise RuntimeError("Not all invited participants were saved.")
+        if payload.recurrence is None and session_student_id is not None:
+            session = create_session({
+                "event_id": event["id"],
+                "student_id": session_student_id,
+                "plan_type": (payload.title or payload.event_type)[:100],
+                "focus": "",
+                "duration_minutes": int(session_duration_seconds // 60),
+                "scheduled_at": payload.starts_at.isoformat(),
+                "status": "planned",
+                "created_by": user["public_id"],
+            })
+            if session is None:
+                raise RuntimeError("Student session creation failed.")
     except HTTPException:
         if recurrence is not None:
             delete_calendar_recurrence(recurrence["id"])
