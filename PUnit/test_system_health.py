@@ -14,6 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import main
+from auth import security
 from auth.security import create_access_token
 from health import checks, collector
 from health.normalize import make_result, normalize_statuspage, sanitize_details
@@ -34,8 +35,20 @@ def component(cid, name, status="operational", group=False, group_id=None):
     return {"id": cid, "name": name, "status": status, "group": group, "group_id": group_id}
 
 
+#stands in for the users table get_current_user reads on every request
+ACCOUNTS = {}
+
+
+@pytest.fixture(autouse=True)
+def users_table(monkeypatch):
+    ACCOUNTS.clear()
+    monkeypatch.setattr(security, "fetch_user_auth", lambda uid: ACCOUNTS.get(uid))
+
+
 def token_for(role):
-    return create_access_token({"public_id": "pub-1", "id": 1, "role": role})
+    account = {"public_id": "pub-1", "id": 1, "role": role, "read_only": False, "school": 7}
+    ACCOUNTS[1] = account
+    return create_access_token(account)
 
 
 @pytest.fixture(autouse=True)

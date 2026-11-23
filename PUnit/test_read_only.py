@@ -2,6 +2,7 @@ import pytest
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.testclient import TestClient
 
+from auth import security
 from auth.security import (
     READ_ONLY_DETAIL,
     block_writes_if_read_only,
@@ -48,9 +49,33 @@ def client():
         yield test_client
 
 
+#stands in for the users table get_current_user reads on every request
+ACCOUNTS = {}
+
+
+@pytest.fixture(autouse=True)
+def users_table(monkeypatch):
+    ACCOUNTS.clear()
+    monkeypatch.setattr(security, "fetch_user_auth", lambda uid: ACCOUNTS.get(uid))
+
+
 def auth_header(read_only):
     user = {"public_id": "user-1", "id": 1, "role": "admin", "read_only": read_only}
+    ACCOUNTS[1] = user
     return {"Authorization": f"Bearer {create_access_token(user)}"}
+
+
+def test_read_only_flag_comes_from_database_not_token(client):
+    #token minted while writable; account switched to read-only afterwards
+    headers = auth_header(False)
+    ACCOUNTS[1] = {**ACCOUNTS[1], "read_only": True}
+    assert client.post("/thing", headers=headers).status_code == 403
+
+
+def test_deleted_account_token_is_rejected(client):
+    headers = auth_header(False)
+    ACCOUNTS.clear()
+    assert client.get("/thing", headers=headers).status_code == 401
 
 
 def test_read_only_account_can_read(client):
@@ -73,5 +98,6 @@ def test_normal_account_unaffected(client, method):
 
 def test_missing_read_only_column_defaults_to_writable(client):
     user = {"public_id": "user-1", "id": 1, "role": "admin"}
+    ACCOUNTS[1] = {**user, "read_only": None}
     headers = {"Authorization": f"Bearer {create_access_token(user)}"}
     assert client.post("/thing", headers=headers).status_code == 200

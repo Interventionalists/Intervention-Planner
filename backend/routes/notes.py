@@ -7,7 +7,6 @@ from database.supabase_client import (
     edit_text,
     fetch_notes_for_session,
     fetch_notes_for_student,
-    fetch_notes_from_date,
     fetch_notes_from_user,
     fetch_note_for_author,
     fetch_session,
@@ -59,14 +58,6 @@ def get_notes_from_user(public_id: str, user: dict = Depends(get_current_user)):
     require_self_or_admin(user, public_id)
     try:
         notes = fetch_notes_from_user(public_id)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    return {"notes": _visible_notes(notes, user)}
-
-@router.get("/notes-fetchFromDate/{timestamp}")
-def get_notes_from_date(timestamp: str, user: dict = Depends(get_current_user)):
-    try:
-        notes = fetch_notes_from_date(timestamp)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     return {"notes": _visible_notes(notes, user)}

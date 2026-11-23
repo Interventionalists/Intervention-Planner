@@ -40,7 +40,8 @@ class AccountProfileUpdateRequest(BaseModel):
     first_name: str | None = Field(default=None, min_length=1, max_length=100)
     last_name: str | None = Field(default=None, min_length=1, max_length=100)
     email: str | None = Field(default=None, min_length=3, max_length=254)
-    school: int | None = Field(default=None, ge=1)
+    #no school field: extra="forbid" rejects it. A school is a tenant boundary
+    #and only an admin of that school may assign it (PATCH /admins-users).
 
     @field_validator("email")
     @classmethod
@@ -70,6 +71,20 @@ class LoginResponse(BaseModel):
     user: UserOut
 
 
+#a real bcrypt hash at the same cost as stored passwords, compared against for
+#unknown emails so they take as long as known ones
+DUMMY_PASSWORD_HASH = hash_password("timing-equalizer-not-a-real-password")
+
+
+#bcrypt 5 raises ValueError for passwords over 72 bytes; treat that as a
+#mismatch (401) rather than letting it surface as a 500
+def _password_matches(password: str, password_hash: str) -> bool:
+    try:
+        return verify_password(password, password_hash)
+    except ValueError:
+        return False
+
+
 def is_locked(locked_until) -> bool:
     if not locked_until:
         return False
@@ -84,15 +99,20 @@ def authenticate(email: str, password: str):
     try:
         user = fetch_user_by_email(email)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Unable to sign in.") from e
 
     if not user:
+        #spend the same bcrypt time as a real account so response timing
+        #doesn't reveal which emails are registered
+        _password_matches(password, DUMMY_PASSWORD_HASH)
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     if is_locked(user.get("locked_until")):
         raise HTTPException(status_code=423, detail=LOCKED_DETAIL)
 
-    password_ok = bool(user.get("password_hash")) and verify_password(password, user["password_hash"])
+    stored_hash = user.get("password_hash")
+    #accounts without a password still pay the bcrypt cost, then always fail
+    password_ok = _password_matches(password, stored_hash or DUMMY_PASSWORD_HASH) and bool(stored_hash)
 
     try:
         if not password_ok:
@@ -107,7 +127,7 @@ def authenticate(email: str, password: str):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Unable to sign in.") from e
 
     return user
 
@@ -141,8 +161,11 @@ def change_password(payload: ChangePasswordRequest):
 
     try:
         updated = update_user_password(payload.email, hash_password(payload.new_password))
+    except ValueError as e:
+        #bcrypt 5 rejects passwords over 72 bytes
+        raise HTTPException(status_code=400, detail="New password is too long") from e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Password update failed") from e
 
     if not updated:
         raise HTTPException(status_code=500, detail="Password update failed")
@@ -159,18 +182,12 @@ def update_account_profile(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=READ_ONLY_DETAIL)
     updates = payload.model_dump(exclude_unset=True)
     profile_fields = {"first_name", "last_name", "email"}
-    if user["role"] == "teacher":
+    if user["role"] in ("teacher", "interventionist"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Teachers cannot update account details.",
+            detail="Ask an administrator to update your account details.",
         )
-    if user["role"] == "interventionist":
-        if set(updates) != {"school"}:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Interventionists may only update their school.",
-            )
-    elif user["role"] == "admin":
+    if user["role"] == "admin":
         if not profile_fields.issubset(updates) or any(
             not updates[field] for field in profile_fields
         ):
