@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 import math
 import os
 
@@ -1431,6 +1431,134 @@ def fetch_calendar_event_participants(event_id: int):
         .execute()
     )
     return response.data
+
+
+def fetch_pending_event_invitations(user_public_id: str, school_id: int):
+    """Events in the user's school they were invited to but have not answered.
+
+    Events that have already finished (or recurring series whose last date has
+    passed) are left out, as are events the user organizes themselves.
+    """
+    invitations_response = (
+        supabase.table("event_participants")
+        .select("event_id, attendance")
+        .eq("user_id", user_public_id)
+        .eq("attendance", "invited")
+        .execute()
+    )
+    event_ids = list({row["event_id"] for row in (invitations_response.data or [])})
+    if not event_ids:
+        return []
+
+    events_response = (
+        supabase.table("calendar_events")
+        .select("*")
+        .eq("school", school_id)
+        .in_("id", event_ids)
+        .execute()
+    )
+    events = [
+        event
+        for event in (events_response.data or [])
+        if str(event.get("organizer")) != str(user_public_id)
+    ]
+    if not events:
+        return []
+
+    recurrence_ids = list({
+        event["recurrence_id"]
+        for event in events
+        if event.get("recurrence_id") is not None
+    })
+    recurrences_response = (
+        supabase.table("event_recurrence")
+        .select("id, weekdays, every_n_weeks, ends_on")
+        .in_("id", recurrence_ids)
+        .execute()
+    ) if recurrence_ids else None
+    recurrences = {
+        recurrence["id"]: recurrence
+        for recurrence in (recurrences_response.data if recurrences_response else [])
+    }
+
+    now = datetime.now(timezone.utc)
+    upcoming = []
+    for event in events:
+        recurrence = recurrences.get(event.get("recurrence_id"))
+        if recurrence is not None:
+            ends_on = recurrence.get("ends_on")
+            if ends_on and date.fromisoformat(ends_on) < now.date():
+                continue
+        elif datetime.fromisoformat(event["ends_at"]) <= now:
+            continue
+        upcoming.append({**event, "recurrence": recurrence})
+    if not upcoming:
+        return []
+
+    organizer_ids = list({
+        str(event["organizer"]) for event in upcoming if event.get("organizer")
+    })
+    organizers_response = (
+        supabase.table("users")
+        .select("public_id, first_name, last_name")
+        .eq("school", school_id)
+        .in_("public_id", organizer_ids)
+        .execute()
+    ) if organizer_ids else None
+    organizer_names = {
+        str(user["public_id"]): " ".join(
+            part for part in (user.get("first_name"), user.get("last_name")) if part
+        )
+        for user in (organizers_response.data if organizers_response else [])
+    }
+
+    return sorted(
+        (
+            {
+                "event_id": event["public_id"],
+                "title": event.get("title"),
+                "event_type": event.get("event_type"),
+                "starts_at": event["starts_at"],
+                "ends_at": event["ends_at"],
+                "location": event.get("location"),
+                "color": event.get("color"),
+                "organizer": event.get("organizer"),
+                "organizer_name": organizer_names.get(str(event.get("organizer"))),
+                "recurrence": event["recurrence"],
+                "attendance": "invited",
+            }
+            for event in upcoming
+        ),
+        key=lambda invitation: invitation["starts_at"],
+    )
+
+
+def fetch_event_participant(event_id: int, user_public_id: str):
+    response = (
+        supabase.table("event_participants")
+        .select("event_id, user_id, student_id, attendance")
+        .eq("event_id", event_id)
+        .eq("user_id", user_public_id)
+        .limit(1)
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+
+def update_event_participant_attendance(
+    event_id: int,
+    user_public_id: str,
+    attendance: str,
+):
+    response = (
+        supabase.table("event_participants")
+        .update({"attendance": attendance})
+        .eq("event_id", event_id)
+        .eq("user_id", user_public_id)
+        .select("event_id, user_id, student_id, attendance")
+        .execute()
+    )
+    return response.data[0] if response.data else None
 
 
 def delete_calendar_event_participants(event_id: int):
